@@ -54,7 +54,11 @@ func main() {
 	filterCommand.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s filter FILTER_SPEC WARCFILE...\n", os.Args[0])
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintf(os.Stderr, "\tFILTER_SPEC is of the form HEADER:VALUE where HEADER is a warc record header key\n")
+		fmt.Fprintf(os.Stderr, "Filters input warcs to create new warcs on stdout\n")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintf(os.Stderr, "Positional arguments:\n")
+		fmt.Fprintf(os.Stderr, "\tFILTER_SPEC\tspecifies which records to include in output;\n\t\t\tform is HEADER:VALUE where HEADER is a warc record header key\n")
+		fmt.Fprintf(os.Stderr, "\tWARCFILE...\twarc files to filter\n")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "\t%s filter warc-type:response foo.warc.gz bar.warc.gz\n", os.Args[0])
@@ -78,10 +82,19 @@ func main() {
 			os.Exit(1)
 		}
 		filterKeyVal := strings.SplitN(filterCommand.Arg(0), ":", 2)
+		if len(filterKeyVal) != 2 {
+			filterCommand.Usage()
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintf(os.Stderr,
+				"%s filter: Error: Bad filter spec: %s\n",
+				os.Args[0], filterCommand.Arg(1))
+			os.Exit(1)
+		}
+
 		filterKey := strings.TrimSpace(filterKeyVal[0])
 		filterVal := strings.TrimSpace(filterKeyVal[1])
-		for i := 1; i < flag.NArg(); i++ {
-			filterWarc(flag.Arg(i), filterKey, filterVal)
+		for i := 1; i < filterCommand.NArg(); i++ {
+			filterWarc(filterCommand.Arg(i), filterKey, filterVal)
 		}
 	}
 }
