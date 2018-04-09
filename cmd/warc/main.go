@@ -8,9 +8,11 @@ import (
 	"os"
 	"strings"
 	"fmt"
+	// "compress/gzip"
 )
 
-func filterWarc(filename string, filterKey string, filterVal string) {
+func filterWarc(writer *warc.Writer, filename string, filterKey string,
+	filterVal string) {
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatalln(err, "opening", filename)
@@ -29,13 +31,10 @@ func filterWarc(filename string, filterKey string, filterVal string) {
 			log.Fatalln(err, "reading record from", filename)
 		}
 		if record.Header.Get(filterKey) == filterVal {
-			log.Println("filtered in",
-				record.Header.Get("warc-type"),
-				record.Header.Get("warc-target-uri"))
-		} else {
-			log.Println("filtered out",
-				record.Header.Get("warc-type"),
-				record.Header.Get("warc-target-uri"))
+			_, err := writer.WriteRecord(record)
+			if err != nil {
+				log.Fatalln(err, "writing record", record)
+			}
 		}
 	}
 }
@@ -93,8 +92,21 @@ func main() {
 
 		filterKey := strings.TrimSpace(filterKeyVal[0])
 		filterVal := strings.TrimSpace(filterKeyVal[1])
+
+		// XXX this would not be record-at-a-time
+		// stdoutGz := gzip.NewWriter(os.Stdout)
+		// defer func() {
+		// 	err := stdoutGz.Close()
+		// 	if err != nil {
+		// 		log.Fatalln(err, "finalizing gzip")
+		// 	}
+		// }()
+		// writer := warc.NewWriter(stdoutGz)
+
+		writer := warc.NewWriter(os.Stdout)
 		for i := 1; i < filterCommand.NArg(); i++ {
-			filterWarc(filterCommand.Arg(i), filterKey, filterVal)
+			filterWarc(writer, filterCommand.Arg(i),
+				filterKey, filterVal)
 		}
 	}
 }
