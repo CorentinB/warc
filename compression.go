@@ -9,11 +9,15 @@ import (
 )
 
 const (
+	// CompressionNone represent uncompression
 	CompressionNone CompressionType = iota
+	// CompressionBZIP represent BZIP compression
 	CompressionBZIP
+	// CompressionGZIP represent GZIP compression
 	CompressionGZIP
 )
 
+// CompressionType represent the compression type as an int
 type CompressionType int
 
 func (c CompressionType) String() string {
@@ -28,6 +32,7 @@ func (c CompressionType) String() string {
 	return ""
 }
 
+// Compression return the CompressionType of a *Reader
 func (r *Reader) Compression() CompressionType {
 	return r.compression
 }

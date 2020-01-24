@@ -50,6 +50,8 @@ func NewExchange() *Exchange {
 	}
 }
 
+// NewRotatorSettings creates a RotatorSettings structure
+// and initialize it with default values
 func NewRotatorSettings() *RotatorSettings {
 	return &RotatorSettings{
 		WarcinfoContent: NewHeader(),
