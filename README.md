@@ -1,6 +1,7 @@
 # warc 
 
 [![GoDoc](https://godoc.org/github.com/CorentinB/warc?status.svg)](https://godoc.org/github.com/CorentinB/warc)
+[![Go Report Card](https://goreportcard.com/badge/github.com/CorentinB/warc)](https://goreportcard.com/report/github.com/CorentinB/warc)
 
 **WARNING: This project is still a WIP. It is NOT ready to be used in any project.**
 
