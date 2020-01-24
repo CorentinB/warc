@@ -171,5 +171,5 @@ func listenCtrlC(cancel context.CancelFunc) {
 	fmt.Fprintln(os.Stderr, "Press ^C again to exit instantly.")
 	<-c
 	fmt.Fprintln(os.Stderr, "\nKilled!")
-	os.Exit(255)
+	os.Exit(130)
 }

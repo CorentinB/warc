@@ -75,6 +75,8 @@ func ExchangeFromHTTPResponse(response *http.Response) (*Exchange, error) {
 // to communicate records to be written to WARC files to the
 // recordWriter function running in a goroutine
 func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *Exchange, err error) {
+	recordWriterChannel = make(chan *Exchange)
+
 	// Check the rotator settings, also set default values
 	err = checkRotatorSettings(s)
 	if err != nil {
@@ -147,14 +149,16 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 			}
 		} else {
 			// Termination signal has been caught
+			// We close the file
+			warcFile.Close()
+
 			// The WARC file is renamed to remove the .open suffix
-			err := os.Rename(currentFileName, strings.TrimSuffix(settings.OutputDirectory+currentFileName, ".open"))
+			err := os.Rename(settings.OutputDirectory+currentFileName, strings.TrimSuffix(settings.OutputDirectory+currentFileName, ".open"))
 			if err != nil {
 				panic(err)
 			}
 
-			// We close the file, then exit
-			warcFile.Close()
+			os.Exit(130)
 		}
 	}
 }
