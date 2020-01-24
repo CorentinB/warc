@@ -132,10 +132,10 @@ func TestWriteRead(t *testing.T) {
 	}
 
 	reader, err := warc.NewReader(buffer)
-        if reader.Compression() != warc.CompressionNone {
-            t.Errorf("reader.Compression() == %q, expected %q",
-                reader.Compression(), warc.CompressionNone)
-        }
+	if reader.Compression() != warc.CompressionNone {
+		t.Errorf("reader.Compression() == %q, expected %q",
+			reader.Compression(), warc.CompressionNone)
+	}
 	if err != nil {
 		t.Fatalf("failed to create reader: %v", err)
 	}

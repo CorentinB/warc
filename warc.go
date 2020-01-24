@@ -5,11 +5,15 @@ This module is based on nlevitt's WARC module (https://github.com/nlevitt/warc).
 package warc
 
 import (
+	"context"
 	"net/http"
 	"net/http/httputil"
 	"os"
 	"strings"
+	"sync/atomic"
 )
+
+var exitRequested int32
 
 // RotatorSettings is used to store the settings
 // needed by recordWriter to write WARC files
@@ -78,16 +82,17 @@ func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *Exchange, 
 	}
 
 	// Handle termination signals to properly close WARC files afterwards
-	go terminationHandler(recordWriterChannel)
+	c, cancel := context.WithCancel(context.Background())
+	go listenCtrlC(cancel)
 
 	// Start the record writer in a goroutine
 	// TODO: support for pool of recordWriter?
-	go recordWriter(s, recordWriterChannel)
+	go recordWriter(c, s, recordWriterChannel)
 
 	return recordWriterChannel, nil
 }
 
-func recordWriter(settings *RotatorSettings, exchanges chan *Exchange) {
+func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *Exchange) {
 	var serial = 1
 	var currentFileName string = generateWarcFileName(settings.Prefix, settings.Encryption, serial)
 
@@ -101,9 +106,8 @@ func recordWriter(settings *RotatorSettings, exchanges chan *Exchange) {
 	warcWriter := NewWriter(warcFile, currentFileName)
 	warcWriter.WriteInfoRecord(settings.WarcinfoContent)
 
-	for {
-		exchange, ok := <-exchanges
-		if ok {
+	for exchange := range exchanges {
+		if atomic.LoadInt32(&exitRequested) == 0 {
 			if isFileSizeExceeded(settings.OutputDirectory+currentFileName, settings.WarcSize) {
 				// WARC file size exceeded settings.WarcSize
 				// The WARC file is renamed to remove the .open suffix

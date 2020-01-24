@@ -2,13 +2,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"github.com/slyrz/warc"
 	"io"
 	"log"
 	"os"
 	"strings"
-	"fmt"
-	// "compress/gzip"
 )
 
 func filterWarc(writer *warc.Writer, filename string, filterKey string,
