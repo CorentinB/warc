@@ -1,7 +1,9 @@
 package warc
 
 import (
+	"bufio"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,8 +16,11 @@ import (
 
 // Writer writes WARC records to WARC files.
 type Writer struct {
-	FileName string
-	target   io.Writer
+	FileName    string
+	Compression bool
+	gzipWriter  *gzip.Writer
+	fileWriter  *bufio.Writer
+	target      io.Writer
 }
 
 // Exchange is a pair of request/response to be written in a WARC file,
@@ -92,7 +97,7 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) error {
 
 	// Set the headers
 	infoRecord.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339))
-	infoRecord.Header.Set("WARC-Filename", w.FileName)
+	infoRecord.Header.Set("WARC-Filename", strings.TrimSuffix(w.FileName, ".open"))
 	infoRecord.Header.Set("WARC-Type", "warcinfo")
 	infoRecord.Header.Set("content-type", "application/warc-fields")
 

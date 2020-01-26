@@ -135,14 +135,14 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 			}
 			// Write response first, then the request
 			exchange.Response.Header.Set("WARC-Date", exchange.CaptureTime)
-			exchange.Response.Header.Set("WARC-Filename", currentFileName)
+			exchange.Response.Header.Set("WARC-Filename", strings.TrimSuffix(currentFileName, ".open"))
 			err := warcWriter.WriteRecord(exchange.Response)
 			if err != nil {
 				panic(err)
 			}
 
 			exchange.Request.Header.Set("WARC-Date", exchange.CaptureTime)
-			exchange.Request.Header.Set("WARC-Filename", currentFileName)
+			exchange.Request.Header.Set("WARC-Filename", strings.TrimSuffix(currentFileName, ".open"))
 			err = warcWriter.WriteRecord(exchange.Request)
 			if err != nil {
 				panic(err)
