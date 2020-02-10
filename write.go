@@ -20,7 +20,6 @@ type Writer struct {
 	Compression bool
 	gzipWriter  *gzip.Writer
 	fileWriter  *bufio.Writer
-	target      io.Writer
 }
 
 // Exchange is a pair of request/response to be written in a WARC file,
@@ -68,21 +67,21 @@ func (w *Writer) WriteRecord(r *Record) error {
 		r.Header["warc-record-id"] = "<urn:uuid:" + uuid.NewV4().String() + ">"
 	}
 
-	_, err = io.WriteString(w.target, "WARC/1.1\r\n")
+	_, err = io.WriteString(w.fileWriter, "WARC/1.1\r\n")
 	if err != nil {
 		return err
 	}
 
 	// Write headers
 	for key, value := range r.Header {
-		_, err = io.WriteString(w.target, strings.Title(key)+": "+value+"\r\n")
+		_, err = io.WriteString(w.fileWriter, strings.Title(key)+": "+value+"\r\n")
 		if err != nil {
 			return err
 		}
 	}
 
 	// Write payload
-	_, err = io.WriteString(w.target, "\r\n"+string(data)+"\r\n\r\n")
+	_, err = io.WriteString(w.fileWriter, "\r\n"+string(data)+"\r\n\r\n")
 	if err != nil {
 		return err
 	}

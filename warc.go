@@ -105,7 +105,7 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 	}
 
 	// Initialize WARC writer
-	warcWriter := NewWriter(warcFile, currentFileName)
+	warcWriter := NewWriter(warcFile, currentFileName, settings.Encryption)
 	warcWriter.WriteInfoRecord(settings.WarcinfoContent)
 
 	for exchange := range exchanges {
@@ -118,7 +118,11 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 					panic(err)
 				}
 
-				// We close the file
+				// We flush the data and close the file
+				warcWriter.fileWriter.Flush()
+				if settings.Encryption {
+					warcWriter.gzipWriter.Close()
+				}
 				warcFile.Close()
 
 				// Increment the file's serial number, then create the new file
@@ -130,7 +134,7 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 				}
 
 				// Initialize new WARC writer and write warcinfo record
-				warcWriter = NewWriter(warcFile, currentFileName)
+				warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
 				warcWriter.WriteInfoRecord(settings.WarcinfoContent)
 			}
 			// Write response first, then the request
@@ -149,7 +153,11 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 			}
 		} else {
 			// Termination signal has been caught
-			// We close the file
+			// We flush the data and close the file
+			warcWriter.fileWriter.Flush()
+			if settings.Encryption {
+				warcWriter.gzipWriter.Close()
+			}
 			warcFile.Close()
 
 			// The WARC file is renamed to remove the .open suffix

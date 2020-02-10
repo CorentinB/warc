@@ -1,6 +1,8 @@
 package warc
 
 import (
+	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/sha1"
 	"encoding/base32"
@@ -22,10 +24,21 @@ func GetSHA1(content []byte) string {
 }
 
 // NewWriter creates a new WARC writer.
-func NewWriter(writer io.Writer, fileName string) *Writer {
+func NewWriter(writer io.Writer, fileName string, useGZIP bool) *Writer {
+	if useGZIP {
+		gzipWriter := gzip.NewWriter(writer)
+		return &Writer{
+			FileName:    fileName,
+			Compression: true,
+			gzipWriter:  gzipWriter,
+			fileWriter:  bufio.NewWriter(gzipWriter),
+		}
+	}
+
 	return &Writer{
-		FileName: fileName,
-		target:   writer,
+		FileName:    fileName,
+		Compression: false,
+		fileWriter:  bufio.NewWriter(writer),
 	}
 }
 
