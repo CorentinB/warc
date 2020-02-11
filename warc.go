@@ -107,7 +107,16 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 
 	// Initialize WARC writer
 	warcWriter := NewWriter(warcFile, currentFileName, settings.Encryption)
+
+	// Write the info record
 	warcWriter.WriteInfoRecord(settings.WarcinfoContent)
+
+	// If encryption is enabled, we close the record's GZIP chunk
+	if settings.Encryption {
+		warcWriter.fileWriter.Flush()
+		warcWriter.gzipWriter.Close()
+		warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+	}
 
 	for {
 		exchange, more := <-exchanges
@@ -136,9 +145,18 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 						panic(err)
 					}
 
-					// Initialize new WARC writer and write warcinfo record
+					// Initialize new WARC writer
 					warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+
+					// Write the info record
 					warcWriter.WriteInfoRecord(settings.WarcinfoContent)
+
+					// If encryption is enabled, we close the record's GZIP chunk
+					if settings.Encryption {
+						warcWriter.fileWriter.Flush()
+						warcWriter.gzipWriter.Close()
+						warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+					}
 				}
 				// Write response first, then the request
 				exchange.Response.Header.Set("WARC-Date", exchange.CaptureTime)
@@ -148,11 +166,27 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 					panic(err)
 				}
 
+				// Before writing request, if encryption is enabled, we close the
+				// record's GZIP chunk
+				if settings.Encryption {
+					warcWriter.fileWriter.Flush()
+					warcWriter.gzipWriter.Close()
+					warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+				}
+
+				// Write the request record
 				exchange.Request.Header.Set("WARC-Date", exchange.CaptureTime)
 				exchange.Request.Header.Set("WARC-Filename", strings.TrimSuffix(currentFileName, ".open"))
 				err = warcWriter.WriteRecord(exchange.Request)
 				if err != nil {
 					panic(err)
+				}
+
+				// If encryption is enabled, we close the record's GZIP chunk
+				if settings.Encryption {
+					warcWriter.fileWriter.Flush()
+					warcWriter.gzipWriter.Close()
+					warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
 				}
 			} else {
 				// Termination signal has been caught
