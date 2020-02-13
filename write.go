@@ -23,7 +23,7 @@ type Writer struct {
 }
 
 // RecordBatch is a structure that contains a bunch of
-// records to be writtent at the same time, and a common
+// records to be written at the same time, and a common
 // capture timestamp
 type RecordBatch struct {
 	Records     []*Record
@@ -85,6 +85,8 @@ func (w *Writer) WriteRecord(r *Record) error {
 		return err
 	}
 
+	// Flush data
+	w.fileWriter.Flush()
 	return nil
 }
 
@@ -106,11 +108,12 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) error {
 	}
 	infoRecord.Content = warcInfoContent
 
-	// Finally, write the record
+	// Finally, write the record and flush the data
 	err := w.WriteRecord(infoRecord)
 	if err != nil {
 		return err
 	}
 
+	w.fileWriter.Flush()
 	return nil
 }

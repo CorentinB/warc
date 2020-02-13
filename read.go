@@ -80,6 +80,7 @@ func (r *Reader) readLine() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	// Line was too long for the buffer.
 	// TODO: rather return an error in this case? This function
 	// is only used on header fields and they shouldn't exceed the buffer size
@@ -103,10 +104,12 @@ func (r *Reader) readLine() (string, error) {
 func (r *Reader) ReadRecord() (*Record, error) {
 	// Go to the position of the next record in the file.
 	r.seekRecord()
+
 	// Skip the record version line.
 	if _, err := r.readLine(); err != nil {
 		return nil, err
 	}
+
 	// Parse the record header.
 	header := NewHeader()
 	for {
@@ -121,6 +124,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 			header.Set(key, value)
 		}
 	}
+
 	// Determine the content length and then retrieve the record content.
 	length, err := strconv.Atoi(header["content-length"])
 	if err != nil {
@@ -145,6 +149,7 @@ func (r *Reader) seekRecord() error {
 	if r.record == nil {
 		return nil
 	}
+
 	// If the mode is set to SequentialMode, the underlying r.reader might be
 	// anywhere inside the active record's block - depending on how much the
 	// user actually consumed. So we have to make sure all content gets skipped
@@ -157,6 +162,7 @@ func (r *Reader) seekRecord() error {
 			}
 		}
 	}
+
 	// Set to nil so it's safe to call this function several times without
 	// destroying stuff.
 	r.record = nil

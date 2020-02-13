@@ -118,7 +118,6 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 
 	// If encryption is enabled, we close the record's GZIP chunk
 	if settings.Encryption {
-		warcWriter.fileWriter.Flush()
 		warcWriter.gzipWriter.Close()
 		warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
 	}
@@ -158,7 +157,6 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 
 					// If encryption is enabled, we close the record's GZIP chunk
 					if settings.Encryption {
-						warcWriter.fileWriter.Flush()
 						warcWriter.gzipWriter.Close()
 						warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
 					}
@@ -173,15 +171,12 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 						panic(err)
 					}
 
-					// Before writing record, if encryption is enabled, we close the
-					// record's GZIP chunk
+					// If encryption is enabled, we close the record's GZIP chunk
 					if settings.Encryption {
-						warcWriter.fileWriter.Flush()
 						warcWriter.gzipWriter.Close()
 						warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
 					}
 				}
-				warcWriter.fileWriter.Flush()
 			} else {
 				// Termination signal has been caught
 				// We flush the data and close the file
@@ -203,8 +198,7 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 			}
 		} else {
 			// Channel has been closed
-			// We flush the datam close the file,
-			// and rename it
+			// We flush the data, close the file, and rename it
 			warcWriter.fileWriter.Flush()
 			if settings.Encryption {
 				warcWriter.gzipWriter.Close()
