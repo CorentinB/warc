@@ -181,6 +181,7 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 						warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
 					}
 				}
+				warcWriter.fileWriter.Flush()
 			} else {
 				// Termination signal has been caught
 				// We flush the data and close the file
@@ -201,6 +202,9 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 				os.Exit(130)
 			}
 		} else {
+			// Channel has been closed
+			// We flush the datam close the file,
+			// and rename it
 			warcWriter.fileWriter.Flush()
 			if settings.Encryption {
 				warcWriter.gzipWriter.Close()
