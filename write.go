@@ -22,12 +22,11 @@ type Writer struct {
 	fileWriter  *bufio.Writer
 }
 
-// Exchange is a pair of request/response to be written in a WARC file,
-// it is named Exchange because RFC2616 refers to the word exchange
-// merely twice for a pair or request/response
-type Exchange struct {
-	Response    *Record
-	Request     *Record
+// RecordBatch is a structure that contains a bunch of
+// records to be writtent at the same time, and a common
+// capture timestamp
+type RecordBatch struct {
+	Records     []*Record
 	CaptureTime string
 }
 

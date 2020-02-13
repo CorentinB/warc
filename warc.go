@@ -34,48 +34,53 @@ type RotatorSettings struct {
 	OutputDirectory string
 }
 
-// ExchangeFromHTTPResponse turns a http.Response into a warc.Exchange
+// RecordsFromHTTPResponse turns a http.Response into a warc.RecordBatch
 // filling both Response and Request records
-func ExchangeFromHTTPResponse(response *http.Response) (*Exchange, error) {
-	var exchange = NewExchange()
+func RecordsFromHTTPResponse(response *http.Response) (*RecordBatch, error) {
+	var batch = NewRecordBatch()
 
 	// Dump response
 	responseDump, err := httputil.DumpResponse(response, true)
 	if err != nil {
-		return exchange, err
+		return batch, err
 	}
 
 	// Add the response to the exchange
-	exchange.Response.Header.Set("WARC-Type", "response")
-	exchange.Response.Header.Set("WARC-Payload-Digest", "sha1:"+GetSHA1(responseDump))
-	exchange.Response.Header.Set("WARC-Target-URI", response.Request.URL.String())
-	exchange.Response.Header.Set("Content-Type", "application/http; msgtype=response")
+	var responseRecord = NewRecord()
+	responseRecord.Header.Set("WARC-Type", "response")
+	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+GetSHA1(responseDump))
+	responseRecord.Header.Set("WARC-Target-URI", response.Request.URL.String())
+	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
-	exchange.Response.Content = strings.NewReader(string(responseDump))
+	responseRecord.Content = strings.NewReader(string(responseDump))
 
 	// Dump request
 	requestDump, err := httputil.DumpRequestOut(response.Request, true)
 	if err != nil {
-		return exchange, err
+		return batch, err
 	}
 
 	// Add the request to the exchange
-	exchange.Request.Header.Set("WARC-Type", "request")
-	exchange.Request.Header.Set("WARC-Payload-Digest", "sha1:"+GetSHA1(requestDump))
-	exchange.Request.Header.Set("WARC-Target-URI", response.Request.URL.String())
-	exchange.Request.Header.Set("Host", response.Request.URL.Host)
-	exchange.Request.Header.Set("Content-Type", "application/http; msgtype=request")
+	var requestRecord = NewRecord()
+	requestRecord.Header.Set("WARC-Type", "request")
+	requestRecord.Header.Set("WARC-Payload-Digest", "sha1:"+GetSHA1(requestDump))
+	requestRecord.Header.Set("WARC-Target-URI", response.Request.URL.String())
+	requestRecord.Header.Set("Host", response.Request.URL.Host)
+	requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
 
-	exchange.Request.Content = strings.NewReader(string(requestDump))
+	requestRecord.Content = strings.NewReader(string(requestDump))
 
-	return exchange, nil
+	// Append records to the record batch
+	batch.Records = append(batch.Records, responseRecord, requestRecord)
+
+	return batch, nil
 }
 
 // NewWARCRotator creates and return a channel that can be used
 // to communicate records to be written to WARC files to the
 // recordWriter function running in a goroutine
-func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *Exchange, done chan bool, err error) {
-	recordWriterChannel = make(chan *Exchange)
+func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *RecordBatch, done chan bool, err error) {
+	recordWriterChannel = make(chan *RecordBatch)
 	done = make(chan bool)
 
 	// Check the rotator settings, also set default values
@@ -95,7 +100,7 @@ func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *Exchange, 
 	return recordWriterChannel, done, nil
 }
 
-func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *Exchange, done chan bool) {
+func recordWriter(c context.Context, settings *RotatorSettings, records chan *RecordBatch, done chan bool) {
 	var serial = 1
 	var currentFileName string = generateWarcFileName(settings.Prefix, settings.Encryption, serial)
 
@@ -119,7 +124,7 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 	}
 
 	for {
-		exchange, more := <-exchanges
+		recordBatch, more := <-records
 		if more {
 			if atomic.LoadInt32(&exitRequested) == 0 {
 				if isFileSizeExceeded(settings.OutputDirectory+currentFileName, settings.WarcSize) {
@@ -158,35 +163,23 @@ func recordWriter(c context.Context, settings *RotatorSettings, exchanges chan *
 						warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
 					}
 				}
-				// Write response first, then the request
-				exchange.Response.Header.Set("WARC-Date", exchange.CaptureTime)
-				exchange.Response.Header.Set("WARC-Filename", strings.TrimSuffix(currentFileName, ".open"))
-				err := warcWriter.WriteRecord(exchange.Response)
-				if err != nil {
-					panic(err)
-				}
 
-				// Before writing request, if encryption is enabled, we close the
-				// record's GZIP chunk
-				if settings.Encryption {
-					warcWriter.fileWriter.Flush()
-					warcWriter.gzipWriter.Close()
-					warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
-				}
+				// Write all the records of the record batch
+				for _, record := range recordBatch.Records {
+					record.Header.Set("WARC-Date", recordBatch.CaptureTime)
+					record.Header.Set("WARC-Filename", strings.TrimSuffix(currentFileName, ".open"))
+					err := warcWriter.WriteRecord(record)
+					if err != nil {
+						panic(err)
+					}
 
-				// Write the request record
-				exchange.Request.Header.Set("WARC-Date", exchange.CaptureTime)
-				exchange.Request.Header.Set("WARC-Filename", strings.TrimSuffix(currentFileName, ".open"))
-				err = warcWriter.WriteRecord(exchange.Request)
-				if err != nil {
-					panic(err)
-				}
-
-				// If encryption is enabled, we close the record's GZIP chunk
-				if settings.Encryption {
-					warcWriter.fileWriter.Flush()
-					warcWriter.gzipWriter.Close()
-					warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+					// Before writing record, if encryption is enabled, we close the
+					// record's GZIP chunk
+					if settings.Encryption {
+						warcWriter.fileWriter.Flush()
+						warcWriter.gzipWriter.Close()
+						warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+					}
 				}
 			} else {
 				// Termination signal has been caught

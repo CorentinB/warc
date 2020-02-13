@@ -54,12 +54,10 @@ func NewRecord() *Record {
 	}
 }
 
-// NewExchange creates a new pair of request/response
-// records, and set the time
-func NewExchange() *Exchange {
-	return &Exchange{
-		Response:    NewRecord(),
-		Request:     NewRecord(),
+// NewRecordBatch creates a record batch,
+// it also initialize the capture time
+func NewRecordBatch() *RecordBatch {
+	return &RecordBatch{
 		CaptureTime: time.Now().UTC().Format(time.RFC3339),
 	}
 }
