@@ -120,7 +120,11 @@ func TestSimpleWriteRead(t *testing.T) {
 	buffer := new(bytes.Buffer)
 
 	// We write the test records to the warc writer
-	writer := NewWriter(buffer, "test.warc", false)
+	writer, err := NewWriter(buffer, "test.warc", "")
+	if err != nil {
+		t.Fatalf("failed to initialize a new writer: %v", err)
+	}
+
 	for i, testRecord := range testRecords {
 		t.Logf("writing record %d", i)
 		record := NewRecord()

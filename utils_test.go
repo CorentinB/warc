@@ -27,7 +27,7 @@ func TestNewRotatorSettings(t *testing.T) {
 		t.Error("Failed to set WARC rotator's output directory")
 	}
 
-	if rotatorSettings.Encryption != false {
-		t.Error("Failed to set WARC rotator's encryption usage setting")
+	if rotatorSettings.Encryption != "GZIP" {
+		t.Error("Failed to set WARC rotator's encryption algorithm")
 	}
 }

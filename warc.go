@@ -25,8 +25,8 @@ type RotatorSettings struct {
 	// recommend to name files this way:
 	// Prefix-Timestamp-Serial-Crawlhost.warc.gz
 	Prefix string
-	// To use or to not use Gzip compression
-	Encryption bool
+	// Type of encryption to use
+	Encryption string
 	// WarcSize is in MegaBytes
 	WarcSize float64
 	// Directory where the created WARC files will be stored,
@@ -111,15 +111,23 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 	}
 
 	// Initialize WARC writer
-	warcWriter := NewWriter(warcFile, currentFileName, settings.Encryption)
+	warcWriter, err := NewWriter(warcFile, currentFileName, settings.Encryption)
+	if err != nil {
+		panic(err)
+	}
 
 	// Write the info record
 	warcWriter.WriteInfoRecord(settings.WarcinfoContent)
 
 	// If encryption is enabled, we close the record's GZIP chunk
-	if settings.Encryption {
-		warcWriter.gzipWriter.Close()
-		warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+	if settings.Encryption != "" {
+		if settings.Encryption == "GZIP" {
+			warcWriter.gzipWriter.Close()
+			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+			if err != nil {
+				panic(err)
+			}
+		}
 	}
 
 	for {
@@ -136,8 +144,10 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 
 					// We flush the data and close the file
 					warcWriter.fileWriter.Flush()
-					if settings.Encryption {
-						warcWriter.gzipWriter.Close()
+					if settings.Encryption != "" {
+						if settings.Encryption == "GZIP" {
+							warcWriter.gzipWriter.Close()
+						}
 					}
 					warcFile.Close()
 
@@ -150,15 +160,23 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 					}
 
 					// Initialize new WARC writer
-					warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+					warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+					if err != nil {
+						panic(err)
+					}
 
 					// Write the info record
 					warcWriter.WriteInfoRecord(settings.WarcinfoContent)
 
 					// If encryption is enabled, we close the record's GZIP chunk
-					if settings.Encryption {
-						warcWriter.gzipWriter.Close()
-						warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+					if settings.Encryption != "" {
+						if settings.Encryption == "GZIP" {
+							warcWriter.gzipWriter.Close()
+							warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+							if err != nil {
+								panic(err)
+							}
+						}
 					}
 				}
 
@@ -172,17 +190,24 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 					}
 
 					// If encryption is enabled, we close the record's GZIP chunk
-					if settings.Encryption {
-						warcWriter.gzipWriter.Close()
-						warcWriter = NewWriter(warcFile, currentFileName, settings.Encryption)
+					if settings.Encryption != "" {
+						if settings.Encryption == "GZIP" {
+							warcWriter.gzipWriter.Close()
+							warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+							if err != nil {
+								panic(err)
+							}
+						}
 					}
 				}
 			} else {
 				// Termination signal has been caught
 				// We flush the data and close the file
 				warcWriter.fileWriter.Flush()
-				if settings.Encryption {
-					warcWriter.gzipWriter.Close()
+				if settings.Encryption != "" {
+					if settings.Encryption == "GZIP" {
+						warcWriter.gzipWriter.Close()
+					}
 				}
 				warcFile.Close()
 
@@ -200,8 +225,10 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 			// Channel has been closed
 			// We flush the data, close the file, and rename it
 			warcWriter.fileWriter.Flush()
-			if settings.Encryption {
-				warcWriter.gzipWriter.Close()
+			if settings.Encryption != "" {
+				if settings.Encryption == "GZIP" {
+					warcWriter.gzipWriter.Close()
+				}
 			}
 			warcFile.Close()
 

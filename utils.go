@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/base32"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,22 +25,25 @@ func GetSHA1(content []byte) string {
 }
 
 // NewWriter creates a new WARC writer.
-func NewWriter(writer io.Writer, fileName string, useGZIP bool) *Writer {
-	if useGZIP {
-		gzipWriter := gzip.NewWriter(writer)
-		return &Writer{
-			FileName:    fileName,
-			Compression: true,
-			gzipWriter:  gzipWriter,
-			fileWriter:  bufio.NewWriter(gzipWriter),
+func NewWriter(writer io.Writer, fileName string, encryption string) (*Writer, error) {
+	if encryption != "" {
+		if encryption == "GZIP" {
+			gzipWriter := gzip.NewWriter(writer)
+			return &Writer{
+				FileName:    fileName,
+				Compression: encryption,
+				gzipWriter:  gzipWriter,
+				fileWriter:  bufio.NewWriter(gzipWriter),
+			}, nil
 		}
+		return nil, errors.New("Invalid encryption algorithm: " + encryption)
 	}
 
 	return &Writer{
 		FileName:    fileName,
-		Compression: false,
+		Compression: "",
 		fileWriter:  bufio.NewWriter(writer),
-	}
+	}, nil
 }
 
 // NewReader creates a new WARC reader.
@@ -69,7 +73,7 @@ func NewRotatorSettings() *RotatorSettings {
 		WarcinfoContent: NewHeader(),
 		Prefix:          "WARC",
 		WarcSize:        1000,
-		Encryption:      false,
+		Encryption:      "GZIP",
 		OutputDirectory: "./",
 	}
 }
@@ -111,6 +115,11 @@ func checkRotatorSettings(settings *RotatorSettings) (err error) {
 	// If WARC size isn't specified, set it to 1GB (10^9 bytes) by default
 	if settings.WarcSize == 0 {
 		settings.WarcSize = 1000
+	}
+
+	// Check if the specified encryption algorithm is valid
+	if settings.Encryption != "" && settings.Encryption != "GZIP" {
+		return errors.New("Invalid encryption algorithm: " + settings.Encryption)
 	}
 
 	// Add few headers to the warcinfo payload, to not have it empty
@@ -157,7 +166,7 @@ func formatSerial(serial int, format string) string {
 // generateWarcFileName generate a WARC file name following recommendations
 // of the specs:
 // Prefix-Timestamp-Serial-Crawlhost.warc.gz
-func generateWarcFileName(prefix string, encryption bool, serial int) (fileName string) {
+func generateWarcFileName(prefix string, encryption string, serial int) (fileName string) {
 	// Get host name as reported by the kernel
 	hostName, err := os.Hostname()
 	if err != nil {
@@ -166,8 +175,10 @@ func generateWarcFileName(prefix string, encryption bool, serial int) (fileName 
 
 	formattedSerial := formatSerial(serial, "5")
 
-	if encryption {
-		return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.gz.open"
+	if encryption != "" {
+		if encryption == "GZIP" {
+			return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.gz.open"
+		}
 	}
 	return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.open"
 }

@@ -17,7 +17,7 @@ import (
 // Writer writes WARC records to WARC files.
 type Writer struct {
 	FileName    string
-	Compression bool
+	Compression string
 	gzipWriter  *gzip.Writer
 	fileWriter  *bufio.Writer
 }
