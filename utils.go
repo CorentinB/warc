@@ -13,6 +13,8 @@ import (
 	"os/signal"
 	"sync/atomic"
 	"time"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 // GetSHA1 return the SHA1 of a []byte,
@@ -34,6 +36,17 @@ func NewWriter(writer io.Writer, fileName string, encryption string) (*Writer, e
 				Compression: encryption,
 				gzipWriter:  gzipWriter,
 				fileWriter:  bufio.NewWriter(gzipWriter),
+			}, nil
+		} else if encryption == "ZSTD" {
+			zstdWriter, err := zstd.NewWriter(writer)
+			if err != nil {
+				return nil, err
+			}
+			return &Writer{
+				FileName:    fileName,
+				Compression: encryption,
+				zstdWriter:  zstdWriter,
+				fileWriter:  bufio.NewWriter(zstdWriter),
 			}, nil
 		}
 		return nil, errors.New("Invalid encryption algorithm: " + encryption)
@@ -118,7 +131,7 @@ func checkRotatorSettings(settings *RotatorSettings) (err error) {
 	}
 
 	// Check if the specified encryption algorithm is valid
-	if settings.Encryption != "" && settings.Encryption != "GZIP" {
+	if settings.Encryption != "" && settings.Encryption != "GZIP" && settings.Encryption != "ZSTD" {
 		return errors.New("Invalid encryption algorithm: " + settings.Encryption)
 	}
 
@@ -178,6 +191,9 @@ func generateWarcFileName(prefix string, encryption string, serial int) (fileNam
 	if encryption != "" {
 		if encryption == "GZIP" {
 			return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.gz.open"
+		}
+		if encryption == "ZSTD" {
+			return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.zst.open"
 		}
 	}
 	return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.open"

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -19,6 +20,7 @@ type Writer struct {
 	FileName    string
 	Compression string
 	gzipWriter  *gzip.Writer
+	zstdWriter  *zstd.Encoder
 	fileWriter  *bufio.Writer
 }
 

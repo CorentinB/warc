@@ -127,6 +127,12 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 			if err != nil {
 				panic(err)
 			}
+		} else if settings.Encryption == "ZSTD" {
+			warcWriter.zstdWriter.Close()
+			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 
@@ -147,6 +153,8 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 					if settings.Encryption != "" {
 						if settings.Encryption == "GZIP" {
 							warcWriter.gzipWriter.Close()
+						} else if settings.Encryption == "ZSTD" {
+							warcWriter.zstdWriter.Close()
 						}
 					}
 					warcFile.Close()
@@ -176,6 +184,12 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 							if err != nil {
 								panic(err)
 							}
+						} else if settings.Encryption == "ZSTD" {
+							warcWriter.zstdWriter.Close()
+							warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+							if err != nil {
+								panic(err)
+							}
 						}
 					}
 				}
@@ -197,6 +211,12 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 							if err != nil {
 								panic(err)
 							}
+						} else if settings.Encryption == "ZSTD" {
+							warcWriter.zstdWriter.Close()
+							warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+							if err != nil {
+								panic(err)
+							}
 						}
 					}
 				}
@@ -207,6 +227,8 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 				if settings.Encryption != "" {
 					if settings.Encryption == "GZIP" {
 						warcWriter.gzipWriter.Close()
+					} else if settings.Encryption == "ZSTD" {
+						warcWriter.zstdWriter.Close()
 					}
 				}
 				warcFile.Close()
@@ -228,6 +250,8 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 			if settings.Encryption != "" {
 				if settings.Encryption == "GZIP" {
 					warcWriter.gzipWriter.Close()
+				} else if settings.Encryption == "ZSTD" {
+					warcWriter.zstdWriter.Close()
 				}
 			}
 			warcFile.Close()
