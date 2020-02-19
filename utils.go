@@ -3,15 +3,12 @@ package warc
 import (
 	"bufio"
 	"compress/gzip"
-	"context"
 	"crypto/sha1"
 	"encoding/base32"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"sync/atomic"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -197,17 +194,4 @@ func generateWarcFileName(prefix string, encryption string, serial int) (fileNam
 		}
 	}
 	return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.open"
-}
-
-func listenCtrlC(cancel context.CancelFunc) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	<-c
-	atomic.StoreInt32(&exitRequested, 1)
-	cancel()
-	fmt.Fprintln(os.Stderr, "\nWaiting for WARC writing to finish...")
-	fmt.Fprintln(os.Stderr, "Press ^C again to exit instantly.")
-	<-c
-	fmt.Fprintln(os.Stderr, "\nKilled!")
-	os.Exit(130)
 }

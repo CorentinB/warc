@@ -5,15 +5,11 @@ This module is based on nlevitt's WARC module (https://github.com/nlevitt/warc).
 package warc
 
 import (
-	"context"
 	"net/http"
 	"net/http/httputil"
 	"os"
 	"strings"
-	"sync/atomic"
 )
-
-var exitRequested int32
 
 // RotatorSettings is used to store the settings
 // needed by recordWriter to write WARC files
@@ -89,18 +85,14 @@ func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *RecordBatc
 		return recordWriterChannel, done, err
 	}
 
-	// Handle termination signals to properly close WARC files afterwards
-	c, cancel := context.WithCancel(context.Background())
-	go listenCtrlC(cancel)
-
 	// Start the record writer in a goroutine
 	// TODO: support for pool of recordWriter?
-	go recordWriter(c, s, recordWriterChannel, done)
+	go recordWriter(s, recordWriterChannel, done)
 
 	return recordWriterChannel, done, nil
 }
 
-func recordWriter(c context.Context, settings *RotatorSettings, records chan *RecordBatch, done chan bool) {
+func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool) {
 	var serial = 1
 	var currentFileName string = generateWarcFileName(settings.Prefix, settings.Encryption, serial)
 
@@ -139,89 +131,14 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 	for {
 		recordBatch, more := <-records
 		if more {
-			if atomic.LoadInt32(&exitRequested) == 0 {
-				if isFileSizeExceeded(settings.OutputDirectory+currentFileName, settings.WarcSize) {
-					// WARC file size exceeded settings.WarcSize
-					// The WARC file is renamed to remove the .open suffix
-					err := os.Rename(settings.OutputDirectory+currentFileName, strings.TrimSuffix(settings.OutputDirectory+currentFileName, ".open"))
-					if err != nil {
-						panic(err)
-					}
-
-					// We flush the data and close the file
-					warcWriter.fileWriter.Flush()
-					if settings.Encryption != "" {
-						if settings.Encryption == "GZIP" {
-							warcWriter.gzipWriter.Close()
-						} else if settings.Encryption == "ZSTD" {
-							warcWriter.zstdWriter.Close()
-						}
-					}
-					warcFile.Close()
-
-					// Increment the file's serial number, then create the new file
-					serial++
-					currentFileName = generateWarcFileName(settings.Prefix, settings.Encryption, serial)
-					warcFile, err = os.Create(settings.OutputDirectory + currentFileName)
-					if err != nil {
-						panic(err)
-					}
-
-					// Initialize new WARC writer
-					warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
-					if err != nil {
-						panic(err)
-					}
-
-					// Write the info record
-					warcWriter.WriteInfoRecord(settings.WarcinfoContent)
-
-					// If encryption is enabled, we close the record's GZIP chunk
-					if settings.Encryption != "" {
-						if settings.Encryption == "GZIP" {
-							warcWriter.gzipWriter.Close()
-							warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
-							if err != nil {
-								panic(err)
-							}
-						} else if settings.Encryption == "ZSTD" {
-							warcWriter.zstdWriter.Close()
-							warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
-							if err != nil {
-								panic(err)
-							}
-						}
-					}
+			if isFileSizeExceeded(settings.OutputDirectory+currentFileName, settings.WarcSize) {
+				// WARC file size exceeded settings.WarcSize
+				// The WARC file is renamed to remove the .open suffix
+				err := os.Rename(settings.OutputDirectory+currentFileName, strings.TrimSuffix(settings.OutputDirectory+currentFileName, ".open"))
+				if err != nil {
+					panic(err)
 				}
 
-				// Write all the records of the record batch
-				for _, record := range recordBatch.Records {
-					record.Header.Set("WARC-Date", recordBatch.CaptureTime)
-					record.Header.Set("WARC-Filename", strings.TrimSuffix(currentFileName, ".open"))
-					err := warcWriter.WriteRecord(record)
-					if err != nil {
-						panic(err)
-					}
-
-					// If encryption is enabled, we close the record's GZIP chunk
-					if settings.Encryption != "" {
-						if settings.Encryption == "GZIP" {
-							warcWriter.gzipWriter.Close()
-							warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
-							if err != nil {
-								panic(err)
-							}
-						} else if settings.Encryption == "ZSTD" {
-							warcWriter.zstdWriter.Close()
-							warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
-							if err != nil {
-								panic(err)
-							}
-						}
-					}
-				}
-			} else {
-				// Termination signal has been caught
 				// We flush the data and close the file
 				warcWriter.fileWriter.Flush()
 				if settings.Encryption != "" {
@@ -233,15 +150,66 @@ func recordWriter(c context.Context, settings *RotatorSettings, records chan *Re
 				}
 				warcFile.Close()
 
-				// The WARC file is renamed to remove the .open suffix
-				err := os.Rename(settings.OutputDirectory+currentFileName, strings.TrimSuffix(settings.OutputDirectory+currentFileName, ".open"))
+				// Increment the file's serial number, then create the new file
+				serial++
+				currentFileName = generateWarcFileName(settings.Prefix, settings.Encryption, serial)
+				warcFile, err = os.Create(settings.OutputDirectory + currentFileName)
 				if err != nil {
 					panic(err)
 				}
 
-				done <- true
+				// Initialize new WARC writer
+				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+				if err != nil {
+					panic(err)
+				}
 
-				os.Exit(130)
+				// Write the info record
+				warcWriter.WriteInfoRecord(settings.WarcinfoContent)
+
+				// If encryption is enabled, we close the record's GZIP chunk
+				if settings.Encryption != "" {
+					if settings.Encryption == "GZIP" {
+						warcWriter.gzipWriter.Close()
+						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+						if err != nil {
+							panic(err)
+						}
+					} else if settings.Encryption == "ZSTD" {
+						warcWriter.zstdWriter.Close()
+						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+						if err != nil {
+							panic(err)
+						}
+					}
+				}
+			}
+
+			// Write all the records of the record batch
+			for _, record := range recordBatch.Records {
+				record.Header.Set("WARC-Date", recordBatch.CaptureTime)
+				record.Header.Set("WARC-Filename", strings.TrimSuffix(currentFileName, ".open"))
+				err := warcWriter.WriteRecord(record)
+				if err != nil {
+					panic(err)
+				}
+
+				// If encryption is enabled, we close the record's GZIP chunk
+				if settings.Encryption != "" {
+					if settings.Encryption == "GZIP" {
+						warcWriter.gzipWriter.Close()
+						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+						if err != nil {
+							panic(err)
+						}
+					} else if settings.Encryption == "ZSTD" {
+						warcWriter.zstdWriter.Close()
+						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+						if err != nil {
+							panic(err)
+						}
+					}
+				}
 			}
 		} else {
 			// Channel has been closed
