@@ -21,8 +21,8 @@ type RotatorSettings struct {
 	// recommend to name files this way:
 	// Prefix-Timestamp-Serial-Crawlhost.warc.gz
 	Prefix string
-	// Type of encryption to use
-	Encryption string
+	// Compression algorithm to use
+	Compression string
 	// WarcSize is in MegaBytes
 	WarcSize float64
 	// Directory where the created WARC files will be stored,
@@ -94,7 +94,7 @@ func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *RecordBatc
 
 func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool) {
 	var serial = 1
-	var currentFileName string = generateWarcFileName(settings.Prefix, settings.Encryption, serial)
+	var currentFileName string = generateWarcFileName(settings.Prefix, settings.Compression, serial)
 
 	// Create and open the initial file
 	warcFile, err := os.Create(settings.OutputDirectory + currentFileName)
@@ -103,7 +103,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	}
 
 	// Initialize WARC writer
-	warcWriter, err := NewWriter(warcFile, currentFileName, settings.Encryption)
+	warcWriter, err := NewWriter(warcFile, currentFileName, settings.Compression)
 	if err != nil {
 		panic(err)
 	}
@@ -111,17 +111,17 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	// Write the info record
 	warcWriter.WriteInfoRecord(settings.WarcinfoContent)
 
-	// If encryption is enabled, we close the record's GZIP chunk
-	if settings.Encryption != "" {
-		if settings.Encryption == "GZIP" {
+	// If compression is enabled, we close the record's GZIP chunk
+	if settings.Compression != "" {
+		if settings.Compression == "GZIP" {
 			warcWriter.gzipWriter.Close()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
 			if err != nil {
 				panic(err)
 			}
-		} else if settings.Encryption == "ZSTD" {
+		} else if settings.Compression == "ZSTD" {
 			warcWriter.zstdWriter.Close()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
 			if err != nil {
 				panic(err)
 			}
@@ -141,10 +141,10 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 				// We flush the data and close the file
 				warcWriter.fileWriter.Flush()
-				if settings.Encryption != "" {
-					if settings.Encryption == "GZIP" {
+				if settings.Compression != "" {
+					if settings.Compression == "GZIP" {
 						warcWriter.gzipWriter.Close()
-					} else if settings.Encryption == "ZSTD" {
+					} else if settings.Compression == "ZSTD" {
 						warcWriter.zstdWriter.Close()
 					}
 				}
@@ -152,14 +152,14 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 				// Increment the file's serial number, then create the new file
 				serial++
-				currentFileName = generateWarcFileName(settings.Prefix, settings.Encryption, serial)
+				currentFileName = generateWarcFileName(settings.Prefix, settings.Compression, serial)
 				warcFile, err = os.Create(settings.OutputDirectory + currentFileName)
 				if err != nil {
 					panic(err)
 				}
 
 				// Initialize new WARC writer
-				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
 				if err != nil {
 					panic(err)
 				}
@@ -167,17 +167,17 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				// Write the info record
 				warcWriter.WriteInfoRecord(settings.WarcinfoContent)
 
-				// If encryption is enabled, we close the record's GZIP chunk
-				if settings.Encryption != "" {
-					if settings.Encryption == "GZIP" {
+				// If compression is enabled, we close the record's GZIP chunk
+				if settings.Compression != "" {
+					if settings.Compression == "GZIP" {
 						warcWriter.gzipWriter.Close()
-						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
 						if err != nil {
 							panic(err)
 						}
-					} else if settings.Encryption == "ZSTD" {
+					} else if settings.Compression == "ZSTD" {
 						warcWriter.zstdWriter.Close()
-						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
 						if err != nil {
 							panic(err)
 						}
@@ -194,17 +194,17 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 					panic(err)
 				}
 
-				// If encryption is enabled, we close the record's GZIP chunk
-				if settings.Encryption != "" {
-					if settings.Encryption == "GZIP" {
+				// If compression is enabled, we close the record's GZIP chunk
+				if settings.Compression != "" {
+					if settings.Compression == "GZIP" {
 						warcWriter.gzipWriter.Close()
-						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
 						if err != nil {
 							panic(err)
 						}
-					} else if settings.Encryption == "ZSTD" {
+					} else if settings.Compression == "ZSTD" {
 						warcWriter.zstdWriter.Close()
-						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Encryption)
+						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
 						if err != nil {
 							panic(err)
 						}
@@ -215,10 +215,10 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 			// Channel has been closed
 			// We flush the data, close the file, and rename it
 			warcWriter.fileWriter.Flush()
-			if settings.Encryption != "" {
-				if settings.Encryption == "GZIP" {
+			if settings.Compression != "" {
+				if settings.Compression == "GZIP" {
 					warcWriter.gzipWriter.Close()
-				} else if settings.Encryption == "ZSTD" {
+				} else if settings.Compression == "ZSTD" {
 					warcWriter.zstdWriter.Close()
 				}
 			}
