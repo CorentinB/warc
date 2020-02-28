@@ -201,7 +201,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 			// Write all the records of the record batch
 			for _, record := range recordBatch.Records {
 				record.Header.Set("WARC-Date", recordBatch.CaptureTime)
-				record.Header.Set("WARC-Warcinfo-ID", currentWarcinfoRecordID)
+				record.Header.Set("WARC-Warcinfo-ID", "<urn:uuid:"+currentWarcinfoRecordID+">")
 				_, err := warcWriter.WriteRecord(record)
 				if err != nil {
 					panic(err)
