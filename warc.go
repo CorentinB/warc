@@ -179,29 +179,22 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				if settings.Compression != "" {
 					if settings.Compression == "GZIP" {
 						warcWriter.gzipWriter.Close()
-						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
-						if err != nil {
-							panic(err)
-						}
 					} else if settings.Compression == "ZSTD" {
 						warcWriter.zstdWriter.Close()
-						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
-						if err != nil {
-							panic(err)
-						}
 					}
-				}
-			} else {
-				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
-				if err != nil {
-					panic(err)
 				}
 			}
 
 			// Write all the records of the record batch
 			for _, record := range recordBatch.Records {
+				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
+				if err != nil {
+					panic(err)
+				}
+
 				record.Header.Set("WARC-Date", recordBatch.CaptureTime)
 				record.Header.Set("WARC-Warcinfo-ID", "<urn:uuid:"+currentWarcinfoRecordID+">")
+
 				_, err := warcWriter.WriteRecord(record)
 				if err != nil {
 					panic(err)
@@ -216,6 +209,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 					}
 				}
 			}
+			warcWriter.fileWriter.Flush()
 		} else {
 			// Channel has been closed
 			// We flush the data, close the file, and rename it
