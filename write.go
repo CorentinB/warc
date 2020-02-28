@@ -47,11 +47,14 @@ type Record struct {
 // 	Content
 // 	CLRF
 // 	CLRF
-func (w *Writer) WriteRecord(r *Record) error {
+func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	data, err := ioutil.ReadAll(r.Content)
 	if err != nil {
-		return err
+		return recordID, err
 	}
+
+	// Generate record ID
+	recordID = uuid.NewV4().String()
 
 	// Add the mandatories headers
 	r.Header["content-length"] = strconv.Itoa(len(data))
@@ -65,35 +68,35 @@ func (w *Writer) WriteRecord(r *Record) error {
 	}
 
 	if r.Header["warc-record-id"] == "" {
-		r.Header["warc-record-id"] = "<urn:uuid:" + uuid.NewV4().String() + ">"
+		r.Header["warc-record-id"] = "<urn:uuid:" + recordID + ">"
 	}
 
 	_, err = io.WriteString(w.fileWriter, "WARC/1.1\r\n")
 	if err != nil {
-		return err
+		return recordID, err
 	}
 
 	// Write headers
 	for key, value := range r.Header {
 		_, err = io.WriteString(w.fileWriter, strings.Title(key)+": "+value+"\r\n")
 		if err != nil {
-			return err
+			return recordID, err
 		}
 	}
 
 	// Write payload
 	_, err = io.WriteString(w.fileWriter, "\r\n"+string(data)+"\r\n\r\n")
 	if err != nil {
-		return err
+		return recordID, err
 	}
 
 	// Flush data
 	w.fileWriter.Flush()
-	return nil
+	return recordID, err
 }
 
 // WriteInfoRecord method can be used to write informations record to the WARC file
-func (w *Writer) WriteInfoRecord(payload map[string]string) error {
+func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, err error) {
 	// Initialize the record
 	infoRecord := NewRecord()
 
@@ -111,11 +114,11 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) error {
 	infoRecord.Content = warcInfoContent
 
 	// Finally, write the record and flush the data
-	err := w.WriteRecord(infoRecord)
+	recordID, err = w.WriteRecord(infoRecord)
 	if err != nil {
-		return err
+		return recordID, err
 	}
 
 	w.fileWriter.Flush()
-	return nil
+	return recordID, err
 }

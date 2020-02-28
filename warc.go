@@ -95,6 +95,7 @@ func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *RecordBatc
 func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool) {
 	var serial = 1
 	var currentFileName string = generateWarcFileName(settings.Prefix, settings.Compression, serial)
+	var currentWarcinfoRecordID string
 
 	// Create and open the initial file
 	warcFile, err := os.Create(settings.OutputDirectory + currentFileName)
@@ -165,7 +166,11 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				}
 
 				// Write the info record
-				warcWriter.WriteInfoRecord(settings.WarcinfoContent)
+				currentWarcinfoRecordID, err := warcWriter.WriteInfoRecord(settings.WarcinfoContent)
+				if err != nil {
+					panic(err)
+				}
+				_ = currentWarcinfoRecordID
 
 				// If compression is enabled, we close the record's GZIP chunk
 				if settings.Compression != "" {
@@ -193,8 +198,8 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 			// Write all the records of the record batch
 			for _, record := range recordBatch.Records {
 				record.Header.Set("WARC-Date", recordBatch.CaptureTime)
-				record.Header.Set("WARC-Filename", strings.TrimSuffix(currentFileName, ".open"))
-				err := warcWriter.WriteRecord(record)
+				record.Header.Set("WARC-Warcinfo-ID", currentWarcinfoRecordID)
+				_, err := warcWriter.WriteRecord(record)
 				if err != nil {
 					panic(err)
 				}

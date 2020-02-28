@@ -130,7 +130,8 @@ func TestSimpleWriteRead(t *testing.T) {
 		record := NewRecord()
 		record.Header = testRecord.Header
 		record.Content = bytes.NewReader(testRecord.Content)
-		if err := writer.WriteRecord(record); err != nil {
+		_, err := writer.WriteRecord(record)
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
