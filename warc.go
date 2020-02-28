@@ -183,6 +183,11 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 						}
 					}
 				}
+			} else {
+				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
+				if err != nil {
+					panic(err)
+				}
 			}
 
 			// Write all the records of the record batch
@@ -198,16 +203,8 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				if settings.Compression != "" {
 					if settings.Compression == "GZIP" {
 						warcWriter.gzipWriter.Close()
-						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
-						if err != nil {
-							panic(err)
-						}
 					} else if settings.Compression == "ZSTD" {
 						warcWriter.zstdWriter.Close()
-						warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
-						if err != nil {
-							panic(err)
-						}
 					}
 				}
 			}
