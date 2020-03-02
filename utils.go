@@ -134,8 +134,8 @@ func checkRotatorSettings(settings *RotatorSettings) (err error) {
 
 	// Add few headers to the warcinfo payload, to not have it empty
 	settings.WarcinfoContent.Set("hostname", hostName)
-	settings.WarcinfoContent.Set("format", "WARC file version 1.1")
-	settings.WarcinfoContent.Set("conformsTo", "http://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/")
+	settings.WarcinfoContent.Set("format", "WARC file version 1.0")
+	settings.WarcinfoContent.Set("conformsTo", "https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.0/")
 
 	return nil
 }
