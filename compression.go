@@ -25,7 +25,7 @@ func (c CompressionType) String() string {
 	case CompressionNone:
 		return "CompressionNone"
 	case CompressionBZIP:
-		return "CompressionGZIP"
+		return "CompressionBZIP"
 	case CompressionGZIP:
 		return "CompressionGZIP"
 	}
