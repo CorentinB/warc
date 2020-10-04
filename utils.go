@@ -187,11 +187,11 @@ func generateWarcFileName(prefix string, compression string, serial int) (fileNa
 
 	if compression != "" {
 		if compression == "GZIP" {
-			return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.gz.open"
+			return prefix + "-" + time.Now().UTC().Format("20060102150405000") + "-" + formattedSerial + "-" + hostName + ".warc.gz.open"
 		}
 		if compression == "ZSTD" {
-			return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.zst.open"
+			return prefix + "-" + time.Now().UTC().Format("20060102150405000") + "-" + formattedSerial + "-" + hostName + ".warc.zst.open"
 		}
 	}
-	return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + formattedSerial + "-" + hostName + ".warc.open"
+	return prefix + "-" + time.Now().UTC().Format("20060102150405000") + "-" + formattedSerial + "-" + hostName + ".warc.open"
 }
