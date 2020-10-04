@@ -115,23 +115,6 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 		panic(err)
 	}
 
-	// If compression is enabled, we close the record's GZIP chunk
-	if settings.Compression != "" {
-		if settings.Compression == "GZIP" {
-			warcWriter.gzipWriter.Close()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
-			if err != nil {
-				panic(err)
-			}
-		} else if settings.Compression == "ZSTD" {
-			warcWriter.zstdWriter.Close()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
-			if err != nil {
-				panic(err)
-			}
-		}
-	}
-
 	for {
 		recordBatch, more := <-records
 		if more {
@@ -144,7 +127,6 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				}
 
 				// We flush the data and close the file
-				warcWriter.fileWriter.Flush()
 				if settings.Compression != "" {
 					if settings.Compression == "GZIP" {
 						warcWriter.gzipWriter.Close()
@@ -187,11 +169,6 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 			// Write all the records of the record batch
 			for _, record := range recordBatch.Records {
-				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
-				if err != nil {
-					panic(err)
-				}
-
 				record.Header.Set("WARC-Date", recordBatch.CaptureTime)
 				record.Header.Set("WARC-Warcinfo-ID", "<urn:uuid:"+currentWarcinfoRecordID+">")
 
@@ -199,21 +176,10 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				if err != nil {
 					panic(err)
 				}
-
-				// If compression is enabled, we close the record's GZIP chunk
-				if settings.Compression != "" {
-					if settings.Compression == "GZIP" {
-						warcWriter.gzipWriter.Close()
-					} else if settings.Compression == "ZSTD" {
-						warcWriter.zstdWriter.Close()
-					}
-				}
 			}
-			warcWriter.fileWriter.Flush()
 		} else {
 			// Channel has been closed
 			// We flush the data, close the file, and rename it
-			warcWriter.fileWriter.Flush()
 			if settings.Compression != "" {
 				if settings.Compression == "GZIP" {
 					warcWriter.gzipWriter.Close()
