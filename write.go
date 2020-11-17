@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -34,8 +35,9 @@ type RecordBatch struct {
 
 // Record represents a WARC record.
 type Record struct {
-	Header  Header
-	Content io.Reader
+	Header      Header
+	Content     io.Reader
+	PayloadPath string
 }
 
 // WriteRecord writes a record to the underlying WARC file.
@@ -48,17 +50,10 @@ type Record struct {
 // 	CLRF
 // 	CLRF
 func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
-	data, err := ioutil.ReadAll(r.Content)
-	if err != nil {
-		return recordID, err
-	}
-
 	// Generate record ID
 	recordID = uuid.NewV4().String()
 
 	// Add the mandatories headers
-	r.Header["content-length"] = strconv.Itoa(len(data))
-
 	if r.Header["warc-date"] == "" {
 		r.Header["warc-date"] = time.Now().UTC().Format(time.RFC3339)
 	}
@@ -84,15 +79,70 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		}
 	}
 
-	// Write payload
-	_, err = io.WriteString(w.fileWriter, "\r\n"+string(data)+"\r\n\r\n")
-	if err != nil {
-		return recordID, err
+	// If PayloadPath isn't empty, it means that the payload we need to write
+	// lives on disk
+	if r.PayloadPath != "" {
+		var contentLength int
+
+		file, err := os.Open(r.PayloadPath)
+		if err != nil {
+			return recordID, err
+		}
+		defer file.Close()
+
+		_, err = io.WriteString(w.fileWriter, "\r\n")
+		if err != nil {
+			tempFileDone(r.PayloadPath)
+			return recordID, err
+		}
+
+		bufferedReader := bufio.NewReader(file)
+
+		buffer := make([]byte, 1024)
+		for {
+			count, err := bufferedReader.Read(buffer)
+			if err != nil && err != io.EOF {
+				tempFileDone(r.PayloadPath)
+				return recordID, err
+			}
+
+			_, err = io.WriteString(w.fileWriter, string(buffer))
+			if err != nil {
+				tempFileDone(r.PayloadPath)
+				return recordID, err
+			}
+
+			if count == 0 || err == io.EOF {
+				contentLength += count
+				break
+			}
+		}
+		tempFileDone(r.PayloadPath)
+
+		_, err = io.WriteString(w.fileWriter, "\r\n\r\n")
+		if err != nil {
+			return recordID, err
+		}
+
+		r.Header["content-length"] = strconv.Itoa(contentLength)
+	} else {
+		data, err := ioutil.ReadAll(r.Content)
+		if err != nil {
+			return recordID, err
+		}
+
+		_, err = io.WriteString(w.fileWriter, "\r\n"+string(data)+"\r\n\r\n")
+		if err != nil {
+			return recordID, err
+		}
+
+		r.Header["content-length"] = strconv.Itoa(len(data))
 	}
 
 	// Flush data
 	w.fileWriter.Flush()
-	return recordID, err
+
+	return recordID, nil
 }
 
 // WriteInfoRecord method can be used to write informations record to the WARC file
