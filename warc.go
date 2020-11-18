@@ -210,6 +210,10 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				}
 			}
 			warcWriter.fileWriter.Flush()
+
+			if recordBatch.Done != nil {
+				recordBatch.Done <- true
+			}
 		} else {
 			// Channel has been closed
 			// We flush the data, close the file, and rename it

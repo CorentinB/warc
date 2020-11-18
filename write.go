@@ -30,6 +30,7 @@ type Writer struct {
 // capture timestamp
 type RecordBatch struct {
 	Records     []*Record
+	Done        chan bool
 	CaptureTime string
 }
 
@@ -50,15 +51,6 @@ type Record struct {
 // 	CLRF
 // 	CLRF
 func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
-	defer func(r *Record) {
-		if r.PayloadPath != "" {
-			err := os.Rename(r.PayloadPath, r.PayloadPath+".done")
-			if err != nil {
-				panic(err)
-			}
-		}
-	}(r)
-
 	// Generate record ID
 	recordID = uuid.NewV4().String()
 
