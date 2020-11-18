@@ -15,13 +15,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-func tempFileDone(filePath string) {
-	err := os.Rename(filePath, filePath+".done")
-	if err != nil {
-		panic(err)
-	}
-}
-
 // GetSHA1 return the SHA1 of a []byte,
 // can be used to fill the WARC-Payload-Digest header
 func GetSHA1(content []byte) string {

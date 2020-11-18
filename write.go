@@ -50,6 +50,15 @@ type Record struct {
 // 	CLRF
 // 	CLRF
 func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
+	defer func(r *Record) {
+		if r.PayloadPath != "" {
+			err := os.Rename(r.PayloadPath, r.PayloadPath+".done")
+			if err != nil {
+				panic(err)
+			}
+		}
+	}(r)
+
 	// Generate record ID
 	recordID = uuid.NewV4().String()
 
@@ -92,7 +101,6 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 		_, err = io.WriteString(w.fileWriter, "\r\n")
 		if err != nil {
-			tempFileDone(r.PayloadPath)
 			return recordID, err
 		}
 
@@ -102,13 +110,11 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		for {
 			count, err := bufferedReader.Read(buffer)
 			if err != nil && err != io.EOF {
-				tempFileDone(r.PayloadPath)
 				return recordID, err
 			}
 
 			_, err = io.WriteString(w.fileWriter, string(buffer))
 			if err != nil {
-				tempFileDone(r.PayloadPath)
 				return recordID, err
 			}
 
@@ -117,7 +123,6 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 				break
 			}
 		}
-		tempFileDone(r.PayloadPath)
 
 		_, err = io.WriteString(w.fileWriter, "\r\n\r\n")
 		if err != nil {
