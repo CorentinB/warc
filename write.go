@@ -72,14 +72,6 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		return recordID, err
 	}
 
-	// Write headers
-	for key, value := range r.Header {
-		_, err = io.WriteString(w.fileWriter, strings.Title(key)+": "+value+"\r\n")
-		if err != nil {
-			return recordID, err
-		}
-	}
-
 	// If PayloadPath isn't empty, it means that the payload we need to write
 	// lives on disk
 	if r.PayloadPath != "" {
@@ -116,16 +108,32 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 			}
 		}
 
+		// Write headers
+		r.Header["content-length"] = strconv.Itoa(contentLength)
+		for key, value := range r.Header {
+			_, err = io.WriteString(w.fileWriter, strings.Title(key)+": "+value+"\r\n")
+			if err != nil {
+				return recordID, err
+			}
+		}
+
 		_, err = io.WriteString(w.fileWriter, "\r\n\r\n")
 		if err != nil {
 			return recordID, err
 		}
-
-		r.Header["content-length"] = strconv.Itoa(contentLength)
 	} else {
 		data, err := ioutil.ReadAll(r.Content)
 		if err != nil {
 			return recordID, err
+		}
+
+		// Write headers
+		r.Header["content-length"] = strconv.Itoa(len(data))
+		for key, value := range r.Header {
+			_, err = io.WriteString(w.fileWriter, strings.Title(key)+": "+value+"\r\n")
+			if err != nil {
+				return recordID, err
+			}
 		}
 
 		_, err = io.WriteString(w.fileWriter, "\r\n"+string(data)+"\r\n\r\n")
