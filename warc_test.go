@@ -54,7 +54,7 @@ func TestRecordsFromHTTPResponse(t *testing.T) {
 	}
 
 	if reflect.DeepEqual(responseContent, testResponseContent) == false ||
-		records.Records[0].Header.Get("WARC-Payload-Digest") != testResponseSHA1 {
+		records.Records[0].Header.Get("WARC-Block-Digest") != testResponseSHA1 {
 		t.Error("Failed to turn a http.Response into a WARC record")
 	}
 
@@ -64,7 +64,7 @@ func TestRecordsFromHTTPResponse(t *testing.T) {
 	}
 
 	if reflect.DeepEqual(requestContent, testRequestContent) == false ||
-		records.Records[1].Header.Get("WARC-Payload-Digest") != testRequestSHA1 {
+		records.Records[1].Header.Get("WARC-Block-Digest") != testRequestSHA1 {
 		t.Error("Failed to turn a http.Response.Request into a WARC record")
 	}
 }

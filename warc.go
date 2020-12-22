@@ -118,13 +118,13 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	// If compression is enabled, we close the record's GZIP chunk
 	if settings.Compression != "" {
 		if settings.Compression == "GZIP" {
-			warcWriter.gzipWriter.Close()
+			warcWriter.GZIPWriter.Close()
 			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
 			if err != nil {
 				panic(err)
 			}
 		} else if settings.Compression == "ZSTD" {
-			warcWriter.zstdWriter.Close()
+			warcWriter.ZSTDWriter.Close()
 			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
 			if err != nil {
 				panic(err)
@@ -144,12 +144,12 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				}
 
 				// We flush the data and close the file
-				warcWriter.fileWriter.Flush()
+				warcWriter.FileWriter.Flush()
 				if settings.Compression != "" {
 					if settings.Compression == "GZIP" {
-						warcWriter.gzipWriter.Close()
+						warcWriter.GZIPWriter.Close()
 					} else if settings.Compression == "ZSTD" {
-						warcWriter.zstdWriter.Close()
+						warcWriter.ZSTDWriter.Close()
 					}
 				}
 				warcFile.Close()
@@ -178,9 +178,9 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				// If compression is enabled, we close the record's GZIP chunk
 				if settings.Compression != "" {
 					if settings.Compression == "GZIP" {
-						warcWriter.gzipWriter.Close()
+						warcWriter.GZIPWriter.Close()
 					} else if settings.Compression == "ZSTD" {
-						warcWriter.zstdWriter.Close()
+						warcWriter.ZSTDWriter.Close()
 					}
 				}
 			}
@@ -203,13 +203,13 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				// If compression is enabled, we close the record's GZIP chunk
 				if settings.Compression != "" {
 					if settings.Compression == "GZIP" {
-						warcWriter.gzipWriter.Close()
+						warcWriter.GZIPWriter.Close()
 					} else if settings.Compression == "ZSTD" {
-						warcWriter.zstdWriter.Close()
+						warcWriter.ZSTDWriter.Close()
 					}
 				}
 			}
-			warcWriter.fileWriter.Flush()
+			warcWriter.FileWriter.Flush()
 
 			if recordBatch.Done != nil {
 				recordBatch.Done <- true
@@ -217,12 +217,12 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 		} else {
 			// Channel has been closed
 			// We flush the data, close the file, and rename it
-			warcWriter.fileWriter.Flush()
+			warcWriter.FileWriter.Flush()
 			if settings.Compression != "" {
 				if settings.Compression == "GZIP" {
-					warcWriter.gzipWriter.Close()
+					warcWriter.GZIPWriter.Close()
 				} else if settings.Compression == "ZSTD" {
-					warcWriter.zstdWriter.Close()
+					warcWriter.ZSTDWriter.Close()
 				}
 			}
 			warcFile.Close()

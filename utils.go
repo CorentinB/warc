@@ -10,18 +10,47 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
 )
 
 // GetSHA1 return the SHA1 of a []byte,
-// can be used to fill the WARC-Payload-Digest header
+// can be used to fill the WARC-Block-Digest header
 func GetSHA1(content []byte) string {
 	sha := sha1.New()
+
 	sha.Write(content)
 
 	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
+}
+
+// GetSHA1FromFile return the SHA1 of a file,
+// can be used to fill the WARC-Block-Digest header
+func GetSHA1FromFile(path string) (string, error) {
+	hash := sha1.New()
+
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+
+	return base32.StdEncoding.EncodeToString(hash.Sum(nil)), nil
+}
+
+// splitKeyValue parses WARC record header fields.
+func splitKeyValue(line string) (string, string) {
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], strings.TrimSpace(parts[1])
 }
 
 // NewWriter creates a new WARC writer.
@@ -32,8 +61,8 @@ func NewWriter(writer io.Writer, fileName string, compression string) (*Writer, 
 			return &Writer{
 				FileName:    fileName,
 				Compression: compression,
-				gzipWriter:  gzipWriter,
-				fileWriter:  bufio.NewWriter(gzipWriter),
+				GZIPWriter:  gzipWriter,
+				FileWriter:  bufio.NewWriter(gzipWriter),
 			}, nil
 		} else if compression == "ZSTD" {
 			zstdWriter, err := zstd.NewWriter(writer)
@@ -43,8 +72,8 @@ func NewWriter(writer io.Writer, fileName string, compression string) (*Writer, 
 			return &Writer{
 				FileName:    fileName,
 				Compression: compression,
-				zstdWriter:  zstdWriter,
-				fileWriter:  bufio.NewWriter(zstdWriter),
+				ZSTDWriter:  zstdWriter,
+				FileWriter:  bufio.NewWriter(zstdWriter),
 			}, nil
 		}
 		return nil, errors.New("Invalid compression algorithm: " + compression)
@@ -53,13 +82,8 @@ func NewWriter(writer io.Writer, fileName string, compression string) (*Writer, 
 	return &Writer{
 		FileName:    fileName,
 		Compression: "",
-		fileWriter:  bufio.NewWriter(writer),
+		FileWriter:  bufio.NewWriter(writer),
 	}, nil
-}
-
-// NewReader creates a new WARC reader.
-func NewReader(reader io.Reader) (*Reader, error) {
-	return NewReaderMode(reader, DefaultMode)
 }
 
 // NewRecord creates a new WARC record.

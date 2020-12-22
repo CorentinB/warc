@@ -20,9 +20,9 @@ import (
 type Writer struct {
 	FileName    string
 	Compression string
-	gzipWriter  *gzip.Writer
-	zstdWriter  *zstd.Encoder
-	fileWriter  *bufio.Writer
+	GZIPWriter  *gzip.Writer
+	ZSTDWriter  *zstd.Encoder
+	FileWriter  *bufio.Writer
 }
 
 // RecordBatch is a structure that contains a bunch of
@@ -55,19 +55,19 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	recordID = uuid.NewV4().String()
 
 	// Add the mandatories headers
-	if r.Header["warc-date"] == "" {
-		r.Header["warc-date"] = time.Now().UTC().Format(time.RFC3339)
+	if r.Header.Get("WARC-Date") == "" {
+		r.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339))
 	}
 
-	if r.Header["warc-type"] == "" {
-		r.Header["warc-type"] = "resource"
+	if r.Header.Get("WARC-Type") == "" {
+		r.Header.Set("WARC-Type", "resource")
 	}
 
-	if r.Header["warc-record-id"] == "" {
-		r.Header["warc-record-id"] = "<urn:uuid:" + recordID + ">"
+	if r.Header.Get("WARC-Record-ID") == "" {
+		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordID+">")
 	}
 
-	_, err = io.WriteString(w.fileWriter, "WARC/1.0\r\n")
+	_, err = io.WriteString(w.FileWriter, "WARC/1.0\r\n")
 	if err != nil {
 		return recordID, err
 	}
@@ -86,37 +86,30 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		if err != nil {
 			return recordID, err
 		}
-		r.Header["content-length"] = strconv.Itoa(int(fileStats.Size()))
+		r.Header.Set("Content-Length", strconv.Itoa(int(fileStats.Size())))
+
+		// Generate WARC-Block-Digest
+		digest, err := GetSHA1FromFile(r.PayloadPath)
+		if err == nil {
+			r.Header.Set("WARC-Block-Digest", "sha1:"+digest)
+		}
 
 		// Write headers
 		for key, value := range r.Header {
-			_, err = io.WriteString(w.fileWriter, strings.Title(key)+": "+value+"\r\n")
+			_, err = io.WriteString(w.FileWriter, strings.Title(key)+": "+value+"\r\n")
 			if err != nil {
 				return recordID, err
 			}
 		}
 
-		_, err = io.WriteString(w.fileWriter, "\r\n")
+		_, err = io.WriteString(w.FileWriter, "\r\n")
 		if err != nil {
 			return recordID, err
 		}
 
-		bufferedReader := bufio.NewReader(file)
-		buffer := make([]byte, 1024)
-		for {
-			count, err := bufferedReader.Read(buffer)
-			if err != nil && err != io.EOF {
-				return recordID, err
-			}
-
-			_, err = io.WriteString(w.fileWriter, string(buffer))
-			if err != nil {
-				return recordID, err
-			}
-
-			if count == 0 || err == io.EOF {
-				break
-			}
+		_, err = io.Copy(w.FileWriter, file)
+		if err != nil {
+			return recordID, err
 		}
 	} else {
 		data, err := ioutil.ReadAll(r.Content)
@@ -125,27 +118,29 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		}
 
 		// Write headers
-		r.Header["content-length"] = strconv.Itoa(len(data))
+		r.Header.Set("Content-Length", strconv.Itoa(len(data)))
+		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(data))
+
 		for key, value := range r.Header {
-			_, err = io.WriteString(w.fileWriter, strings.Title(key)+": "+value+"\r\n")
+			_, err = io.WriteString(w.FileWriter, strings.Title(key)+": "+value+"\r\n")
 			if err != nil {
 				return recordID, err
 			}
 		}
 
-		_, err = io.WriteString(w.fileWriter, "\r\n"+string(data))
+		_, err = io.WriteString(w.FileWriter, "\r\n"+string(data))
 		if err != nil {
 			return recordID, err
 		}
 	}
 
-	_, err = io.WriteString(w.fileWriter, "\r\n\r\n")
+	_, err = io.WriteString(w.FileWriter, "\r\n\r\n")
 	if err != nil {
 		return recordID, err
 	}
 
 	// Flush data
-	w.fileWriter.Flush()
+	w.FileWriter.Flush()
 
 	return recordID, nil
 }
@@ -159,7 +154,7 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	infoRecord.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339))
 	infoRecord.Header.Set("WARC-Filename", strings.TrimSuffix(w.FileName, ".open"))
 	infoRecord.Header.Set("WARC-Type", "warcinfo")
-	infoRecord.Header.Set("content-type", "application/warc-fields")
+	infoRecord.Header.Set("Content-Type", "application/warc-fields")
 
 	// Write the payload
 	warcInfoContent := new(bytes.Buffer)
@@ -168,12 +163,15 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	}
 	infoRecord.Content = warcInfoContent
 
+	// Generate WARC-Block-Digest
+	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(warcInfoContent.Bytes()))
+
 	// Finally, write the record and flush the data
 	recordID, err = w.WriteRecord(infoRecord)
 	if err != nil {
 		return recordID, err
 	}
 
-	w.fileWriter.Flush()
+	w.FileWriter.Flush()
 	return recordID, err
 }

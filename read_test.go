@@ -2,7 +2,6 @@ package warc
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,8 +9,8 @@ import (
 	"testing"
 )
 
-func testFileHash(t *testing.T, path string, mode Mode) {
-	t.Logf("testFileHash %q, mode %v", path, mode)
+func testFileHash(t *testing.T, path string) {
+	t.Logf("testFileHash %q", path)
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -19,11 +18,10 @@ func testFileHash(t *testing.T, path string, mode Mode) {
 	}
 	defer file.Close()
 
-	reader, err := NewReaderMode(file, mode)
+	reader, err := NewReader(file)
 	if err != nil {
-		t.Fatalf("warc.NewReaderMode failed for %q: %v", path, err)
+		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
 	}
-	defer reader.Close()
 
 	for {
 		record, err := reader.ReadRecord()
@@ -33,29 +31,30 @@ func testFileHash(t *testing.T, path string, mode Mode) {
 			}
 			break
 		}
+
 		content, err := ioutil.ReadAll(record.Content)
 		if err != nil {
 			t.Fatalf("failed to read all record content: %v", err)
 		}
-		hash := fmt.Sprintf("sha1:%x", sha1.Sum(content))
+
+		hash := fmt.Sprintf("sha1:%s", GetSHA1(content))
 		if hash != record.Header["warc-block-digest"] {
-			t.Fatalf("expected %q, got %q", record.Header["warc-block-digest"], hash)
+			t.Fatalf("expected %s, got %s", record.Header.Get("warc-block-digest"), hash)
 		}
 	}
 }
 
-func testFileScan(t *testing.T, path string, mode Mode) {
+func testFileScan(t *testing.T, path string) {
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("failed to open %q: %v", path, err)
 	}
 	defer file.Close()
 
-	reader, err := NewReaderMode(file, mode)
+	reader, err := NewReader(file)
 	if err != nil {
-		t.Fatalf("warc.NewReaderMode failed for %q: %v", path, err)
+		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
 	}
-	defer reader.Close()
 
 	total := 0
 	for {
@@ -71,16 +70,11 @@ func testFileScan(t *testing.T, path string, mode Mode) {
 
 func TestReader(t *testing.T) {
 	var paths = []string{
-		"testdata/test.warc",
 		"testdata/test.warc.gz",
-		"testdata/test.warc.bz2",
 	}
 
 	for _, path := range paths {
-		testFileHash(t, path, SequentialMode)
-		testFileHash(t, path, AsynchronousMode)
-		testFileScan(t, path, SequentialMode)
-		testFileScan(t, path, AsynchronousMode)
+		testFileHash(t, path)
 	}
 }
 
@@ -132,7 +126,7 @@ func TestSimpleWriteRead(t *testing.T) {
 		record.Content = bytes.NewReader(testRecord.Content)
 		_, err := writer.WriteRecord(record)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("error while writing test record: %v", err)
 		}
 	}
 
@@ -141,12 +135,6 @@ func TestSimpleWriteRead(t *testing.T) {
 	reader, err := NewReader(buffer)
 	if err != nil {
 		t.Fatalf("failed to create reader: %v", err)
-	}
-
-	// We test if the compression detection is working
-	if reader.Compression() != CompressionNone {
-		t.Errorf("reader.Compression() == %q, expected %q",
-			reader.Compression(), CompressionNone)
 	}
 
 	// We read the records and test if we get the expected output
@@ -167,8 +155,9 @@ func TestSimpleWriteRead(t *testing.T) {
 		// Test the record content
 		content, err := ioutil.ReadAll(record.Content)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("failed reading the test record: %v", err)
 		}
+
 		if string(content) != string(testRecord.Content) {
 			t.Errorf("expected %s = %s", content, testRecord.Content)
 		}
