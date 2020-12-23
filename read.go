@@ -58,7 +58,10 @@ func readUntilDelim(r reader, delim []byte) (line []byte, err error) {
 }
 
 // ReadRecord reads the next record from the opened WARC file.
-func (r *Reader) ReadRecord() (*Record, error) {
+// If onDisk is set to true, then the record's payload will be
+// written to a temp file on disk, and specified in the *Record.PayloadPath,
+// else, everything happen in memory.
+func (r *Reader) ReadRecord(onDisk bool) (*Record, error) {
 	r.gzipReader.Multistream(false)
 
 	// Dump gzip block to a temporary file
@@ -108,16 +111,62 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		}
 	}
 
-	content, err := ioutil.ReadAll(tempReader)
-	if err != nil {
-		return nil, err
-	}
+	// If onDisk is specified, then we write the payload to a new temp file
+	if onDisk {
+		payloadTempFile, err := ioutil.TempFile("", "warc-reading-*")
+		if err != nil {
+			return nil, err
+		}
+		defer payloadTempFile.Close()
 
-	content = bytes.TrimSuffix(content, []byte("\r\n\r\n"))
+		// Copy all the payload (including the potential trailing CRLF)
+		// to a newly created temporary file
+		_, err = io.Copy(payloadTempFile, tempReader)
+		if err != nil {
+			payloadTempFile.Close()
+			os.Remove(payloadTempFile.Name())
+			return nil, err
+		}
 
-	r.record = &Record{
-		Header:  header,
-		Content: bytes.NewReader(content),
+		// Check if the last 4 bytes are \r\n\r\n,
+		// if yes, then we truncate the last 4 bytes
+		buf := make([]byte, 16)
+		stats, err := os.Stat(payloadTempFile.Name())
+		if err != nil {
+			payloadTempFile.Close()
+			os.Remove(payloadTempFile.Name())
+			return nil, err
+		}
+
+		start := stats.Size() - 16
+		_, err = payloadTempFile.ReadAt(buf, start)
+		if err != nil {
+			payloadTempFile.Close()
+			os.Remove(payloadTempFile.Name())
+			return nil, err
+		}
+
+		if bytes.HasSuffix(buf, []byte("\r\n\r\n")) {
+			os.Truncate(payloadTempFile.Name(), stats.Size()-4)
+		}
+
+		r.record = &Record{
+			Header:      header,
+			Content:     nil,
+			PayloadPath: payloadTempFile.Name(),
+		}
+	} else {
+		content, err := ioutil.ReadAll(tempReader)
+		if err != nil {
+			return nil, err
+		}
+
+		content = bytes.TrimSuffix(content, []byte("\r\n\r\n"))
+
+		r.record = &Record{
+			Header:  header,
+			Content: bytes.NewReader(content),
+		}
 	}
 
 	// Reset the reader for the next block

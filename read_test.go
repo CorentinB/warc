@@ -24,7 +24,7 @@ func testFileHash(t *testing.T, path string) {
 	}
 
 	for {
-		record, err := reader.ReadRecord()
+		record, err := reader.ReadRecord(false)
 		if err != nil {
 			if err != io.EOF {
 				t.Fatalf("failed to read all record content: %v", err)
@@ -58,7 +58,7 @@ func testFileScan(t *testing.T, path string) {
 
 	total := 0
 	for {
-		if _, err := reader.ReadRecord(); err != nil {
+		if _, err := reader.ReadRecord(false); err != nil {
 			break
 		}
 		total++
@@ -140,7 +140,7 @@ func TestSimpleWriteRead(t *testing.T) {
 	// We read the records and test if we get the expected output
 	for i, testRecord := range testRecords {
 		t.Logf("reading record %d", i)
-		record, err := reader.ReadRecord()
+		record, err := reader.ReadRecord(false)
 		if err != nil {
 			t.Fatalf("expected record, got %v", err)
 		}
