@@ -5,8 +5,6 @@ This module is based on nlevitt's WARC module (https://github.com/nlevitt/warc).
 package warc
 
 import (
-	"net/http"
-	"net/http/httputil"
 	"os"
 	"strings"
 )
@@ -28,48 +26,6 @@ type RotatorSettings struct {
 	// Directory where the created WARC files will be stored,
 	// default will be the current directory
 	OutputDirectory string
-}
-
-// RecordsFromHTTPResponse turns a http.Response into a warc.RecordBatch
-// filling both Response and Request records
-func RecordsFromHTTPResponse(response *http.Response) (*RecordBatch, error) {
-	var batch = NewRecordBatch()
-
-	// Dump response
-	responseDump, err := httputil.DumpResponse(response, true)
-	if err != nil {
-		return batch, err
-	}
-
-	// Add the response to the exchange
-	var responseRecord = NewRecord()
-	responseRecord.Header.Set("WARC-Type", "response")
-	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+GetSHA1(responseDump))
-	responseRecord.Header.Set("WARC-Target-URI", response.Request.URL.String())
-	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
-
-	responseRecord.Content = strings.NewReader(string(responseDump))
-
-	// Dump request
-	requestDump, err := httputil.DumpRequestOut(response.Request, true)
-	if err != nil {
-		return batch, err
-	}
-
-	// Add the request to the exchange
-	var requestRecord = NewRecord()
-	requestRecord.Header.Set("WARC-Type", "request")
-	requestRecord.Header.Set("WARC-Payload-Digest", "sha1:"+GetSHA1(requestDump))
-	requestRecord.Header.Set("WARC-Target-URI", response.Request.URL.String())
-	requestRecord.Header.Set("Host", response.Request.URL.Host)
-	requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
-
-	requestRecord.Content = strings.NewReader(string(requestDump))
-
-	// Append records to the record batch
-	batch.Records = append(batch.Records, responseRecord, requestRecord)
-
-	return batch, nil
 }
 
 // NewWARCRotator creates and return a channel that can be used

@@ -114,7 +114,7 @@ func TestSimpleWriteRead(t *testing.T) {
 	buffer := new(bytes.Buffer)
 
 	// We write the test records to the warc writer
-	writer, err := NewWriter(buffer, "test.warc", "")
+	writer, err := NewWriter(buffer, "test.warc.gz", "GZIP")
 	if err != nil {
 		t.Fatalf("failed to initialize a new writer: %v", err)
 	}
@@ -124,9 +124,16 @@ func TestSimpleWriteRead(t *testing.T) {
 		record := NewRecord()
 		record.Header = testRecord.Header
 		record.Content = bytes.NewReader(testRecord.Content)
+
 		_, err := writer.WriteRecord(record)
 		if err != nil {
 			t.Fatalf("error while writing test record: %v", err)
+		}
+
+		writer.GZIPWriter.Close()
+		writer, err = NewWriter(buffer, "test.warc.gz", "GZIP")
+		if err != nil {
+			t.Fatalf("failed to initialize a new writer: %v", err)
 		}
 	}
 
@@ -136,6 +143,7 @@ func TestSimpleWriteRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create reader: %v", err)
 	}
+	defer reader.Close()
 
 	// We read the records and test if we get the expected output
 	for i, testRecord := range testRecords {
