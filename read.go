@@ -62,29 +62,36 @@ func readUntilDelim(r reader, delim []byte) (line []byte, err error) {
 // written to a temp file on disk, and specified in the *Record.PayloadPath,
 // else, everything happen in memory.
 func (r *Reader) ReadRecord(onDisk bool) (*Record, error) {
+	var err error
+	var tempReader *bufio.Reader
+
 	r.gzipReader.Multistream(false)
 
-	// Dump gzip block to a temporary file
-	tempFile, err := ioutil.TempFile("", "warc-reading-*")
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(tempFile.Name())
+	// If onDisk is specified, dump gzip block to a temporary file
+	if onDisk {
+		tempFile, err := ioutil.TempFile("", "warc-reading-*")
+		if err != nil {
+			return nil, err
+		}
+		defer os.Remove(tempFile.Name())
 
-	if _, err := io.Copy(tempFile, r.gzipReader); err != nil {
+		if _, err := io.Copy(tempFile, r.gzipReader); err != nil {
+			tempFile.Close()
+			return nil, err
+		}
 		tempFile.Close()
-		return nil, err
-	}
-	tempFile.Close()
 
-	// Open temp file and start parsing it
-	file, err := os.Open(tempFile.Name())
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
+		// Open temp file and start parsing it
+		file, err := os.Open(tempFile.Name())
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
 
-	tempReader := bufio.NewReader(file)
+		tempReader = bufio.NewReader(file)
+	} else {
+		tempReader = bufio.NewReader(r.gzipReader)
+	}
 
 	// Skip first line (WARC version)
 	// TODO: add check for WARC version
