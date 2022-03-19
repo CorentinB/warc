@@ -86,12 +86,19 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		if err != nil {
 			return recordID, err
 		}
-		r.Header.Set("Content-Length", strconv.Itoa(int(fileStats.Size())))
 
-		// Generate WARC-Block-Digest
-		digest, err := GetSHA1FromFile(r.PayloadPath)
-		if err == nil {
-			r.Header.Set("WARC-Block-Digest", "sha1:"+digest)
+		if r.Header.Get("Content-Length") == "" {
+			r.Header.Set("Content-Length", strconv.Itoa(int(fileStats.Size())))
+		}
+
+		if r.Header.Get("WARC-Block-Digest") == "" {
+			// Generate WARC-Block-Digest
+			digest, err := GetSHA1FromFile(r.PayloadPath)
+			if err == nil {
+				r.Header.Set("WARC-Block-Digest", "sha1:"+digest)
+			} else {
+				return recordID, err
+			}
 		}
 
 		// Write headers
@@ -118,8 +125,13 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		}
 
 		// Write headers
-		r.Header.Set("Content-Length", strconv.Itoa(len(data)))
-		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(data))
+		if r.Header.Get("Content-Length") == "" {
+			r.Header.Set("Content-Length", strconv.Itoa(len(data)))
+		}
+
+		if r.Header.Get("WARC-Block-Digest") == "" {
+			r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(data))
+		}
 
 		for key, value := range r.Header {
 			_, err = io.WriteString(w.FileWriter, strings.Title(key)+": "+value+"\r\n")
