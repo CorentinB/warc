@@ -1,17 +1,16 @@
 package warc
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
-
-	"github.com/remeh/sizedwaitgroup"
 )
 
 type customDialer struct {
@@ -41,12 +40,12 @@ func (cc *customConnection) Close() error {
 	return cc.Conn.Close()
 }
 
-func wrapConnection(c net.Conn, URL *url.URL) net.Conn {
+func wrapConnection(c net.Conn, scheme string) net.Conn {
 	reqReader, reqWriter := io.Pipe()
 	respReader, respWriter := io.Pipe()
 
 	WaitGroup.Add(1)
-	go writeWARCFromConnection(reqReader, respReader, URL)
+	go writeWARCFromConnection(reqReader, respReader, scheme)
 
 	return &customConnection{
 		Conn:    c,
@@ -59,34 +58,32 @@ func wrapConnection(c net.Conn, URL *url.URL) net.Conn {
 func (dialer *customDialer) DialRequest(req *http.Request) (net.Conn, error) {
 	switch req.URL.Scheme {
 	case "http":
-		return dialer.CustomDialWithURL("tcp", req.Host+":80", req.URL)
+		return dialer.CustomDialWithURL("tcp", req.Host+":80", req.URL.Scheme)
 	case "https":
-		return dialer.CustomDialTLSWithURL("tcp", req.Host+":443", req.URL)
+		return dialer.CustomDialTLSWithURL("tcp", req.Host+":443", req.URL.Scheme)
 	default:
 		panic("WTF?!?")
 	}
 }
 
 func (dialer *customDialer) CustomDial(network, address string) (net.Conn, error) {
-	u, _ := url.Parse("http://" + address)
-	return dialer.CustomDialWithURL(network, address, u)
+	return dialer.CustomDialWithURL(network, address, "http")
 }
 
 func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
-	u, _ := url.Parse("https://" + address)
-	return dialer.CustomDialTLSWithURL(network, address, u)
+	return dialer.CustomDialTLSWithURL(network, address, "https")
 }
 
-func (dialer *customDialer) CustomDialWithURL(network, address string, URL *url.URL) (net.Conn, error) {
+func (dialer *customDialer) CustomDialWithURL(network, address string, scheme string) (net.Conn, error) {
 	conn, err := dialer.Dial(network, address)
 	if err != nil {
 		return nil, err
 	}
 
-	return wrapConnection(conn, URL), nil
+	return wrapConnection(conn, scheme), nil
 }
 
-func (dialer *customDialer) CustomDialTLSWithURL(network, address string, URL *url.URL) (net.Conn, error) {
+func (dialer *customDialer) CustomDialTLSWithURL(network, address string, scheme string) (net.Conn, error) {
 	plainConn, err := dialer.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -120,27 +117,24 @@ func (dialer *customDialer) CustomDialTLSWithURL(network, address string, URL *u
 		}
 	}
 
-	return wrapConnection(tlsConn, URL), nil // return a wrapped net.Conn
+	return wrapConnection(tlsConn, scheme), nil // return a wrapped net.Conn
 }
 
-func writeWARCFromConnection(req, resp *io.PipeReader, URL *url.URL) (err error) {
+func writeWARCFromConnection(req, resp *io.PipeReader, scheme string) (err error) {
 	defer WaitGroup.Done()
 
 	var (
-		batch      = NewRecordBatch()
-		recordChan = make(chan *Record)
+		batch         = NewRecordBatch()
+		recordChan    = make(chan *Record)
+		warcTargetURI = scheme + "://"
+		target        string
+		host          string
 	)
 
-	swg := sizedwaitgroup.New(2)
-
 	go func() {
-		defer swg.Done()
-
 		// initialize the request record
 		var requestRecord = NewRecord()
 		requestRecord.Header.Set("WARC-Type", "request")
-		requestRecord.Header.Set("WARC-Target-URI", URL.String())
-		requestRecord.Header.Set("Host", URL.Host)
 		requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
 
 		var buf bytes.Buffer
@@ -149,19 +143,57 @@ func writeWARCFromConnection(req, resp *io.PipeReader, URL *url.URL) (err error)
 			panic(err)
 		}
 
+		// parse data for WARC-Target-URI
+		scanner := bufio.NewScanner(&buf)
+		for scanner.Scan() {
+			if strings.HasPrefix(scanner.Text(), "GET ") && (strings.HasSuffix(scanner.Text(), "HTTP/1.0") || strings.HasSuffix(scanner.Text(), "HTTP/1.1")) {
+				splitted := strings.Split(scanner.Text(), " ")
+				target = splitted[1]
+
+				if host != "" && target != "" {
+					break
+				} else {
+					continue
+				}
+			}
+
+			if strings.HasPrefix(scanner.Text(), "Host: ") {
+				host = strings.TrimPrefix(scanner.Text(), "Host: ")
+
+				if host != "" && target != "" {
+					break
+				} else {
+					continue
+				}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			log.Fatal(err)
+		}
+
+		// check that we achieved to parse all the necessary data
+		if host != "" && target != "" {
+			// HTTP's request first line can include a complete path, we check that
+			if strings.HasSuffix(target, scheme+"://"+host) {
+				warcTargetURI = target
+			} else {
+				warcTargetURI += host
+				warcTargetURI += target
+			}
+		} else {
+			panic(errors.New("unable to parse data necessary for WARC-Target-URI"))
+		}
+
 		requestRecord.Content = &buf
 
 		recordChan <- requestRecord
 	}()
 
 	go func() {
-		defer swg.Done()
-
 		// initialize the response record
 		var responseRecord = NewRecord()
 		responseRecord.Header.Set("WARC-Type", "response")
-		responseRecord.Header.Set("WARC-Target-URI", URL.String())
-		responseRecord.Header.Set("Host", URL.Host)
 		responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
 		var buf bytes.Buffer
@@ -175,11 +207,14 @@ func writeWARCFromConnection(req, resp *io.PipeReader, URL *url.URL) (err error)
 		recordChan <- responseRecord
 	}()
 
-	swg.Wait()
-
 	for i := 0; i < 2; i++ {
 		record := <-recordChan
 		batch.Records = append(batch.Records, record)
+	}
+
+	// add the WARC-Target-URI header
+	for _, r := range batch.Records {
+		r.Header.Set("WARC-Target-URI", warcTargetURI)
 	}
 
 	WARCWriter <- batch
