@@ -35,7 +35,8 @@ func Close() {
 		ProxiedHTTPClient.CloseIdleConnections()
 	}
 
-	WARCWriterFinish <- true
+	close(WARCWriter)
+	<-WARCWriterFinish
 }
 
 func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (err error) {
@@ -70,15 +71,6 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (e
 	HTTPClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
-
-	// configure HTTP2
-	// h2t, err := http2.ConfigureTransports(&customTransport.Transport)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// customTransport.h2t = h2t
-	// customTransport.h2t.AllowHTTP = true
 
 	// set our custom transport as our HTTP client transport
 	HTTPClient.Transport = customTransport

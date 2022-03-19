@@ -144,7 +144,7 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string) (err error
 		}
 
 		// parse data for WARC-Target-URI
-		scanner := bufio.NewScanner(&buf)
+		scanner := bufio.NewScanner(bytes.NewReader(buf.Bytes()))
 		for scanner.Scan() {
 			if strings.HasPrefix(scanner.Text(), "GET ") && (strings.HasSuffix(scanner.Text(), "HTTP/1.0") || strings.HasSuffix(scanner.Text(), "HTTP/1.1")) {
 				splitted := strings.Split(scanner.Text(), " ")
