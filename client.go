@@ -6,8 +6,6 @@ import (
 	"net/url"
 	"sync"
 	"time"
-
-	"golang.org/x/net/http2"
 )
 
 var (
@@ -18,6 +16,7 @@ var (
 	// Custom HTTP clients
 	HTTPClient        *http.Client
 	ProxiedHTTPClient *http.Client
+	useProxy          bool
 
 	WaitGroup *sync.WaitGroup
 )
@@ -28,12 +27,15 @@ func init() {
 }
 
 func Close() {
+	WaitGroup.Wait()
+
 	HTTPClient.CloseIdleConnections()
-	ProxiedHTTPClient.CloseIdleConnections()
+
+	if useProxy {
+		ProxiedHTTPClient.CloseIdleConnections()
+	}
 
 	WARCWriterFinish <- true
-
-	WaitGroup.Wait()
 }
 
 func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (err error) {
@@ -57,13 +59,12 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (e
 		InsecureSkipVerify: true,
 	}
 	customTransport.d = customDialer
-	// customTransport.Dial = customDialer.CustomDial
-	// customTransport.DialTLS = customDialer.CustomDialTLS
+
+	customTransport.Dial = customDialer.CustomDial
+	customTransport.DialTLS = customDialer.CustomDialTLS
 
 	customTransport.DisableCompression = true
 	customTransport.ForceAttemptHTTP2 = false
-
-	HTTPClient.Transport = customTransport
 
 	// configure HTTP client
 	HTTPClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -71,11 +72,13 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (e
 	}
 
 	// configure HTTP2
-	h2t, err := http2.ConfigureTransports(&customTransport.Transport)
-	if err != nil {
-		return err
-	}
-	customTransport.h2t = h2t
+	// h2t, err := http2.ConfigureTransports(&customTransport.Transport)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// customTransport.h2t = h2t
+	// customTransport.h2t.AllowHTTP = true
 
 	// set our custom transport as our HTTP client transport
 	HTTPClient.Transport = customTransport
@@ -89,6 +92,8 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (e
 	// init the secondary HTTP client dedicated to requests that should
 	// be executed through the specified proxy
 	if proxy != "" {
+		useProxy = true
+
 		customProxiedHTTPTransport := customTransport
 		ProxiedHTTPClient = HTTPClient
 

@@ -59,25 +59,25 @@ func wrapConnection(c net.Conn, URL *url.URL) net.Conn {
 func (dialer *customDialer) DialRequest(req *http.Request) (net.Conn, error) {
 	switch req.URL.Scheme {
 	case "http":
-		return dialer.CustomDial("tcp", req.Host+":80", req.URL)
+		return dialer.CustomDialWithURL("tcp", req.Host+":80", req.URL)
 	case "https":
-		return dialer.CustomDialTLS("tcp", req.Host+":443", req.URL)
+		return dialer.CustomDialTLSWithURL("tcp", req.Host+":443", req.URL)
 	default:
 		panic("WTF?!?")
 	}
 }
 
-func (dialer *customDialer) CustomDial_(network, address string) (net.Conn, error) {
+func (dialer *customDialer) CustomDial(network, address string) (net.Conn, error) {
 	u, _ := url.Parse("http://" + address)
-	return dialer.CustomDial(network, address, u)
+	return dialer.CustomDialWithURL(network, address, u)
 }
 
-func (dialer *customDialer) CustomDialTLS_(network, address string) (net.Conn, error) {
+func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
 	u, _ := url.Parse("https://" + address)
-	return dialer.CustomDialTLS(network, address, u)
+	return dialer.CustomDialTLSWithURL(network, address, u)
 }
 
-func (dialer *customDialer) CustomDial(network, address string, URL *url.URL) (net.Conn, error) {
+func (dialer *customDialer) CustomDialWithURL(network, address string, URL *url.URL) (net.Conn, error) {
 	conn, err := dialer.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func (dialer *customDialer) CustomDial(network, address string, URL *url.URL) (n
 	return wrapConnection(conn, URL), nil
 }
 
-func (dialer *customDialer) CustomDialTLS(network, address string, URL *url.URL) (net.Conn, error) {
+func (dialer *customDialer) CustomDialTLSWithURL(network, address string, URL *url.URL) (net.Conn, error) {
 	plainConn, err := dialer.Dial(network, address)
 	if err != nil {
 		return nil, err
