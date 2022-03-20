@@ -10,7 +10,7 @@ import (
 )
 
 func testFileHash(t *testing.T, path string) {
-	t.Logf("testFileHash %q", path)
+	t.Logf("testFileHash on %q", path)
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -38,8 +38,8 @@ func testFileHash(t *testing.T, path string) {
 		}
 
 		hash := fmt.Sprintf("sha1:%s", GetSHA1(content))
-		if hash != record.Header["warc-block-digest"] {
-			t.Fatalf("expected %s, got %s", record.Header.Get("warc-block-digest"), hash)
+		if hash != record.Header["WARC-Block-Digest"] {
+			t.Fatalf("expected %s, got %s", record.Header.Get("WARC-Block-Digest"), hash)
 		}
 	}
 }
