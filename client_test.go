@@ -2,11 +2,26 @@ package warc
 
 import (
 	"io"
+	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
+	"path"
 	"testing"
 )
 
 func TestWARCWritingHTTPClient(t *testing.T) {
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Write(fileBytes)
+	}))
+
 	// init WARC rotator settings
 	var rotatorSettings = NewRotatorSettings()
 	var err error
@@ -21,7 +36,7 @@ func TestWARCWritingHTTPClient(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	req, err := http.NewRequest("GET", "https://img-s-msn-com.akamaized.net/tenant/amp/entityid/AAVeYY8.img?h=1536&w=2560&m=6&q=60&o=f&l=f&x=236&y=113", nil)
+	req, err := http.NewRequest("GET", server.URL, nil)
 
 	if err != nil {
 		t.Fatal(err)
