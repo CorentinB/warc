@@ -5,11 +5,15 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"strings"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
 )
 
 type customDialer struct {
@@ -44,7 +48,7 @@ func wrapConnection(c net.Conn, scheme string) net.Conn {
 	respReader, respWriter := io.Pipe()
 
 	WaitGroup.Add(1)
-	go writeWARCFromConnection(reqReader, respReader, scheme)
+	go writeWARCFromConnection(reqReader, respReader, scheme, c.RemoteAddr())
 
 	return &customConnection{
 		Conn:    c,
@@ -55,6 +59,13 @@ func wrapConnection(c net.Conn, scheme string) net.Conn {
 }
 
 func (dialer *customDialer) CustomDial(network, address string) (net.Conn, error) {
+	// force IPV4 as we are having some issues figuring out how to get
+	// RFC4291 compliant IPV6 IP for WARC-IP-Address
+	// NOTE: cause issues for IPV6 only sites?
+	if strings.Contains(network, "tcp") {
+		network = "tcp4"
+	}
+
 	conn, err := dialer.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -64,6 +75,13 @@ func (dialer *customDialer) CustomDial(network, address string) (net.Conn, error
 }
 
 func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
+	// force IPV4 as we are having some issues figuring out how to get
+	// RFC4291 compliant IPV6 IP for WARC-IP-Address
+	// NOTE: cause issues for IPV6 only sites?
+	if strings.Contains(network, "tcp") {
+		network = "tcp4"
+	}
+
 	plainConn, err := dialer.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -100,7 +118,7 @@ func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, er
 	return wrapConnection(tlsConn, "https"), nil
 }
 
-func writeWARCFromConnection(req, resp *io.PipeReader, scheme string) (err error) {
+func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr net.Addr) (err error) {
 	defer WaitGroup.Done()
 
 	var (
@@ -182,18 +200,55 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string) (err error
 			panic(err)
 		}
 
+		// generate WARC-Payload-Digest
+		resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
+		if err != nil {
+			panic(err)
+		}
+
+		// responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+GetSHA1(respBuffer.Bytes()))
+
+		fmt.Println(GetSHA1FromResp(resp))
+
 		responseRecord.Content = &buf
 
 		recordChan <- responseRecord
 	}()
 
+	var (
+		recordIDs []string
+	)
+
 	for i := 0; i < 2; i++ {
 		record := <-recordChan
+		recordIDs = append(recordIDs, uuid.NewV4().String())
 		batch.Records = append(batch.Records, record)
 	}
 
-	// add the WARC-Target-URI header
-	for _, r := range batch.Records {
+	// generate the two record IDs for the batch
+
+	// add headers
+	for i, r := range batch.Records {
+		// generate WARC-IP-Address
+		switch addr := remoteAddr.(type) {
+		case *net.UDPAddr:
+			IP := addr.IP.String()
+			r.Header.Set("WARC-IP-Address", IP)
+		case *net.TCPAddr:
+			IP := addr.IP.String()
+			r.Header.Set("WARC-IP-Address", IP)
+		}
+
+		// set WARC-Record-ID and WARC-Concurrent-To
+		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordIDs[i]+">")
+
+		if i == len(recordIDs)-1 {
+			r.Header.Set("WARC-Concurrent-To", "<urn:uuid:"+recordIDs[0]+">")
+		} else {
+			r.Header.Set("WARC-Concurrent-To", "<urn:uuid:"+recordIDs[1]+">")
+		}
+
+		// add WARC-Target-URI
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
 	}
 

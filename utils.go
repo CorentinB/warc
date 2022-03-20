@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -22,6 +23,17 @@ func GetSHA1(content []byte) string {
 	sha := sha1.New()
 
 	sha.Write(content)
+
+	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
+}
+
+// GetSHA1FromResp return the SHA1 of an *http.Response,
+// can be used to fill the WARC-Block-Digest header
+func GetSHA1FromResp(resp *http.Response) string {
+	sha := sha1.New()
+
+	io.Copy(sha, resp.Body)
+	resp.Body.Close()
 
 	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
 }
