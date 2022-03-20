@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -55,35 +54,25 @@ func wrapConnection(c net.Conn, scheme string) net.Conn {
 	}
 }
 
-func (dialer *customDialer) DialRequest(req *http.Request) (net.Conn, error) {
-	switch req.URL.Scheme {
-	case "http":
-		return dialer.CustomDialWithURL("tcp", req.Host+":80", req.URL.Scheme)
-	case "https":
-		return dialer.CustomDialTLSWithURL("tcp", req.Host+":443", req.URL.Scheme)
-	default:
-		panic("WTF?!?")
-	}
-}
-
 func (dialer *customDialer) CustomDial(network, address string) (net.Conn, error) {
-	return dialer.CustomDialWithURL(network, address, "http")
-}
-
-func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
-	return dialer.CustomDialTLSWithURL(network, address, "https")
-}
-
-func (dialer *customDialer) CustomDialWithURL(network, address string, scheme string) (net.Conn, error) {
 	conn, err := dialer.Dial(network, address)
 	if err != nil {
 		return nil, err
 	}
 
-	return wrapConnection(conn, scheme), nil
+	return wrapConnection(conn, "http"), nil
 }
 
-func (dialer *customDialer) CustomDialTLSWithURL(network, address string, scheme string) (net.Conn, error) {
+func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
+	conn, err := dialer.Dial(network, address)
+	if err != nil {
+		return nil, err
+	}
+
+	return wrapConnection(conn, "https"), nil
+}
+
+func (dialer *customDialer) CustomDialWithURL(network, address string, scheme string) (net.Conn, error) {
 	plainConn, err := dialer.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -117,7 +106,7 @@ func (dialer *customDialer) CustomDialTLSWithURL(network, address string, scheme
 		}
 	}
 
-	return wrapConnection(tlsConn, scheme), nil // return a wrapped net.Conn
+	return wrapConnection(tlsConn, "https"), nil
 }
 
 func writeWARCFromConnection(req, resp *io.PipeReader, scheme string) (err error) {
