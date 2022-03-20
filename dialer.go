@@ -64,15 +64,6 @@ func (dialer *customDialer) CustomDial(network, address string) (net.Conn, error
 }
 
 func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
-	conn, err := dialer.Dial(network, address)
-	if err != nil {
-		return nil, err
-	}
-
-	return wrapConnection(conn, "https"), nil
-}
-
-func (dialer *customDialer) CustomDialWithURL(network, address string, scheme string) (net.Conn, error) {
 	plainConn, err := dialer.Dial(network, address)
 	if err != nil {
 		return nil, err
