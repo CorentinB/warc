@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
@@ -19,6 +21,8 @@ var (
 	useProxy          bool
 
 	WaitGroup *sync.WaitGroup
+
+	keptAlive *prometheus.CounterVec
 )
 
 func init() {
@@ -47,11 +51,14 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (e
 
 	// configure net dialer
 	customDialer.Timeout = 30 * time.Second
-	customDialer.KeepAlive = -1
+
+	customTransport.d = customDialer
+	customTransport.Dial = customDialer.CustomDial
+	customTransport.DialTLS = customDialer.CustomDialTLS
 
 	// configure HTTP transport
 	customTransport.Proxy = nil
-	customTransport.MaxIdleConns = -1
+	customTransport.MaxConnsPerHost = 0
 	customTransport.IdleConnTimeout = -1
 	customTransport.TLSHandshakeTimeout = 15 * time.Second
 	customTransport.ExpectContinueTimeout = 1 * time.Second
@@ -59,13 +66,14 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (e
 	customTransport.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}
-	customTransport.d = customDialer
-
-	customTransport.Dial = customDialer.CustomDial
-	customTransport.DialTLS = customDialer.CustomDialTLS
 
 	customTransport.DisableCompression = true
 	customTransport.ForceAttemptHTTP2 = false
+
+	// disable keep alive
+	customTransport.MaxIdleConns = -1
+	customTransport.MaxIdleConnsPerHost = -1
+	customTransport.DisableKeepAlives = true
 
 	// configure HTTP client
 	HTTPClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
