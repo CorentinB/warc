@@ -5,11 +5,9 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"strings"
 	"time"
 
@@ -125,6 +123,7 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr
 		batch         = NewRecordBatch()
 		recordChan    = make(chan *Record)
 		warcTargetURI = scheme + "://"
+		recordIDs     []string
 		target        string
 		host          string
 	)
@@ -201,31 +200,23 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr
 		}
 
 		// generate WARC-Payload-Digest
-		resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
+		payloadDigest, err := GetPayloadDigest(buf.Bytes())
 		if err != nil {
 			panic(err)
 		}
 
-		// responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+GetSHA1(respBuffer.Bytes()))
-
-		fmt.Println(GetSHA1FromResp(resp))
+		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
 		responseRecord.Content = &buf
 
 		recordChan <- responseRecord
 	}()
 
-	var (
-		recordIDs []string
-	)
-
 	for i := 0; i < 2; i++ {
 		record := <-recordChan
 		recordIDs = append(recordIDs, uuid.NewV4().String())
 		batch.Records = append(batch.Records, record)
 	}
-
-	// generate the two record IDs for the batch
 
 	// add headers
 	for i, r := range batch.Records {
