@@ -50,6 +50,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 			defer wg.Done()
 
 			req, err := http.NewRequest("GET", server.URL, nil)
+			req.Close = true
 			if err != nil {
 				errChan <- err
 				return
@@ -60,9 +61,9 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 				errChan <- err
 				return
 			}
-			defer resp.Body.Close()
-
 			io.Copy(io.Discard, resp.Body)
+
+			resp.Body.Close()
 		}()
 	}
 
