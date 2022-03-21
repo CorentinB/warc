@@ -32,7 +32,7 @@ type RotatorSettings struct {
 // to communicate records to be written to WARC files to the
 // recordWriter function running in a goroutine
 func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *RecordBatch, done chan bool, err error) {
-	recordWriterChannel = make(chan *RecordBatch)
+	recordWriterChannel = make(chan *RecordBatch, 1)
 	done = make(chan bool)
 
 	// Check the rotator settings, also set default values
