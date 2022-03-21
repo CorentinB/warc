@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path"
+	"sync"
 	"testing"
-
-	"github.com/remeh/sizedwaitgroup"
 )
 
 func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
@@ -38,26 +37,44 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	req, err := http.NewRequest("GET", server.URL, nil)
-	if err != nil {
-		t.Fatal(err)
+	var (
+		wg      sync.WaitGroup
+		errChan = make(chan error, 8)
+	)
+
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			req, err := http.NewRequest("GET", server.URL, nil)
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			resp, err := HTTPClient.Do(req)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			defer resp.Body.Close()
+
+			io.Copy(io.Discard, resp.Body)
+		}()
 	}
 
-	swg := sizedwaitgroup.New(8)
-
 	go func() {
-		defer swg.Done()
+		wg.Wait()
+		close(errChan)
+	}()
 
-		resp, err := HTTPClient.Do(req)
+	for err := range errChan {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
-
-		io.Copy(io.Discard, resp.Body)
-	}()
-
-	swg.Wait()
+	}
 
 	Close()
 }
