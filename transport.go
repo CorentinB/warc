@@ -5,7 +5,7 @@ import (
 )
 
 type customTransport struct {
-	http.Transport
+	*http.Transport
 	d *customDialer
 }
 

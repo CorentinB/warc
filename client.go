@@ -45,6 +45,8 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (e
 		customDialer    = new(customDialer)
 	)
 
+	customTransport.Transport = http.DefaultTransport.(*http.Transport).Clone()
+
 	// configure net dialer
 	customDialer.Timeout = 30 * time.Second
 
