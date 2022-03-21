@@ -38,11 +38,12 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	}
 
 	var (
-		wg      sync.WaitGroup
-		errChan = make(chan error, 8)
+		concurrency = 256
+		wg          sync.WaitGroup
+		errChan     = make(chan error, concurrency)
 	)
 
-	for i := 0; i < 8; i++ {
+	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 
 		go func() {
