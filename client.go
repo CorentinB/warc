@@ -6,8 +6,6 @@ import (
 	"net/url"
 	"sync"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
@@ -21,8 +19,6 @@ var (
 	useProxy          bool
 
 	WaitGroup *sync.WaitGroup
-
-	keptAlive *prometheus.CounterVec
 )
 
 func init() {
