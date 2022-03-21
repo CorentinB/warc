@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"strings"
 	"time"
 
@@ -200,10 +201,12 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr
 		}
 
 		// generate WARC-Payload-Digest
-		payloadDigest, err := GetPayloadDigest(buf.Bytes())
+		resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
 		if err != nil {
 			panic(err)
 		}
+
+		payloadDigest := GetSHA1FromResp(resp)
 
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 

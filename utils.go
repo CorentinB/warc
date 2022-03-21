@@ -2,13 +2,13 @@ package warc
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"encoding/base32"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -17,19 +17,13 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-func GetPayloadDigest(b []byte) (string, error) {
+func GetSHA1FromResp(resp *http.Response) string {
 	sha := sha1.New()
 
-	split := bytes.Split(b, []byte("\r\n\r\n"))
+	io.Copy(sha, resp.Body)
+	resp.Body.Close()
 
-	if len(split) <= 1 {
-		return "", errors.New("unable to generate payload digest")
-	}
-
-	sha.Write(split[1])
-	sha.Write([]byte("\r\n\r\n"))
-
-	return base32.StdEncoding.EncodeToString(sha.Sum(nil)), nil
+	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
 }
 
 // GetSHA1 return the SHA1 of a []byte,
