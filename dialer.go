@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
@@ -17,6 +18,7 @@ import (
 
 type customDialer struct {
 	net.Dialer
+	httpClient *customHTTPClient
 }
 
 type customConnection struct {
@@ -24,6 +26,7 @@ type customConnection struct {
 	io.Reader
 	io.Writer
 	closers []io.Closer
+	sync.WaitGroup
 }
 
 func (cc *customConnection) Read(b []byte) (int, error) {
@@ -42,12 +45,12 @@ func (cc *customConnection) Close() error {
 	return cc.Conn.Close()
 }
 
-func wrapConnection(c net.Conn, scheme string) net.Conn {
+func (dialer *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 	reqReader, reqWriter := io.Pipe()
 	respReader, respWriter := io.Pipe()
 
-	WaitGroup.Add(1)
-	go writeWARCFromConnection(reqReader, respReader, scheme, c.RemoteAddr())
+	dialer.httpClient.WaitGroup.Add(1)
+	go dialer.writeWARCFromConnection(reqReader, respReader, scheme, c)
 
 	return &customConnection{
 		Conn:    c,
@@ -70,7 +73,7 @@ func (dialer *customDialer) CustomDial(network, address string) (net.Conn, error
 		return nil, err
 	}
 
-	return wrapConnection(conn, "http"), nil
+	return dialer.wrapConnection(conn, "http"), nil
 }
 
 func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
@@ -114,11 +117,11 @@ func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, er
 		}
 	}
 
-	return wrapConnection(tlsConn, "https"), nil
+	return dialer.wrapConnection(tlsConn, "https"), nil
 }
 
-func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr net.Addr) (err error) {
-	defer WaitGroup.Done()
+func (dialer *customDialer) writeWARCFromConnection(req, resp *io.PipeReader, scheme string, conn net.Conn) (err error) {
+	defer dialer.httpClient.WaitGroup.Done()
 
 	var (
 		batch         = NewRecordBatch()
@@ -129,7 +132,11 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr
 		host          string
 	)
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
 		// initialize the request record
 		var requestRecord = NewRecord()
 		requestRecord.Header.Set("WARC-Type", "request")
@@ -188,7 +195,10 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr
 		recordChan <- requestRecord
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
 		// initialize the response record
 		var responseRecord = NewRecord()
 		responseRecord.Header.Set("WARC-Type", "response")
@@ -215,8 +225,12 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr
 		recordChan <- responseRecord
 	}()
 
-	for i := 0; i < 2; i++ {
-		record := <-recordChan
+	go func() {
+		wg.Wait()
+		close(recordChan)
+	}()
+
+	for record := range recordChan {
 		recordIDs = append(recordIDs, uuid.NewV4().String())
 		batch.Records = append(batch.Records, record)
 	}
@@ -224,7 +238,7 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr
 	// add headers
 	for i, r := range batch.Records {
 		// generate WARC-IP-Address
-		switch addr := remoteAddr.(type) {
+		switch addr := conn.RemoteAddr().(type) {
 		case *net.UDPAddr:
 			IP := addr.IP.String()
 			r.Header.Set("WARC-IP-Address", IP)
@@ -246,7 +260,16 @@ func writeWARCFromConnection(req, resp *io.PipeReader, scheme string, remoteAddr
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
 	}
 
-	WARCWriter <- batch
+	dialer.httpClient.WARCWriter <- batch
 
 	return nil
+}
+
+func newCustomDialer(httpClient *customHTTPClient) *customDialer {
+	var d = new(customDialer)
+
+	d.Timeout = 30 * time.Second
+	d.httpClient = httpClient
+
+	return d
 }

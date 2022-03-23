@@ -1,108 +1,51 @@
 package warc
 
 import (
-	"crypto/tls"
 	"net/http"
-	"net/url"
 	"sync"
-	"time"
 )
 
-var (
-	// WARC writer related channels
+type customHTTPClient struct {
+	http.Client
 	WARCWriter       chan *RecordBatch
 	WARCWriterFinish chan bool
-
-	// Custom HTTP clients
-	HTTPClient        *http.Client
-	ProxiedHTTPClient *http.Client
-	useProxy          bool
-
-	WaitGroup *sync.WaitGroup
-)
-
-func init() {
-	WaitGroup = new(sync.WaitGroup)
-	HTTPClient = new(http.Client)
+	WaitGroup        *sync.WaitGroup
 }
 
-func Close() {
-	WaitGroup.Wait()
-
-	HTTPClient.CloseIdleConnections()
-
-	if useProxy {
-		ProxiedHTTPClient.CloseIdleConnections()
+func CloseClients(httpClients ...*customHTTPClient) {
+	for _, httpClient := range httpClients {
+		httpClient.WaitGroup.Wait()
+		httpClient.CloseIdleConnections()
+		close(httpClient.WARCWriter)
+		<-httpClient.WARCWriterFinish
 	}
-
-	close(WARCWriter)
-	<-WARCWriterFinish
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (err error) {
-	var (
-		customTransport = new(customTransport)
-		customDialer    = new(customDialer)
-	)
+func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (httpClient *customHTTPClient, err error) {
+	httpClient = new(customHTTPClient)
 
-	customTransport.Transport = http.DefaultTransport.(*http.Transport).Clone()
+	// configure the waitgroup
+	httpClient.WaitGroup = new(sync.WaitGroup)
 
-	// configure net dialer
-	customDialer.Timeout = 30 * time.Second
-
-	customTransport.d = customDialer
-	customTransport.Dial = customDialer.CustomDial
-	customTransport.DialTLS = customDialer.CustomDialTLS
-
-	// configure HTTP transport
-	customTransport.Proxy = nil
-	customTransport.MaxConnsPerHost = 0
-	customTransport.IdleConnTimeout = -1
-	customTransport.TLSHandshakeTimeout = 15 * time.Second
-	customTransport.ExpectContinueTimeout = 1 * time.Second
-	customTransport.TLSNextProto = make(map[string]func(authority string, c *tls.Conn) http.RoundTripper)
-	customTransport.TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: true,
+	// configure WARC writer
+	httpClient.WARCWriter, httpClient.WARCWriterFinish, err = rotatorSettings.NewWARCRotator()
+	if err != nil {
+		return nil, err
 	}
-
-	customTransport.DisableCompression = true
-	customTransport.ForceAttemptHTTP2 = false
-
-	// disable keep alive
-	customTransport.MaxIdleConns = -1
-	customTransport.MaxIdleConnsPerHost = -1
-	customTransport.DisableKeepAlives = true
 
 	// configure HTTP client
-	HTTPClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
 
-	// set our custom transport as our HTTP client transport
-	HTTPClient.Transport = customTransport
-
-	// init WARC rotator
-	WARCWriter, WARCWriterFinish, err = rotatorSettings.NewWARCRotator()
+	// configure custom dialer / transport
+	customDialer := newCustomDialer(httpClient)
+	customTransport, err := newCustomTransport(customDialer, proxy)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// init the secondary HTTP client dedicated to requests that should
-	// be executed through the specified proxy
-	if proxy != "" {
-		useProxy = true
+	httpClient.Transport = customTransport
 
-		customProxiedHTTPTransport := customTransport
-		ProxiedHTTPClient = HTTPClient
-
-		proxyURL, err := url.Parse(proxy)
-		if err != nil {
-			return err
-		}
-
-		customProxiedHTTPTransport.Proxy = http.ProxyURL(proxyURL)
-		ProxiedHTTPClient.Transport = customProxiedHTTPTransport
-	}
-
-	return nil
+	return httpClient, nil
 }

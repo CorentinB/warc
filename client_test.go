@@ -32,7 +32,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	err = NewWARCWritingHTTPClient(rotatorSettings, "")
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -56,14 +56,14 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 				return
 			}
 
-			resp, err := HTTPClient.Do(req)
+			resp, err := httpClient.Do(req)
 			if err != nil {
 				errChan <- err
 				return
 			}
-			io.Copy(io.Discard, resp.Body)
+			defer resp.Body.Close()
 
-			resp.Body.Close()
+			io.Copy(io.Discard, resp.Body)
 		}()
 	}
 
@@ -78,7 +78,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 		}
 	}
 
-	Close()
+	CloseClients(httpClient)
 }
 
 func TestWARCWritingWithHTTPClient(t *testing.T) {
@@ -103,7 +103,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	err = NewWARCWritingHTTPClient(rotatorSettings, "")
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -113,7 +113,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := HTTPClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,5 +121,5 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 
 	io.Copy(io.Discard, resp.Body)
 
-	Close()
+	CloseClients(httpClient)
 }
