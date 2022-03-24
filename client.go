@@ -12,13 +12,12 @@ type customHTTPClient struct {
 	WaitGroup        *sync.WaitGroup
 }
 
-func CloseClients(httpClients ...*customHTTPClient) {
-	for _, httpClient := range httpClients {
-		httpClient.WaitGroup.Wait()
-		httpClient.CloseIdleConnections()
-		close(httpClient.WARCWriter)
-		<-httpClient.WARCWriterFinish
-	}
+func (c *customHTTPClient) Close() error {
+	c.WaitGroup.Wait()
+	c.CloseIdleConnections()
+	close(c.WARCWriter)
+	<-c.WARCWriterFinish
+	return nil
 }
 
 func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (httpClient *customHTTPClient, err error) {

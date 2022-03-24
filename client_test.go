@@ -22,11 +22,10 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Write(fileBytes)
 	}))
+	defer server.Close()
 
 	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
-
+	rotatorSettings := NewRotatorSettings()
 	rotatorSettings.OutputDirectory = "warcs"
 	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "TEST"
@@ -38,13 +37,13 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	}
 
 	var (
-		concurrency = 256
+		concurrency = 128
 		wg          sync.WaitGroup
 		errChan     = make(chan error, concurrency)
 	)
 
+	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
@@ -78,7 +77,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 		}
 	}
 
-	CloseClients(httpClient)
+	httpClient.Close()
 }
 
 func TestWARCWritingWithHTTPClient(t *testing.T) {
@@ -93,6 +92,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Write(fileBytes)
 	}))
+	defer server.Close()
 
 	// init WARC rotator settings
 	var rotatorSettings = NewRotatorSettings()
@@ -121,5 +121,5 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 
 	io.Copy(io.Discard, resp.Body)
 
-	CloseClients(httpClient)
+	httpClient.Close()
 }

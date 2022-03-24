@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -17,11 +16,10 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-func GetSHA1FromResp(resp *http.Response) string {
+func GetSHA1FromReader(r io.Reader) string {
 	sha := sha1.New()
 
-	io.Copy(sha, resp.Body)
-	resp.Body.Close()
+	io.Copy(sha, r)
 
 	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
 }

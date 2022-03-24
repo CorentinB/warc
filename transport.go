@@ -8,45 +8,39 @@ import (
 )
 
 type customTransport struct {
-	http.Transport
-	d *customDialer
+	t http.Transport
 }
 
 func (t *customTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	req = req.Clone(req.Context())
 	req.Header.Set("Accept-Encoding", "gzip")
 
-	resp, err = t.Transport.RoundTrip(req)
-	if err != nil {
-		panic(err)
-	}
-
-	return resp, nil
+	return t.t.RoundTrip(req)
 }
 
 func newCustomTransport(dialer *customDialer, proxy string) (t *customTransport, err error) {
 	t = new(customTransport)
 
-	t.d = dialer
-	t.Dial = dialer.CustomDial
-	t.DialTLS = dialer.CustomDialTLS
+	t.t = http.Transport{
+		// configure HTTP transport
+		Dial:    dialer.CustomDial,
+		DialTLS: dialer.CustomDialTLS,
 
-	// configure HTTP transport
-	t.MaxConnsPerHost = 0
-	t.IdleConnTimeout = -1
-	t.TLSHandshakeTimeout = 15 * time.Second
-	t.ExpectContinueTimeout = 1 * time.Second
-	t.TLSNextProto = make(map[string]func(authority string, c *tls.Conn) http.RoundTripper)
-	t.TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: true,
+		// disable keep alive
+		MaxConnsPerHost:       0,
+		IdleConnTimeout:       -1,
+		TLSHandshakeTimeout:   15 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+		DisableCompression:  true,
+		ForceAttemptHTTP2:   false,
+		MaxIdleConns:        -1,
+		MaxIdleConnsPerHost: -1,
+		DisableKeepAlives:   true,
 	}
-
-	t.DisableCompression = true
-	t.ForceAttemptHTTP2 = false
-
-	// disable keep alive
-	t.MaxIdleConns = -1
-	t.MaxIdleConnsPerHost = -1
-	t.DisableKeepAlives = true
 
 	// add proxy if specified
 	if proxy != "" {
@@ -55,7 +49,7 @@ func newCustomTransport(dialer *customDialer, proxy string) (t *customTransport,
 			return nil, err
 		}
 
-		t.Proxy = http.ProxyURL(proxyURL)
+		t.t.Proxy = http.ProxyURL(proxyURL)
 	}
 
 	return t, nil

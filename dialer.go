@@ -18,7 +18,7 @@ import (
 
 type customDialer struct {
 	net.Dialer
-	httpClient *customHTTPClient
+	client *customHTTPClient
 }
 
 type customConnection struct {
@@ -45,12 +45,12 @@ func (cc *customConnection) Close() error {
 	return cc.Conn.Close()
 }
 
-func (dialer *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
+func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 	reqReader, reqWriter := io.Pipe()
 	respReader, respWriter := io.Pipe()
 
-	dialer.httpClient.WaitGroup.Add(1)
-	go dialer.writeWARCFromConnection(reqReader, respReader, scheme, c)
+	d.client.WaitGroup.Add(1)
+	go d.writeWARCFromConnection(reqReader, respReader, scheme, c)
 
 	return &customConnection{
 		Conn:    c,
@@ -60,7 +60,7 @@ func (dialer *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 	}
 }
 
-func (dialer *customDialer) CustomDial(network, address string) (net.Conn, error) {
+func (d *customDialer) CustomDial(network, address string) (net.Conn, error) {
 	// force IPV4 as we are having some issues figuring out how to get
 	// RFC4291 compliant IPV6 IP for WARC-IP-Address
 	// NOTE: cause issues for IPV6 only sites?
@@ -68,15 +68,15 @@ func (dialer *customDialer) CustomDial(network, address string) (net.Conn, error
 		network = "tcp4"
 	}
 
-	conn, err := dialer.Dial(network, address)
+	conn, err := d.Dial(network, address)
 	if err != nil {
 		return nil, err
 	}
 
-	return dialer.wrapConnection(conn, "http"), nil
+	return d.wrapConnection(conn, "http"), nil
 }
 
-func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
+func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
 	// force IPV4 as we are having some issues figuring out how to get
 	// RFC4291 compliant IPV6 IP for WARC-IP-Address
 	// NOTE: cause issues for IPV6 only sites?
@@ -84,7 +84,7 @@ func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, er
 		network = "tcp4"
 	}
 
-	plainConn, err := dialer.Dial(network, address)
+	plainConn, err := d.Dial(network, address)
 	if err != nil {
 		return nil, err
 	}
@@ -117,11 +117,11 @@ func (dialer *customDialer) CustomDialTLS(network, address string) (net.Conn, er
 		}
 	}
 
-	return dialer.wrapConnection(tlsConn, "https"), nil
+	return d.wrapConnection(tlsConn, "https"), nil
 }
 
-func (dialer *customDialer) writeWARCFromConnection(req, resp *io.PipeReader, scheme string, conn net.Conn) (err error) {
-	defer dialer.httpClient.WaitGroup.Done()
+func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader, scheme string, conn net.Conn) (err error) {
+	defer d.client.WaitGroup.Done()
 
 	var (
 		batch         = NewRecordBatch()
@@ -143,17 +143,17 @@ func (dialer *customDialer) writeWARCFromConnection(req, resp *io.PipeReader, sc
 		requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
 
 		var buf bytes.Buffer
-		_, err := io.Copy(&buf, req)
+		_, err := io.Copy(&buf, reqPipe)
 		if err != nil {
 			panic(err)
 		}
 
 		// parse data for WARC-Target-URI
-		scanner := bufio.NewScanner(bytes.NewReader(buf.Bytes()))
+		scanner := bufio.NewScanner(&buf)
 		for scanner.Scan() {
-			if strings.HasPrefix(scanner.Text(), "GET ") && (strings.HasSuffix(scanner.Text(), "HTTP/1.0") || strings.HasSuffix(scanner.Text(), "HTTP/1.1")) {
-				splitted := strings.Split(scanner.Text(), " ")
-				target = splitted[1]
+			t := scanner.Text()
+			if strings.HasPrefix(t, "GET ") && (strings.HasSuffix(t, "HTTP/1.0") || strings.HasSuffix(t, "HTTP/1.1")) {
+				target = strings.Split(t, " ")[1]
 
 				if host != "" && target != "" {
 					break
@@ -162,8 +162,8 @@ func (dialer *customDialer) writeWARCFromConnection(req, resp *io.PipeReader, sc
 				}
 			}
 
-			if strings.HasPrefix(scanner.Text(), "Host: ") {
-				host = strings.TrimPrefix(scanner.Text(), "Host: ")
+			if strings.HasPrefix(t, "Host: ") {
+				host = strings.TrimPrefix(t, "Host: ")
 
 				if host != "" && target != "" {
 					break
@@ -205,18 +205,19 @@ func (dialer *customDialer) writeWARCFromConnection(req, resp *io.PipeReader, sc
 		responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
 		var buf bytes.Buffer
-		_, err := io.Copy(&buf, resp)
+		_, err := io.Copy(&buf, respPipe)
 		if err != nil {
 			panic(err)
 		}
 
 		// generate WARC-Payload-Digest
-		resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
+		resp, err := http.ReadResponse(bufio.NewReader(&buf), nil)
 		if err != nil {
 			panic(err)
 		}
+		defer resp.Body.Close()
 
-		payloadDigest := GetSHA1FromResp(resp)
+		payloadDigest := GetSHA1FromReader(resp.Body)
 
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
@@ -260,7 +261,7 @@ func (dialer *customDialer) writeWARCFromConnection(req, resp *io.PipeReader, sc
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
 	}
 
-	dialer.httpClient.WARCWriter <- batch
+	d.client.WARCWriter <- batch
 
 	return nil
 }
@@ -269,7 +270,7 @@ func newCustomDialer(httpClient *customHTTPClient) *customDialer {
 	var d = new(customDialer)
 
 	d.Timeout = 30 * time.Second
-	d.httpClient = httpClient
+	d.client = httpClient
 
 	return d
 }
