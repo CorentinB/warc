@@ -12,15 +12,15 @@ import (
 
 func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	// init test HTTP endpoint
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
-		if err != nil {
-			t.Fatal(err)
-		}
+	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
-		w.Write(fileBytes)
+		_, _ = w.Write(fileBytes)
 	}))
 	defer server.Close()
 
