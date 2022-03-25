@@ -149,7 +149,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		}
 
 		// parse data for WARC-Target-URI
-		scanner := bufio.NewScanner(&buf)
+		scanner := bufio.NewScanner(bytes.NewReader(buf.Bytes()))
 		for scanner.Scan() {
 			t := scanner.Text()
 			if strings.HasPrefix(t, "GET ") && (strings.HasSuffix(t, "HTTP/1.0") || strings.HasSuffix(t, "HTTP/1.1")) {
@@ -211,7 +211,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		}
 
 		// generate WARC-Payload-Digest
-		resp, err := http.ReadResponse(bufio.NewReader(&buf), nil)
+		resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
 		if err != nil {
 			panic(err)
 		}
