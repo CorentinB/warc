@@ -56,7 +56,7 @@ func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 		Conn:    c,
 		closers: []io.Closer{reqWriter, respWriter},
 		Reader:  io.TeeReader(c, respWriter),
-		Writer:  io.MultiWriter(c, reqWriter),
+		Writer:  io.MultiWriter(reqWriter, c),
 	}
 }
 
