@@ -16,6 +16,14 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+func GetSHA1FromReader(r io.Reader) string {
+	sha := sha1.New()
+
+	io.Copy(sha, r)
+
+	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
+}
+
 // GetSHA1 return the SHA1 of a []byte,
 // can be used to fill the WARC-Block-Digest header
 func GetSHA1(content []byte) string {

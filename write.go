@@ -51,9 +51,6 @@ type Record struct {
 // 	CLRF
 // 	CLRF
 func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
-	// Generate record ID
-	recordID = uuid.NewV4().String()
-
 	// Add the mandatories headers
 	if r.Header.Get("WARC-Date") == "" {
 		r.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339))
@@ -64,6 +61,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	}
 
 	if r.Header.Get("WARC-Record-ID") == "" {
+		recordID = uuid.NewV4().String()
 		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordID+">")
 	}
 
