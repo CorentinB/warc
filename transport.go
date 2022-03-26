@@ -1,6 +1,7 @@
 package warc
 
 import (
+	"compress/gzip"
 	"crypto/tls"
 	"net/http"
 	"net/url"
@@ -8,17 +9,32 @@ import (
 )
 
 type customTransport struct {
-	t http.Transport
+	t              http.Transport
+	decompressBody bool
 }
 
 func (t *customTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	req = req.Clone(req.Context())
 	req.Header.Set("Accept-Encoding", "gzip")
 
-	return t.t.RoundTrip(req)
+	resp, err = t.t.RoundTrip(req)
+	if err != nil {
+		return resp, err
+	}
+
+	// if the client have been created with decompressBody = true,
+	// we decompress the resp.Body if we received a compressed body
+	if t.decompressBody {
+		switch resp.Header.Get("Content-Encoding") {
+		case "gzip":
+			resp.Body, err = gzip.NewReader(resp.Body)
+		}
+	}
+
+	return
 }
 
-func newCustomTransport(dialer *customDialer, proxy string) (t *customTransport, err error) {
+func newCustomTransport(dialer *customDialer, proxy string, decompressBody bool) (t *customTransport, err error) {
 	t = new(customTransport)
 
 	t.t = http.Transport{
@@ -51,6 +67,8 @@ func newCustomTransport(dialer *customDialer, proxy string) (t *customTransport,
 
 		t.t.Proxy = http.ProxyURL(proxyURL)
 	}
+
+	t.decompressBody = decompressBody
 
 	return t, nil
 }

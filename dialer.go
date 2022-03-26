@@ -3,10 +3,10 @@ package warc
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -14,11 +14,12 @@ import (
 	"time"
 
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/sync/errgroup"
 )
 
 type customDialer struct {
 	net.Dialer
-	client *customHTTPClient
+	client *CustomHTTPClient
 }
 
 type customConnection struct {
@@ -130,13 +131,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		recordIDs     []string
 		target        string
 		host          string
+		errs, _       = errgroup.WithContext(context.Background())
 	)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	errs.Go(func() error {
 		// initialize the request record
 		var requestRecord = NewRecord()
 		requestRecord.Header.Set("WARC-Type", "request")
@@ -145,7 +143,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, reqPipe)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		// parse data for WARC-Target-URI
@@ -174,7 +172,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		}
 
 		if err := scanner.Err(); err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		// check that we achieved to parse all the necessary data
@@ -187,18 +185,17 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 				warcTargetURI += target
 			}
 		} else {
-			panic(errors.New("unable to parse data necessary for WARC-Target-URI"))
+			return errors.New("unable to parse data necessary for WARC-Target-URI")
 		}
 
 		requestRecord.Content = &buf
 
 		recordChan <- requestRecord
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+		return nil
+	})
 
+	errs.Go(func() error {
 		// initialize the response record
 		var responseRecord = NewRecord()
 		responseRecord.Header.Set("WARC-Type", "response")
@@ -207,13 +204,13 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, respPipe)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		// generate WARC-Payload-Digest
 		resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		defer resp.Body.Close()
 
@@ -224,12 +221,18 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		responseRecord.Content = &buf
 
 		recordChan <- responseRecord
-	}()
+
+		return nil
+	})
 
 	go func() {
-		wg.Wait()
+		err = errs.Wait()
 		close(recordChan)
 	}()
+
+	if err != nil {
+		return err
+	}
 
 	for record := range recordChan {
 		recordIDs = append(recordIDs, uuid.NewV4().String())
@@ -266,7 +269,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	return nil
 }
 
-func newCustomDialer(httpClient *customHTTPClient) *customDialer {
+func newCustomDialer(httpClient *CustomHTTPClient) *customDialer {
 	var d = new(customDialer)
 
 	d.Timeout = 30 * time.Second

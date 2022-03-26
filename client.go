@@ -5,14 +5,14 @@ import (
 	"sync"
 )
 
-type customHTTPClient struct {
+type CustomHTTPClient struct {
 	http.Client
 	WARCWriter       chan *RecordBatch
 	WARCWriterFinish chan bool
 	WaitGroup        *sync.WaitGroup
 }
 
-func (c *customHTTPClient) Close() error {
+func (c *CustomHTTPClient) Close() error {
 	c.WaitGroup.Wait()
 	c.CloseIdleConnections()
 	close(c.WARCWriter)
@@ -20,8 +20,8 @@ func (c *customHTTPClient) Close() error {
 	return nil
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (httpClient *customHTTPClient, err error) {
-	httpClient = new(customHTTPClient)
+func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool) (httpClient *CustomHTTPClient, err error) {
+	httpClient = new(CustomHTTPClient)
 
 	// configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
@@ -39,7 +39,7 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string) (h
 
 	// configure custom dialer / transport
 	customDialer := newCustomDialer(httpClient)
-	customTransport, err := newCustomTransport(customDialer, proxy)
+	customTransport, err := newCustomTransport(customDialer, proxy, decompressBody)
 	if err != nil {
 		return nil, err
 	}
