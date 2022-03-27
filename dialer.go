@@ -218,7 +218,30 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
-		responseRecord.Content = &buf
+		revisit, err := CheckRevisit(payloadDigest, warcTargetURI)
+
+		if err != nil {
+			// possibly ignore in the future?
+			return err
+		}
+
+		if revisit.target_uri != "" {
+			responseRecord.Header.Set("WARC-Type", "revisit")
+			responseRecord.Header.Set("WARC-Refers-To-Target-URI", revisit.target_uri)
+			responseRecord.Header.Set("WARC-Refers-To-Date", revisit.date.UTC().Format(time.RFC3339))
+			if revisit.response_uuid != "" {
+				responseRecord.Header.Set("WARC-Refers-To", "<urn:uuid:"+revisit.response_uuid+">")
+			}
+			responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
+			responseRecord.Header.Set("WARC-Truncated", "length")
+
+			//just headers
+			headers := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[0])
+
+			responseRecord.Content = headers
+		} else {
+			responseRecord.Content = &buf
+		}
 
 		recordChan <- responseRecord
 
