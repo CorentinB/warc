@@ -218,14 +218,19 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
-		revisit := checkLocalRevisit(payloadDigest, &d.client.deduplication)
+		var revisit = revisitRecord{}
+		if d.client.dedupe_options.localDedupe {
+			revisit = checkLocalRevisit(payloadDigest, &d.client.deduplication)
+		}
 
 		if revisit.target_uri == "" {
-			revisit, err = checkRevisit(payloadDigest, warcTargetURI)
+			if d.client.dedupe_options.CDXDedupe {
+				revisit, err = checkCDXRevisit(d.client.dedupe_options.CDXURL, payloadDigest, warcTargetURI)
 
-			if err != nil {
-				// possibly ignore in the future?
-				return err
+				if err != nil {
+					// possibly ignore in the future?
+					return err
+				}
 			}
 		}
 

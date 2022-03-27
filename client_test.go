@@ -31,7 +31,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false)
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, dedupe_options{localDedupe: true, CDXDedupe: false, CDXURL: "http://web.archive.org"})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -103,7 +103,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false)
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, dedupe_options{localDedupe: true, CDXDedupe: false, CDXURL: "http://web.archive.org"})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}

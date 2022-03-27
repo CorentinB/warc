@@ -44,8 +44,8 @@ func checkLocalRevisit(digest string, deduplication *dedupe_hash_table) revisitR
 	return revisitRecord{}
 }
 
-func checkRevisit(digest string, targetURI string) (revisitRecord, error) {
-	resp, err := http.Get("http://web.archive.org/web/timemap/cdx?url=" + url.QueryEscape(targetURI) + "&filter=digest:" + digest + "&limit=-1")
+func checkCDXRevisit(CDXURL string, digest string, targetURI string) (revisitRecord, error) {
+	resp, err := http.Get(CDXURL + "/web/timemap/cdx?url=" + url.QueryEscape(targetURI) + "&filter=digest:" + digest + "&limit=-1")
 	if err != nil {
 		return revisitRecord{}, err
 	}
