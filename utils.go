@@ -32,7 +32,19 @@ func GetSHA1FromReader(r io.Reader) string {
 	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
 }
 
-func CheckRevisit(digest string, targetURI string) (revisitRecord, error) {
+func checkLocalRevisit(digest string, deduplication *dedupe_hash_table) revisitRecord {
+	deduplication.RLock()
+	revisit, exists := deduplication.m[digest]
+	deduplication.RUnlock()
+
+	if exists {
+		return revisit
+	}
+
+	return revisitRecord{}
+}
+
+func checkRevisit(digest string, targetURI string) (revisitRecord, error) {
 	resp, err := http.Get("http://web.archive.org/web/timemap/cdx?url=" + url.QueryEscape(targetURI) + "&filter=digest:" + digest + "&limit=-1")
 	if err != nil {
 		return revisitRecord{}, err

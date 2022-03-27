@@ -10,6 +10,12 @@ type CustomHTTPClient struct {
 	WARCWriter       chan *RecordBatch
 	WARCWriterFinish chan bool
 	WaitGroup        *sync.WaitGroup
+	deduplication    dedupe_hash_table
+}
+
+type dedupe_hash_table struct {
+	sync.RWMutex
+	m map[string]revisitRecord
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -22,6 +28,8 @@ func (c *CustomHTTPClient) Close() error {
 
 func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool) (httpClient *CustomHTTPClient, err error) {
 	httpClient = new(CustomHTTPClient)
+
+	httpClient.deduplication.m = make(map[string]revisitRecord)
 
 	// configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)

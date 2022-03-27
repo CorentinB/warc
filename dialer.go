@@ -218,11 +218,15 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
-		revisit, err := CheckRevisit(payloadDigest, warcTargetURI)
+		revisit := checkLocalRevisit(payloadDigest, &d.client.deduplication)
 
-		if err != nil {
-			// possibly ignore in the future?
-			return err
+		if revisit.target_uri == "" {
+			revisit, err = checkRevisit(payloadDigest, warcTargetURI)
+
+			if err != nil {
+				// possibly ignore in the future?
+				return err
+			}
 		}
 
 		if revisit.target_uri != "" {
@@ -285,6 +289,15 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 		// add WARC-Target-URI
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
+
+		if r.Header.Get("WARC-Type") == "response" {
+			d.client.deduplication.Lock()
+			d.client.deduplication.m[r.Header.Get("WARC-Payload-Digest")[5:]] = revisitRecord{
+				response_uuid: recordIDs[i],
+				target_uri:    warcTargetURI,
+				date:          time.Now().UTC()}
+			d.client.deduplication.Unlock()
+		}
 	}
 
 	d.client.WARCWriter <- batch
