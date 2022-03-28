@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -18,57 +16,12 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-type revisitRecord struct {
-	response_uuid string
-	target_uri    string
-	date          time.Time
-}
-
 func GetSHA1FromReader(r io.Reader) string {
 	sha := sha1.New()
 
 	io.Copy(sha, r)
 
 	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
-}
-
-func checkLocalRevisit(digest string, deduplication *dedupe_hash_table) revisitRecord {
-	deduplication.RLock()
-	revisit, exists := deduplication.m[digest]
-	deduplication.RUnlock()
-
-	if exists {
-		return revisit
-	}
-
-	return revisitRecord{}
-}
-
-func checkCDXRevisit(CDXURL string, digest string, targetURI string) (revisitRecord, error) {
-	resp, err := http.Get(CDXURL + "/web/timemap/cdx?url=" + url.QueryEscape(targetURI) + "&filter=digest:" + digest + "&limit=-1")
-	if err != nil {
-		return revisitRecord{}, err
-	}
-
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return revisitRecord{}, err
-	}
-
-	cdxReply := strings.Fields(string(body))
-
-	if len(cdxReply) >= 7 {
-		CDXtime, _ := time.Parse("20060102150405", cdxReply[1])
-
-		return revisitRecord{
-			response_uuid: "",
-			target_uri:    cdxReply[2],
-			date:          CDXtime}, nil
-	}
-
-	return revisitRecord{}, nil
 }
 
 // GetSHA1 return the SHA1 of a []byte,

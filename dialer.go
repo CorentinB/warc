@@ -219,14 +219,13 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
 		var revisit = revisitRecord{}
-		if d.client.dedupe_options.localDedupe {
-			revisit = checkLocalRevisit(payloadDigest, &d.client.deduplication)
+		if d.client.dedupeOptions.localDedupe {
+			revisit = d.checkLocalRevisit(payloadDigest)
 		}
 
-		if revisit.target_uri == "" {
-			if d.client.dedupe_options.CDXDedupe {
-				revisit, err = checkCDXRevisit(d.client.dedupe_options.CDXURL, payloadDigest, warcTargetURI)
-
+		if revisit.targetURI == "" {
+			if d.client.dedupeOptions.CDXDedupe {
+				revisit, err = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
 				if err != nil {
 					// possibly ignore in the future?
 					return err
@@ -234,14 +233,16 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			}
 		}
 
-		if revisit.target_uri != "" {
+		if revisit.targetURI != "" {
 			responseRecord.Header.Set("WARC-Type", "revisit")
-			responseRecord.Header.Set("WARC-Refers-To-Target-URI", revisit.target_uri)
+			responseRecord.Header.Set("WARC-Refers-To-Target-URI", revisit.targetURI)
 			responseRecord.Header.Set("WARC-Refers-To-Date", revisit.date.UTC().Format(time.RFC3339))
-			if revisit.response_uuid != "" {
-				responseRecord.Header.Set("WARC-Refers-To", "<urn:uuid:"+revisit.response_uuid+">")
+
+			if revisit.responseUUID != "" {
+				responseRecord.Header.Set("WARC-Refers-To", "<urn:uuid:"+revisit.responseUUID+">")
 			}
-			responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
+
+			responseRecord.Header.Set("WARC-Profile", "https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#profile-identical-payload-digest")
 			responseRecord.Header.Set("WARC-Truncated", "length")
 
 			//just headers
@@ -296,12 +297,11 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
 
 		if r.Header.Get("WARC-Type") == "response" {
-			d.client.deduplication.Lock()
-			d.client.deduplication.m[r.Header.Get("WARC-Payload-Digest")[5:]] = revisitRecord{
-				response_uuid: recordIDs[i],
-				target_uri:    warcTargetURI,
-				date:          time.Now().UTC()}
-			d.client.deduplication.Unlock()
+			d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
+				responseUUID: recordIDs[i],
+				targetURI:    warcTargetURI,
+				date:         time.Now().UTC(),
+			})
 		}
 	}
 
