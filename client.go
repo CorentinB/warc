@@ -11,7 +11,7 @@ type CustomHTTPClient struct {
 	WARCWriterFinish chan bool
 	WaitGroup        *sync.WaitGroup
 	dedupeHashTable  *sync.Map
-	dedupeOptions    dedupeOptions
+	dedupeOptions    DedupeOptions
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -22,7 +22,7 @@ func (c *CustomHTTPClient) Close() error {
 	return nil
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions dedupeOptions) (httpClient *CustomHTTPClient, err error) {
+func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions) (httpClient *CustomHTTPClient, err error) {
 	httpClient = new(CustomHTTPClient)
 
 	// Toggle deduplication options and create map for deduplication records.

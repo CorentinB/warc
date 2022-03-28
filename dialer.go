@@ -219,7 +219,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
 		var revisit = revisitRecord{}
-		if d.client.dedupeOptions.localDedupe {
+		if d.client.dedupeOptions.LocalDedupe {
 			revisit = d.checkLocalRevisit(payloadDigest)
 		}
 
