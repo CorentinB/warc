@@ -252,7 +252,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 				responseRecord.Header.Set("WARC-Refers-To", "<urn:uuid:"+revisit.responseUUID+">")
 			}
 
-			responseRecord.Header.Set("WARC-Profile", "https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#profile-identical-payload-digest")
+			responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
 			responseRecord.Header.Set("WARC-Truncated", "length")
 
 			//just headers
