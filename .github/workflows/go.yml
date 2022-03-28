@@ -23,3 +23,6 @@ jobs:
 
     - name: Test
       run: go test -v ./...
+
+    - name: Test (with -race enabled)
+      run: go test -race -v ./...
