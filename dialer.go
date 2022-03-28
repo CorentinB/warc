@@ -309,12 +309,14 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		// add WARC-Target-URI
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
 
-		if r.Header.Get("WARC-Type") == "response" {
-			d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
-				responseUUID: recordIDs[i],
-				targetURI:    warcTargetURI,
-				date:         time.Now().UTC(),
-			})
+		if d.client.dedupeOptions.LocalDedupe {
+			if r.Header.Get("WARC-Type") == "response" {
+				d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
+					responseUUID: recordIDs[i],
+					targetURI:    warcTargetURI,
+					date:         time.Now().UTC(),
+				})
+			}
 		}
 	}
 
