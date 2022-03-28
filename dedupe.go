@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-type dedupeOptions struct {
-	localDedupe bool
+type DedupeOptions struct {
+	LocalDedupe bool
 	CDXDedupe   bool
 	CDXURL      string
 }
