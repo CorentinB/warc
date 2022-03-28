@@ -62,13 +62,6 @@ func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 }
 
 func (d *customDialer) CustomDial(network, address string) (net.Conn, error) {
-	// force IPV4 as we are having some issues figuring out how to get
-	// RFC4291 compliant IPV6 IP for WARC-IP-Address
-	// NOTE: cause issues for IPV6 only sites?
-	if strings.Contains(network, "tcp") {
-		network = "tcp4"
-	}
-
 	conn, err := d.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -78,13 +71,6 @@ func (d *customDialer) CustomDial(network, address string) (net.Conn, error) {
 }
 
 func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
-	// force IPV4 as we are having some issues figuring out how to get
-	// RFC4291 compliant IPV6 IP for WARC-IP-Address
-	// NOTE: cause issues for IPV6 only sites?
-	if strings.Contains(network, "tcp") {
-		network = "tcp4"
-	}
-
 	plainConn, err := d.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -291,10 +277,16 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		switch addr := conn.RemoteAddr().(type) {
 		case *net.UDPAddr:
 			IP := addr.IP.String()
-			r.Header.Set("WARC-IP-Address", IP)
+			//Don't write IPv6 addresses to WARC headers yet.
+			if !strings.Contains(IP, ":") {
+				r.Header.Set("WARC-IP-Address", IP)
+			}
 		case *net.TCPAddr:
 			IP := addr.IP.String()
-			r.Header.Set("WARC-IP-Address", IP)
+			//Don't write IPv6 addresses to WARC headers yet.
+			if !strings.Contains(IP, ":") {
+				r.Header.Set("WARC-IP-Address", IP)
+			}
 		}
 
 		// set WARC-Record-ID and WARC-Concurrent-To
