@@ -175,7 +175,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 
 func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	var (
-		dedupePath = "/web/timemap/cdx?url=https://upload.wikimedia.org/wikipedia/commons/5/55/Blason_ville_fr_Sarlat-la-Canéda_%28Dordogne%29.svg&filter=digest:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3&limit=-1"
+		dedupePath = "/web/timemap/cdx?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fcommons%2F5%2F55%2FBlason_ville_fr_Sarlat-la-Can%C3%A9da_%2528Dordogne%2529.svg&filter=digest:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3&limit=-1"
 		dedupeResp = "org,wikimedia,upload)/wikipedia/commons/5/55/blason_ville_fr_sarlat-la-can%c3%a9da_(dordogne).svg 20220320002518 https://upload.wikimedia.org/wikipedia/commons/5/55/Blason_ville_fr_Sarlat-la-Can%C3%A9da_%28Dordogne%29.svg image/svg+xml 200 UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3 13974"
 	)
 	// init test HTTP endpoint
@@ -210,7 +210,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	rotatorSettings.Prefix = "DEDUP"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: true, CDXURL: "http://127.0.0.1"})
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: true, CDXURL: server.URL})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
