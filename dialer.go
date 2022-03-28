@@ -125,16 +125,18 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	defer d.client.WaitGroup.Done()
 
 	var (
-		batch         = NewRecordBatch()
-		recordChan    = make(chan *Record)
-		warcTargetURI = scheme + "://"
-		recordIDs     []string
-		target        string
-		host          string
-		errs, _       = errgroup.WithContext(context.Background())
+		batch                = NewRecordBatch()
+		recordChan           = make(chan *Record)
+		warcTargetURIChannel = make(chan string, 1)
+		recordIDs            []string
+		target               string
+		host                 string
+		errs, _              = errgroup.WithContext(context.Background())
 	)
 
 	errs.Go(func() error {
+		var warcTargetURI = scheme + "://"
+
 		// initialize the request record
 		var requestRecord = NewRecord()
 		requestRecord.Header.Set("WARC-Type", "request")
@@ -188,6 +190,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			return errors.New("unable to parse data necessary for WARC-Target-URI")
 		}
 
+		// send the WARC-Target-URI to a channel so that it can be picked-up
+		// by the goroutine responsible for writing the response
+		warcTargetURIChannel <- warcTargetURI
+
 		requestRecord.Content = &buf
 
 		recordChan <- requestRecord
@@ -222,6 +228,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		if d.client.dedupeOptions.LocalDedupe {
 			revisit = d.checkLocalRevisit(payloadDigest)
 		}
+
+		// grab the WARC-Target-URI and send it back for records post-processing
+		var warcTargetURI = <-warcTargetURIChannel
+		warcTargetURIChannel <- warcTargetURI
 
 		if revisit.targetURI == "" {
 			if d.client.dedupeOptions.CDXDedupe {
@@ -271,6 +281,9 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		recordIDs = append(recordIDs, uuid.NewV4().String())
 		batch.Records = append(batch.Records, record)
 	}
+
+	// get the WARC-Target-URI value
+	var warcTargetURI = <-warcTargetURIChannel
 
 	// add headers
 	for i, r := range batch.Records {

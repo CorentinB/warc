@@ -32,7 +32,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "CONC"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, dedupeOptions{})
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -104,7 +104,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, dedupeOptions{})
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -148,7 +148,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 	rotatorSettings.Prefix = "DEDUP"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, dedupeOptions{localDedupe: true, CDXDedupe: false})
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: false})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -210,7 +210,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	rotatorSettings.Prefix = "DEDUP"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, dedupeOptions{localDedupe: true, CDXDedupe: true, CDXURL: "http://127.0.0.1"})
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: true, CDXURL: "http://127.0.0.1"})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
