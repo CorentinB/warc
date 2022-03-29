@@ -65,7 +65,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordID+">")
 	}
 
-	_, err = io.WriteString(w.FileWriter, "WARC/1.0\r\n")
+	_, err = io.WriteString(w.FileWriter, "WARC/1.1\r\n")
 	if err != nil {
 		return recordID, err
 	}
