@@ -268,6 +268,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		batch.Records = append(batch.Records, record)
 	}
 
+	if len(batch.Records) != 2 {
+		return errors.New("warc: there was a problem creating one of the WARC records")
+	}
+
 	// get the WARC-Target-URI value
 	var warcTargetURI = <-warcTargetURIChannel
 
