@@ -53,7 +53,7 @@ type Record struct {
 func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	// Add the mandatories headers
 	if r.Header.Get("WARC-Date") == "" {
-		r.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339))
+		r.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339Nano))
 	}
 
 	if r.Header.Get("WARC-Type") == "" {
@@ -161,7 +161,7 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	infoRecord := NewRecord()
 
 	// Set the headers
-	infoRecord.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339))
+	infoRecord.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339Nano))
 	infoRecord.Header.Set("WARC-Filename", strings.TrimSuffix(w.FileName, ".open"))
 	infoRecord.Header.Set("WARC-Type", "warcinfo")
 	infoRecord.Header.Set("Content-Type", "application/warc-fields")

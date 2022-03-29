@@ -105,7 +105,7 @@ func NewRecord() *Record {
 // it also initialize the capture time
 func NewRecordBatch() *RecordBatch {
 	return &RecordBatch{
-		CaptureTime: time.Now().UTC().Format(time.RFC3339),
+		CaptureTime: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 }
 
