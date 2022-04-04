@@ -245,7 +245,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			headers := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[0])
 
 			responseRecord.Content = headers
-		} else {
+		}
+
+		// if the response record content wasn't set with a revisit record above
+		if responseRecord.Content == nil {
 			responseRecord.Content = &buf
 		}
 
