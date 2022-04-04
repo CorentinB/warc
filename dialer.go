@@ -112,7 +112,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 	var (
 		batch                = NewRecordBatch()
-		recordChan           = make(chan *Record)
+		recordChan           = make(chan *Record, 2)
 		warcTargetURIChannel = make(chan string, 1)
 		recordIDs            []string
 		target               string
@@ -254,10 +254,8 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		return nil
 	})
 
-	go func() {
-		err = errs.Wait()
-		close(recordChan)
-	}()
+	err = errs.Wait()
+	close(recordChan)
 
 	if err != nil {
 		return err
