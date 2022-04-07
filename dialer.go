@@ -261,6 +261,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	close(recordChan)
 
 	if err != nil {
+		// note: at the moment these errors don't go anywhere because wrapConnection calls us as a goroutine 
 		return err
 	}
 
