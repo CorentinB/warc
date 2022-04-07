@@ -10,6 +10,8 @@ type CustomHTTPClient struct {
 	WARCWriter       chan *RecordBatch
 	WARCWriterFinish chan bool
 	WaitGroup        *sync.WaitGroup
+	dedupeHashTable  *sync.Map
+	dedupeOptions    DedupeOptions
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -20,24 +22,28 @@ func (c *CustomHTTPClient) Close() error {
 	return nil
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool) (httpClient *CustomHTTPClient, err error) {
+func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions) (httpClient *CustomHTTPClient, err error) {
 	httpClient = new(CustomHTTPClient)
 
-	// configure the waitgroup
+	// Toggle deduplication options and create map for deduplication records.
+	httpClient.dedupeOptions = dedupeOptions
+	httpClient.dedupeHashTable = new(sync.Map)
+
+	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
 
-	// configure WARC writer
+	// Configure WARC writer
 	httpClient.WARCWriter, httpClient.WARCWriterFinish, err = rotatorSettings.NewWARCRotator()
 	if err != nil {
 		return nil, err
 	}
 
-	// configure HTTP client
+	// Configure HTTP client
 	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
 
-	// configure custom dialer / transport
+	// Configure custom dialer / transport
 	customDialer := newCustomDialer(httpClient)
 	customTransport, err := newCustomTransport(customDialer, proxy, decompressBody)
 	if err != nil {

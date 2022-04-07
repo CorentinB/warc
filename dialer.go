@@ -62,13 +62,6 @@ func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 }
 
 func (d *customDialer) CustomDial(network, address string) (net.Conn, error) {
-	// force IPV4 as we are having some issues figuring out how to get
-	// RFC4291 compliant IPV6 IP for WARC-IP-Address
-	// NOTE: cause issues for IPV6 only sites?
-	if strings.Contains(network, "tcp") {
-		network = "tcp4"
-	}
-
 	conn, err := d.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -78,13 +71,6 @@ func (d *customDialer) CustomDial(network, address string) (net.Conn, error) {
 }
 
 func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
-	// force IPV4 as we are having some issues figuring out how to get
-	// RFC4291 compliant IPV6 IP for WARC-IP-Address
-	// NOTE: cause issues for IPV6 only sites?
-	if strings.Contains(network, "tcp") {
-		network = "tcp4"
-	}
-
 	plainConn, err := d.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -125,16 +111,18 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	defer d.client.WaitGroup.Done()
 
 	var (
-		batch         = NewRecordBatch()
-		recordChan    = make(chan *Record)
-		warcTargetURI = scheme + "://"
-		recordIDs     []string
-		target        string
-		host          string
-		errs, _       = errgroup.WithContext(context.Background())
+		batch                = NewRecordBatch()
+		recordChan           = make(chan *Record, 2)
+		warcTargetURIChannel = make(chan string, 1)
+		recordIDs            []string
+		target               string
+		host                 string
+		errs, _              = errgroup.WithContext(context.Background())
 	)
 
 	errs.Go(func() error {
+		var warcTargetURI = scheme + "://"
+
 		// initialize the request record
 		var requestRecord = NewRecord()
 		requestRecord.Header.Set("WARC-Type", "request")
@@ -188,6 +176,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			return errors.New("unable to parse data necessary for WARC-Target-URI")
 		}
 
+		// send the WARC-Target-URI to a channel so that it can be picked-up
+		// by the goroutine responsible for writing the response
+		warcTargetURIChannel <- warcTargetURI
+
 		requestRecord.Content = &buf
 
 		recordChan <- requestRecord
@@ -218,19 +210,58 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
-		responseRecord.Content = &buf
+		var revisit = revisitRecord{}
+		if d.client.dedupeOptions.LocalDedupe {
+			revisit = d.checkLocalRevisit(payloadDigest)
+		}
+
+		// grab the WARC-Target-URI and send it back for records post-processing
+		var warcTargetURI = <-warcTargetURIChannel
+		warcTargetURIChannel <- warcTargetURI
+
+		if revisit.targetURI == "" {
+			if d.client.dedupeOptions.CDXDedupe {
+				revisit, err = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
+				if err != nil {
+					// possibly ignore in the future?
+					return err
+				}
+			}
+		}
+
+		if revisit.targetURI != "" {
+			responseRecord.Header.Set("WARC-Type", "revisit")
+			responseRecord.Header.Set("WARC-Refers-To-Target-URI", revisit.targetURI)
+			responseRecord.Header.Set("WARC-Refers-To-Date", revisit.date.UTC().Format(time.RFC3339))
+
+			if revisit.responseUUID != "" {
+				responseRecord.Header.Set("WARC-Refers-To", "<urn:uuid:"+revisit.responseUUID+">")
+			}
+
+			responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
+			responseRecord.Header.Set("WARC-Truncated", "length")
+
+			//just headers
+			headers := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[0])
+
+			responseRecord.Content = headers
+		}
+
+		// if the response record content wasn't set with a revisit record above
+		if responseRecord.Content == nil {
+			responseRecord.Content = &buf
+		}
 
 		recordChan <- responseRecord
 
 		return nil
 	})
 
-	go func() {
-		err = errs.Wait()
-		close(recordChan)
-	}()
+	err = errs.Wait()
+	close(recordChan)
 
 	if err != nil {
+		// note: at the moment these errors don't go anywhere because wrapConnection calls us as a goroutine 
 		return err
 	}
 
@@ -239,16 +270,29 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		batch.Records = append(batch.Records, record)
 	}
 
+	if len(batch.Records) != 2 {
+		return errors.New("warc: there was a problem creating one of the WARC records")
+	}
+
+	// get the WARC-Target-URI value
+	var warcTargetURI = <-warcTargetURIChannel
+
 	// add headers
 	for i, r := range batch.Records {
 		// generate WARC-IP-Address
 		switch addr := conn.RemoteAddr().(type) {
 		case *net.UDPAddr:
 			IP := addr.IP.String()
-			r.Header.Set("WARC-IP-Address", IP)
+			//Don't write IPv6 addresses to WARC headers yet.
+			if !strings.Contains(IP, ":") {
+				r.Header.Set("WARC-IP-Address", IP)
+			}
 		case *net.TCPAddr:
 			IP := addr.IP.String()
-			r.Header.Set("WARC-IP-Address", IP)
+			//Don't write IPv6 addresses to WARC headers yet.
+			if !strings.Contains(IP, ":") {
+				r.Header.Set("WARC-IP-Address", IP)
+			}
 		}
 
 		// set WARC-Record-ID and WARC-Concurrent-To
@@ -262,6 +306,16 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 		// add WARC-Target-URI
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
+
+		if d.client.dedupeOptions.LocalDedupe {
+			if r.Header.Get("WARC-Type") == "response" {
+				d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
+					responseUUID: recordIDs[i],
+					targetURI:    warcTargetURI,
+					date:         time.Now().UTC(),
+				})
+			}
+		}
 	}
 
 	d.client.WARCWriter <- batch
