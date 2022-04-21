@@ -206,8 +206,8 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		}
 		defer resp.Body.Close()
 
-		for i := 0; i < len(d.client.skipHTTPStatusCode); i++ {
-			if d.client.skipHTTPStatusCode[i] == resp.StatusCode {
+		for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
+			if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
 				return errors.New("warc: response code was blocked by config")
 			}
 		}
