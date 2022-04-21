@@ -206,6 +206,12 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		}
 		defer resp.Body.Close()
 
+		for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
+			if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
+				return errors.New("warc: response code was blocked by config")
+			}
+		}
+
 		payloadDigest := GetSHA1FromReader(resp.Body)
 
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
@@ -261,7 +267,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	close(recordChan)
 
 	if err != nil {
-		// note: at the moment these errors don't go anywhere because wrapConnection calls us as a goroutine 
+		// note: at the moment these errors don't go anywhere because wrapConnection calls us as a goroutine
 		return err
 	}
 
