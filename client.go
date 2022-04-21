@@ -7,11 +7,12 @@ import (
 
 type CustomHTTPClient struct {
 	http.Client
-	WARCWriter       chan *RecordBatch
-	WARCWriterFinish chan bool
-	WaitGroup        *sync.WaitGroup
-	dedupeHashTable  *sync.Map
-	dedupeOptions    DedupeOptions
+	WARCWriter         chan *RecordBatch
+	WARCWriterFinish   chan bool
+	WaitGroup          *sync.WaitGroup
+	dedupeHashTable    *sync.Map
+	dedupeOptions      DedupeOptions
+	skipHTTPStatusCode []int
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -22,12 +23,15 @@ func (c *CustomHTTPClient) Close() error {
 	return nil
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions) (httpClient *CustomHTTPClient, err error) {
+func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCode []int) (httpClient *CustomHTTPClient, err error) {
 	httpClient = new(CustomHTTPClient)
 
 	// Toggle deduplication options and create map for deduplication records.
 	httpClient.dedupeOptions = dedupeOptions
 	httpClient.dedupeHashTable = new(sync.Map)
+
+	// Configure HTTP status code skipping (usually 429)
+	httpClient.skipHTTPStatusCode = skipHTTPStatusCode
 
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)

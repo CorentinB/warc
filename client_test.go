@@ -32,7 +32,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "CONC"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{})
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -104,7 +104,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{})
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -148,7 +148,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 	rotatorSettings.Prefix = "DEDUP"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: false})
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: false}, []int{})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -210,7 +210,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	rotatorSettings.Prefix = "DEDUP"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: true, CDXURL: server.URL})
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: true, CDXURL: server.URL}, []int{})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -231,6 +231,50 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 
 		time.Sleep(time.Second)
 	}
+
+	httpClient.Close()
+}
+
+func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Write(fileBytes)
+	}))
+	defer server.Close()
+
+	// init WARC rotator settings
+	var rotatorSettings = NewRotatorSettings()
+	var err error
+
+	rotatorSettings.OutputDirectory = "warcs"
+	rotatorSettings.Compression = "GZIP"
+	rotatorSettings.Prefix = "TEST429"
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{429})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	io.Copy(io.Discard, resp.Body)
 
 	httpClient.Close()
 }
