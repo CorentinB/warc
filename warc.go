@@ -5,6 +5,7 @@ This module is based on nlevitt's WARC module (https://github.com/nlevitt/warc).
 package warc
 
 import (
+	"errors"
 	"os"
 	"strings"
 )
@@ -52,6 +53,13 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	var serial = 1
 	var currentFileName string = generateWarcFileName(settings.Prefix, settings.Compression, serial)
 	var currentWarcinfoRecordID string
+
+	// Ensure file doesn't already exist
+	_, err := os.Stat(settings.OutputDirectory + currentFileName)
+	for !errors.Is(err, os.ErrNotExist) {
+		currentFileName = generateWarcFileName(settings.Prefix, settings.Compression, serial)
+		_, err = os.Stat(settings.OutputDirectory + currentFileName)
+	}
 
 	// Create and open the initial file
 	warcFile, err := os.Create(settings.OutputDirectory + currentFileName)
