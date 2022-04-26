@@ -186,9 +186,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 			// The WARC file is renamed to remove the .open suffix
 			err := os.Rename(settings.OutputDirectory+currentFileName, strings.TrimSuffix(settings.OutputDirectory+currentFileName, ".open"))
 			if err != nil {
-				println("Error renaming WARC file: ", err.Error())
-				//This is most likely due to nothing being written to a WARC during a run, but could be a result of a larger issue.
-				//panic(err)
+				panic(err)
 			}
 
 			done <- true
