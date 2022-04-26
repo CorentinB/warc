@@ -166,7 +166,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		// check that we achieved to parse all the necessary data
 		if host != "" && target != "" {
 			// HTTP's request first line can include a complete path, we check that
-			if strings.HasSuffix(target, scheme+"://"+host) {
+			if strings.HasPrefix(target, scheme+"://"+host) {
 				warcTargetURI = target
 			} else {
 				warcTargetURI += host
