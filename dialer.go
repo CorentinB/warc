@@ -332,7 +332,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 func newCustomDialer(httpClient *CustomHTTPClient) *customDialer {
 	var d = new(customDialer)
 
-	d.Timeout = 30 * time.Second
+	d.Timeout = 5 * time.Second
 	d.client = httpClient
 
 	return d
