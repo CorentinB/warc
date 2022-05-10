@@ -289,16 +289,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		switch addr := conn.RemoteAddr().(type) {
 		case *net.UDPAddr:
 			IP := addr.IP.String()
-			//Don't write IPv6 addresses to WARC headers yet.
-			if !strings.Contains(IP, ":") {
-				r.Header.Set("WARC-IP-Address", IP)
-			}
+			r.Header.Set("WARC-IP-Address", IP)
 		case *net.TCPAddr:
 			IP := addr.IP.String()
-			//Don't write IPv6 addresses to WARC headers yet.
-			if !strings.Contains(IP, ":") {
-				r.Header.Set("WARC-IP-Address", IP)
-			}
+			r.Header.Set("WARC-IP-Address", IP)
 		}
 
 		// set WARC-Record-ID and WARC-Concurrent-To
