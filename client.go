@@ -2,6 +2,7 @@ package warc
 
 import (
 	"net/http"
+	"os"
 	"path"
 	"sync"
 )
@@ -36,7 +37,17 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 	httpClient.skipHTTPStatusCodes = skipHTTPStatusCodes
 
 	// Configure WARC temporary file directory from RotatorSettings.
-	httpClient.WARCTempDir = path.Dir(rotatorSettings.OutputDirectory) + "/temp"
+	if path.Dir(rotatorSettings.OutputDirectory) == "." {
+		// if, for example, like in the tests we are using a single path like "warcs", we should use an upper directory, like temp/
+		httpClient.WARCTempDir = "temp/"
+	} else {
+		httpClient.WARCTempDir = path.Dir(rotatorSettings.OutputDirectory) + "/temp"
+	}
+
+	// Ensure the folder we are trying to write to, exists.
+	if _, err := os.Stat(httpClient.WARCTempDir); os.IsNotExist(err) {
+		os.MkdirAll(httpClient.WARCTempDir, os.ModePerm)
+	}
 
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
