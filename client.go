@@ -41,7 +41,7 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 		// if, for example, like in the tests we are using a single path like "warcs", we should use an upper directory, like temp/
 		httpClient.WARCTempDir = "temp/"
 	} else {
-		httpClient.WARCTempDir = path.Dir(rotatorSettings.OutputDirectory) + "/temp"
+		httpClient.WARCTempDir = path.Join(rotatorSettings.OutputDirectory, "temp")
 	}
 
 	// Ensure the folder we are trying to write to, exists.
