@@ -74,10 +74,13 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	// lives on disk
 	if r.PayloadPath != "" {
 		file, err := os.Open(r.PayloadPath)
+		var headers []byte
+
 		if err != nil {
 			return recordID, err
 		}
 		defer file.Close()
+		defer os.Remove(file.Name())
 
 		// Write headers
 		fileStats, err := file.Stat()
@@ -85,13 +88,28 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 			return recordID, err
 		}
 
+		// Allow the headers to be sent through Content because we can't prepend to files due to a Go limit (or maybe OS limitation). This is required.
+		if r.Content != nil {
+			headers, err = ioutil.ReadAll(r.Content)
+			if err != nil {
+				return recordID, err
+			}
+		}
+
 		if r.Header.Get("Content-Length") == "" {
-			r.Header.Set("Content-Length", strconv.Itoa(int(fileStats.Size())))
+			if headers != nil {
+				// We need to have a correct Content-Length, to do so we need to add, obviously, the headers, plus the 8 bytes for the CLRF, with this, everything plays back correctly and has the "correct" content-length!
+				r.Header.Set("Content-Length", strconv.Itoa(int(fileStats.Size())+len(headers)+8))
+			} else {
+				// If we aren't using headers through r.Content, we obviously don't need to add it.
+				r.Header.Set("Content-Length", strconv.Itoa(int(fileStats.Size())))
+			}
+
 		}
 
 		if r.Header.Get("WARC-Block-Digest") == "" {
 			// Generate WARC-Block-Digest
-			digest, err := GetSHA1FromFile(r.PayloadPath)
+			digest, err := GetSHA1FromFile(r.PayloadPath, headers)
 			if err == nil {
 				r.Header.Set("WARC-Block-Digest", "sha1:"+digest)
 			} else {
@@ -110,6 +128,13 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		_, err = io.WriteString(w.FileWriter, "\r\n")
 		if err != nil {
 			return recordID, err
+		}
+
+		if headers != nil {
+			_, err = io.WriteString(w.FileWriter, string(headers)+"\r\n\r\n")
+			if err != nil {
+				return recordID, err
+			}
 		}
 
 		_, err = io.Copy(w.FileWriter, file)

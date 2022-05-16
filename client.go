@@ -2,17 +2,19 @@ package warc
 
 import (
 	"net/http"
+	"path"
 	"sync"
 )
 
 type CustomHTTPClient struct {
 	http.Client
-	WARCWriter         chan *RecordBatch
-	WARCWriterFinish   chan bool
-	WaitGroup          *sync.WaitGroup
-	dedupeHashTable    *sync.Map
-	dedupeOptions      DedupeOptions
+	WARCWriter          chan *RecordBatch
+	WARCWriterFinish    chan bool
+	WaitGroup           *sync.WaitGroup
+	dedupeHashTable     *sync.Map
+	dedupeOptions       DedupeOptions
 	skipHTTPStatusCodes []int
+	WARCTempDir         string
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -32,6 +34,9 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 
 	// Configure HTTP status code skipping (usually 429)
 	httpClient.skipHTTPStatusCodes = skipHTTPStatusCodes
+
+	// Configure WARC temporary file directory from RotatorSettings.
+	httpClient.WARCTempDir = path.Dir(rotatorSettings.OutputDirectory) + "/temp"
 
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
