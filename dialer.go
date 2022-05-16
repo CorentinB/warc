@@ -166,7 +166,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		// check that we achieved to parse all the necessary data
 		if host != "" && target != "" {
 			// HTTP's request first line can include a complete path, we check that
-			if strings.HasSuffix(target, scheme+"://"+host) {
+			if strings.HasPrefix(target, scheme+"://"+host) {
 				warcTargetURI = target
 			} else {
 				warcTargetURI += host
@@ -289,16 +289,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		switch addr := conn.RemoteAddr().(type) {
 		case *net.UDPAddr:
 			IP := addr.IP.String()
-			//Don't write IPv6 addresses to WARC headers yet.
-			if !strings.Contains(IP, ":") {
-				r.Header.Set("WARC-IP-Address", IP)
-			}
+			r.Header.Set("WARC-IP-Address", IP)
 		case *net.TCPAddr:
 			IP := addr.IP.String()
-			//Don't write IPv6 addresses to WARC headers yet.
-			if !strings.Contains(IP, ":") {
-				r.Header.Set("WARC-IP-Address", IP)
-			}
+			r.Header.Set("WARC-IP-Address", IP)
 		}
 
 		// set WARC-Record-ID and WARC-Concurrent-To

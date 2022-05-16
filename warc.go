@@ -5,8 +5,10 @@ This module is based on nlevitt's WARC module (https://github.com/nlevitt/warc).
 package warc
 
 import (
+	"errors"
 	"os"
 	"strings"
+	"sync"
 )
 
 // RotatorSettings is used to store the settings
@@ -27,6 +29,9 @@ type RotatorSettings struct {
 	// default will be the current directory
 	OutputDirectory string
 }
+
+// Create mutex to ensure we are generating WARC files one at a time and not naming them the same thing.
+var fileMutex sync.Mutex
 
 // NewWARCRotator creates and return a channel that can be used
 // to communicate records to be written to WARC files to the
@@ -53,11 +58,20 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	var currentFileName string = generateWarcFileName(settings.Prefix, settings.Compression, serial)
 	var currentWarcinfoRecordID string
 
+	// Ensure file doesn't already exist (and if it does, make a new one)
+	fileMutex.Lock()
+	_, err := os.Stat(settings.OutputDirectory + currentFileName)
+	for !errors.Is(err, os.ErrNotExist) {
+		currentFileName = generateWarcFileName(settings.Prefix, settings.Compression, serial)
+		_, err = os.Stat(settings.OutputDirectory + currentFileName)
+	}
+
 	// Create and open the initial file
 	warcFile, err := os.Create(settings.OutputDirectory + currentFileName)
 	if err != nil {
 		panic(err)
 	}
+	fileMutex.Unlock()
 
 	// Initialize WARC writer
 	warcWriter, err := NewWriter(warcFile, currentFileName, settings.Compression)
