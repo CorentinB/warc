@@ -195,14 +195,13 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
 		var buf bytes.Buffer
-		// read 10KB to memory and write the rest to a file
-		// this is entirely arbitrary, but I thought it was a good middle ground, will be configurable in the future, but 10-20KB seems like a safe default? I think?
-		read, err := io.CopyN(&buf, respPipe, 10*1024)
+		// read 2MB to memory and if there's more to be read move it to a file
+		read, err := io.CopyN(&buf, respPipe, 2000*1024)
 		if err != io.EOF && err != nil {
 			return err
 		}
 
-		if read == 10*1024 {
+		if read == 2000*1024 {
 			rest_of_file := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[1])
 
 			//TODO: investigate why files that are incredibly large claim to only take 50ms when we actually have to take much longer
