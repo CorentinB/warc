@@ -36,7 +36,7 @@ func GetSHA1(content []byte) string {
 
 // GetSHA1FromFile return the SHA1 of a file,
 // can be used to fill the WARC-Block-Digest header
-func GetSHA1FromFile(path string) (string, error) {
+func GetSHA1FromFile(path string, headers []byte) (string, error) {
 	hash := sha1.New()
 
 	file, err := os.Open(path)
@@ -44,6 +44,10 @@ func GetSHA1FromFile(path string) (string, error) {
 		return "", err
 	}
 	defer file.Close()
+	if headers != nil {
+		hash.Write(headers)
+		hash.Write([]byte("\r\n\r\n"))
+	}
 
 	if _, err := io.Copy(hash, file); err != nil {
 		return "", err

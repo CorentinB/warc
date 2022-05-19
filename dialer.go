@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -194,17 +195,65 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
 		var buf bytes.Buffer
-		_, err := io.Copy(&buf, respPipe)
-		if err != nil {
+		// read 2MB to memory and if there's more to be read move it to a file
+		read, err := io.CopyN(&buf, respPipe, 2000*1024)
+		if err != io.EOF && err != nil {
 			return err
 		}
 
-		// generate WARC-Payload-Digest
-		resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
-		if err != nil {
-			return err
+		if read == 2000*1024 {
+			rest_of_file := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[1])
+
+			//TODO: investigate why files that are incredibly large claim to only take 50ms when we actually have to take much longer
+
+			//Send headers through content so they can be written first as well as read for later steps (status code and proper Payload-Digest)
+			buf = *bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[0])
+			responseRecord.Content = &buf
+
+			tmpFile, err := os.CreateTemp(d.client.WARCTempDir, "warc-temp-*")
+			if err != nil {
+				return err
+			}
+
+			_, err = io.Copy(tmpFile, rest_of_file)
+			if err != nil {
+				os.Remove(tmpFile.Name())
+				return err
+			}
+
+			_, err = io.Copy(tmpFile, respPipe)
+			if err != nil {
+				os.Remove(tmpFile.Name())
+				return err
+			}
+
+			responseRecord.PayloadPath = tmpFile.Name()
+			tmpFile.Close()
+		} else {
+			responseRecord.Content = &buf
 		}
-		defer resp.Body.Close()
+
+		// Define resp here so that we can define it for both methods of writing to WARC
+		var resp *http.Response
+
+		// generate WARC-Payload-Digest and check status code
+		// here we are checking how we are putting the data into the WARC and reading the HTTP response correctly, either from file, or reading the buffer.
+		if responseRecord.PayloadPath != "" {
+			tmpBytes, err := os.ReadFile(responseRecord.PayloadPath)
+			if err != nil {
+				return err
+			}
+
+			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(append(append(buf.Bytes(), []byte("\r\n\r\n")...), tmpBytes...))), nil)
+			if err != nil {
+				return err
+			}
+		} else {
+			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
+			if err != nil {
+				return err
+			}
+		}
 
 		for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
 			if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
@@ -215,6 +264,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		payloadDigest := GetSHA1FromReader(resp.Body)
 
 		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
+		resp.Body.Close()
 
 		var revisit = revisitRecord{}
 		if d.client.dedupeOptions.LocalDedupe {
@@ -250,12 +300,13 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			//just headers
 			headers := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[0])
 
-			responseRecord.Content = headers
-		}
+			if responseRecord.PayloadPath != "" {
+				os.Remove(responseRecord.PayloadPath)
+				// This isn't required as Content is checked first, but we are going to delete it, so it seems like the correct thing to do.
+				responseRecord.PayloadPath = ""
+			}
 
-		// if the response record content wasn't set with a revisit record above
-		if responseRecord.Content == nil {
-			responseRecord.Content = &buf
+			responseRecord.Content = headers
 		}
 
 		recordChan <- responseRecord
