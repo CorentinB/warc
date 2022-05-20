@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -79,6 +80,16 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	}
 
 	httpClient.Close()
+
+	files, err := filepath.Glob("warcs/CONC-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 256)
+	}
+
 }
 
 func TestWARCWritingWithHTTPClient(t *testing.T) {
@@ -123,6 +134,15 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	io.Copy(io.Discard, resp.Body)
 
 	httpClient.Close()
+
+	files, err := filepath.Glob("warcs/TEST-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 1)
+	}
 }
 
 func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
@@ -145,7 +165,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 
 	rotatorSettings.OutputDirectory = "warcs"
 	rotatorSettings.Compression = "GZIP"
-	rotatorSettings.Prefix = "DEDUP"
+	rotatorSettings.Prefix = "DEDUP1"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: false}, []int{})
@@ -171,6 +191,15 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 	}
 
 	httpClient.Close()
+
+	files, err := filepath.Glob("warcs/DEDUP1-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 2)
+	}
 }
 
 func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
@@ -207,7 +236,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 
 	rotatorSettings.OutputDirectory = "warcs"
 	rotatorSettings.Compression = "GZIP"
-	rotatorSettings.Prefix = "DEDUP"
+	rotatorSettings.Prefix = "DEDUP2"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: true, CDXURL: server.URL}, []int{})
@@ -233,6 +262,15 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	}
 
 	httpClient.Close()
+
+	files, err := filepath.Glob("warcs/DEDUP2-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 2)
+	}
 }
 
 func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
@@ -277,4 +315,14 @@ func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
 	io.Copy(io.Discard, resp.Body)
 
 	httpClient.Close()
+
+	files, err := filepath.Glob("warcs/TEST429-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if 429s aren't being filtered correctly!
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 0)
+	}
 }
