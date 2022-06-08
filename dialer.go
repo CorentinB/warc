@@ -47,6 +47,20 @@ func (cc *customConnection) Close() error {
 	return cc.Conn.Close()
 }
 
+func newCustomDialer(httpClient *CustomHTTPClient) *customDialer {
+	var d = new(customDialer)
+
+	d.Timeout = 5 * time.Second
+	d.client = httpClient
+
+	// d.Resolver = &net.Resolver{
+	// 	PreferGo: true,
+	// 	Dial:     net.DefaultResolver.Dial,
+	// }
+
+	return d
+}
+
 func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 	reqReader, reqWriter := io.Pipe()
 	respReader, respWriter := io.Pipe()
@@ -372,13 +386,4 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	d.client.WARCWriter <- batch
 
 	return nil
-}
-
-func newCustomDialer(httpClient *CustomHTTPClient) *customDialer {
-	var d = new(customDialer)
-
-	d.Timeout = 5 * time.Second
-	d.client = httpClient
-
-	return d
 }

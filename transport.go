@@ -3,7 +3,9 @@ package warc
 import (
 	"compress/gzip"
 	"crypto/tls"
+	"log"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"time"
 )
@@ -16,6 +18,26 @@ type customTransport struct {
 func (t *customTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	req = req.Clone(req.Context())
 	req.Header.Set("Accept-Encoding", "gzip")
+
+	// Use httptrace to increment the URI/s counter on DNS requests.
+	trace := &httptrace.ClientTrace{
+		GotConn: func(connInfo httptrace.GotConnInfo) {
+			log.Printf("got conn: %+v\n", connInfo)
+		},
+		DNSStart: func(info httptrace.DNSStartInfo) {
+			t := time.Now().UTC().String()
+			log.Println(t, "dns start")
+			log.Println("dns host:", info.Host)
+		},
+		DNSDone: func(info httptrace.DNSDoneInfo) {
+			t := time.Now().UTC().String()
+			log.Println(t, "dns end")
+			log.Println("addrs:", info.Addrs)
+			log.Println("errs:", info.Err)
+		},
+	}
+
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 
 	resp, err = t.t.RoundTrip(req)
 	if err != nil {
