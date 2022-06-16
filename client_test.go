@@ -46,7 +46,6 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-
 		go func() {
 			defer wg.Done()
 
@@ -89,7 +88,6 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 256)
 	}
-
 }
 
 func TestWARCWritingWithHTTPClient(t *testing.T) {
@@ -371,6 +369,87 @@ func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	httpClient.Close()
 
 	files, err := filepath.Glob("warcs/TEST2MB-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", 1)
+	}
+}
+
+func Test1MConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+	
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Write(fileBytes)
+	}))
+	defer server.Close()
+	
+	// init WARC rotator settings
+	var rotatorSettings = NewRotatorSettings()
+	var err error
+	
+	rotatorSettings.OutputDirectory = "warcs"
+	rotatorSettings.Compression = "GZIP"
+	rotatorSettings.Prefix = "CONCTEST2MB"
+	
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+	
+	var (
+		concurrency = 256
+		todo        = 1000000
+		wg          sync.WaitGroup
+		errChan     = make(chan error, concurrency)
+	)
+
+	for i := 0; i < todo; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			req, err := http.NewRequest("GET", server.URL, nil)
+			req.Close = true
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			defer resp.Body.Close()
+
+			io.Copy(io.Discard, resp.Body)
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	for err := range errChan {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	httpClient.Close()
+
+	files, err := filepath.Glob("warcs/CONCTEST2MB-*")
 	if err != nil {
 		t.Fatal(err)
 	}
