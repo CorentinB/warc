@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/remeh/sizedwaitgroup"
 )
 
 func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
@@ -409,14 +411,15 @@ func Test1MConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	var (
 		concurrency = 256
 		todo        = 1000000
-		wg          sync.WaitGroup
 		errChan     = make(chan error, concurrency)
 	)
 
+	swg := sizedwaitgroup.New(concurrency)
+
 	for i := 0; i < todo; i++ {
-		wg.Add(1)
+		swg.Add()
 		go func() {
-			defer wg.Done()
+			defer swg.Done()
 
 			req, err := http.NewRequest("GET", server.URL, nil)
 			req.Close = true
@@ -437,7 +440,7 @@ func Test1MConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	}
 
 	go func() {
-		wg.Wait()
+		swg.Wait()
 		close(errChan)
 	}()
 
