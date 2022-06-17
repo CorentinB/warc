@@ -129,14 +129,13 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		requestRecord.Header.Set("WARC-Type", "request")
 		requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
 
-		var buf bytes.Buffer
-		_, err := io.Copy(&buf, reqPipe)
+		_, err := io.Copy(&requestRecord.Content, reqPipe)
 		if err != nil {
 			return err
 		}
 
 		// parse data for WARC-Target-URI
-		scanner := bufio.NewScanner(bytes.NewReader(buf.Bytes()))
+		scanner := bufio.NewScanner(bytes.NewReader(requestRecord.Content.Bytes()))
 		for scanner.Scan() {
 			t := scanner.Text()
 			if strings.HasPrefix(t, "GET ") && (strings.HasSuffix(t, "HTTP/1.0") || strings.HasSuffix(t, "HTTP/1.1")) {
@@ -181,8 +180,6 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		// by the goroutine responsible for writing the response
 		warcTargetURIChannel <- warcTargetURI
 
-		requestRecord.Content = &buf
-
 		recordChan <- requestRecord
 
 		return nil
@@ -194,33 +191,40 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		responseRecord.Header.Set("WARC-Type", "response")
 		responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
-		var buf bytes.Buffer
 		// read 2MB to memory and if there's more to be read move it to a file
-		read, err := io.CopyN(&buf, respPipe, 2000*1024)
+		read, err := io.CopyN(&responseRecord.Content, respPipe, 2000*1024)
 		if err != io.EOF && err != nil {
 			return err
 		}
 
 		if read == 2000*1024 {
-			rest_of_file := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[1])
-
 			//TODO: investigate why files that are incredibly large claim to only take 50ms when we actually have to take much longer
 
-			//Send headers through content so they can be written first as well as read for later steps (status code and proper Payload-Digest)
-			buf = *bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[0])
-			responseRecord.Content = &buf
+			// find the position of the end of the headers
+			endOfHeadersOffset := bytes.Index(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))
+			if endOfHeadersOffset == -1 {
+				// TODO: i guess it means that headers are over 2MB, this potential
+				// case need to be handled
+				return errors.New("unable to find end of headers offset")
+			}
 
+			// create temporary file
 			tmpFile, err := os.CreateTemp(d.client.WARCTempDir, "warc-temp-*")
 			if err != nil {
 				return err
 			}
 
-			_, err = io.Copy(tmpFile, rest_of_file)
+			// write what's found after the headers to the temporary file
+			_, err = io.Copy(tmpFile, bytes.NewReader(responseRecord.Content.Bytes()[endOfHeadersOffset:]))
 			if err != nil {
 				os.Remove(tmpFile.Name())
 				return err
 			}
 
+			// truncate the Content to just keep the headers (needed for status code and proper Payload-Digest)
+			responseRecord.Content.Truncate(endOfHeadersOffset)
+
+			// write the rest of the pipe
 			_, err = io.Copy(tmpFile, respPipe)
 			if err != nil {
 				os.Remove(tmpFile.Name())
@@ -229,8 +233,6 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 			responseRecord.PayloadPath = tmpFile.Name()
 			tmpFile.Close()
-		} else {
-			responseRecord.Content = &buf
 		}
 
 		// Define resp here so that we can define it for both methods of writing to WARC
@@ -244,12 +246,12 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 				return err
 			}
 
-			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(append(append(buf.Bytes(), []byte("\r\n\r\n")...), tmpBytes...))), nil)
+			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(append(append(responseRecord.Content.Bytes(), []byte("\r\n\r\n")...), tmpBytes...))), nil)
 			if err != nil {
 				return err
 			}
 		} else {
-			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
+			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
 			if err != nil {
 				return err
 			}
@@ -297,16 +299,16 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
 			responseRecord.Header.Set("WARC-Truncated", "length")
 
-			//just headers
-			headers := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[0])
+			// just headers
+			headers := bytes.NewBuffer(bytes.Split(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))[0])
 
 			if responseRecord.PayloadPath != "" {
 				os.Remove(responseRecord.PayloadPath)
-				// This isn't required as Content is checked first, but we are going to delete it, so it seems like the correct thing to do.
+				// this isn't required as Content is checked first, but we are going to delete it, so it seems like the correct thing to do.
 				responseRecord.PayloadPath = ""
 			}
 
-			responseRecord.Content = headers
+			responseRecord.Content = *headers
 		}
 
 		recordChan <- responseRecord

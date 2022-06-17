@@ -37,7 +37,7 @@ type RecordBatch struct {
 // Record represents a WARC record.
 type Record struct {
 	Header      Header
-	Content     io.Reader
+	Content     bytes.Buffer
 	PayloadPath string
 }
 
