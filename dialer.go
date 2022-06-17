@@ -246,15 +246,13 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 				return err
 			}
 
-			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(append(append(responseRecord.Content.Bytes(), []byte("\r\n\r\n")...), tmpBytes...))), nil)
-			if err != nil {
-				return err
-			}
-		} else {
-			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
-			if err != nil {
-				return err
-			}
+			responseRecord.Content.Write([]byte("\r\n\r\n"))
+			responseRecord.Content.Write(tmpBytes)
+		}
+
+		resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
+		if err != nil {
+			return err
 		}
 
 		for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
@@ -299,16 +297,18 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
 			responseRecord.Header.Set("WARC-Truncated", "length")
 
-			// just headers
-			headers := bytes.NewBuffer(bytes.Split(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))[0])
+			// truncate Content to keep just the headers
+			endOfHeadersOffset := bytes.Index(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))
+			if endOfHeadersOffset == -1 {
+				return errors.New("unable to find end of headers offset for revisit truncate")
+			}
+
+			responseRecord.Content.Truncate(endOfHeadersOffset)
 
 			if responseRecord.PayloadPath != "" {
 				os.Remove(responseRecord.PayloadPath)
-				// this isn't required as Content is checked first, but we are going to delete it, so it seems like the correct thing to do.
 				responseRecord.PayloadPath = ""
 			}
-
-			responseRecord.Content = *headers
 		}
 
 		recordChan <- responseRecord

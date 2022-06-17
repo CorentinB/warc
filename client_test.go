@@ -10,8 +10,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/remeh/sizedwaitgroup"
 )
 
 func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
@@ -380,84 +378,84 @@ func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	}
 }
 
-func Test1MConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
-	// init test HTTP endpoint
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
-		if err != nil {
-			t.Fatal(err)
-		}
-	
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "image/svg+xml")
-		w.Write(fileBytes)
-	}))
-	defer server.Close()
-	
-	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
-	
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
-	rotatorSettings.Prefix = "CONCTEST2MB"
-	
-	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{})
-	if err != nil {
-		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
-	}
-	
-	var (
-		concurrency = 256
-		todo        = 1000000
-		errChan     = make(chan error, concurrency)
-	)
+// func Test1MConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
+// 	// init test HTTP endpoint
+// 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
 
-	swg := sizedwaitgroup.New(concurrency)
+// 		w.WriteHeader(http.StatusOK)
+// 		w.Header().Set("Content-Type", "image/svg+xml")
+// 		w.Write(fileBytes)
+// 	}))
+// 	defer server.Close()
 
-	for i := 0; i < todo; i++ {
-		swg.Add()
-		go func() {
-			defer swg.Done()
+// 	// init WARC rotator settings
+// 	var rotatorSettings = NewRotatorSettings()
+// 	var err error
 
-			req, err := http.NewRequest("GET", server.URL, nil)
-			req.Close = true
-			if err != nil {
-				errChan <- err
-				return
-			}
+// 	rotatorSettings.OutputDirectory = "warcs"
+// 	rotatorSettings.Compression = "GZIP"
+// 	rotatorSettings.Prefix = "CONCTEST2MB"
 
-			resp, err := httpClient.Do(req)
-			if err != nil {
-				errChan <- err
-				return
-			}
-			defer resp.Body.Close()
+// 	// init the HTTP client responsible for recording HTTP(s) requests / responses
+// 	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{})
+// 	if err != nil {
+// 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+// 	}
 
-			io.Copy(io.Discard, resp.Body)
-		}()
-	}
+// 	var (
+// 		concurrency = 256
+// 		todo        = 1000000
+// 		errChan     = make(chan error, concurrency)
+// 	)
 
-	go func() {
-		swg.Wait()
-		close(errChan)
-	}()
+// 	swg := sizedwaitgroup.New(concurrency)
 
-	for err := range errChan {
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+// 	for i := 0; i < todo; i++ {
+// 		swg.Add()
+// 		go func() {
+// 			defer swg.Done()
 
-	httpClient.Close()
+// 			req, err := http.NewRequest("GET", server.URL, nil)
+// 			req.Close = true
+// 			if err != nil {
+// 				errChan <- err
+// 				return
+// 			}
 
-	files, err := filepath.Glob("warcs/CONCTEST2MB-*")
-	if err != nil {
-		t.Fatal(err)
-	}
+// 			resp, err := httpClient.Do(req)
+// 			if err != nil {
+// 				errChan <- err
+// 				return
+// 			}
+// 			defer resp.Body.Close()
 
-	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", 1)
-	}
-}
+// 			io.Copy(io.Discard, resp.Body)
+// 		}()
+// 	}
+
+// 	go func() {
+// 		swg.Wait()
+// 		close(errChan)
+// 	}()
+
+// 	for err := range errChan {
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
+// 	}
+
+// 	httpClient.Close()
+
+// 	files, err := filepath.Glob("warcs/CONCTEST2MB-*")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+
+// 	for _, path := range files {
+// 		testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", 1)
+// 	}
+// }
