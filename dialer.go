@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -122,196 +121,11 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	)
 
 	errs.Go(func() error {
-		var warcTargetURI = scheme + "://"
-
-		// initialize the request record
-		var requestRecord = NewRecord()
-		requestRecord.Header.Set("WARC-Type", "request")
-		requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
-
-		var buf bytes.Buffer
-		_, err := io.Copy(&buf, reqPipe)
-		if err != nil {
-			return err
-		}
-
-		// parse data for WARC-Target-URI
-		scanner := bufio.NewScanner(bytes.NewReader(buf.Bytes()))
-		for scanner.Scan() {
-			t := scanner.Text()
-			if strings.HasPrefix(t, "GET ") && (strings.HasSuffix(t, "HTTP/1.0") || strings.HasSuffix(t, "HTTP/1.1")) {
-				target = strings.Split(t, " ")[1]
-
-				if host != "" && target != "" {
-					break
-				} else {
-					continue
-				}
-			}
-
-			if strings.HasPrefix(t, "Host: ") {
-				host = strings.TrimPrefix(t, "Host: ")
-
-				if host != "" && target != "" {
-					break
-				} else {
-					continue
-				}
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			return err
-		}
-
-		// check that we achieved to parse all the necessary data
-		if host != "" && target != "" {
-			// HTTP's request first line can include a complete path, we check that
-			if strings.HasPrefix(target, scheme+"://"+host) {
-				warcTargetURI = target
-			} else {
-				warcTargetURI += host
-				warcTargetURI += target
-			}
-		} else {
-			return errors.New("unable to parse data necessary for WARC-Target-URI")
-		}
-
-		// send the WARC-Target-URI to a channel so that it can be picked-up
-		// by the goroutine responsible for writing the response
-		warcTargetURIChannel <- warcTargetURI
-
-		requestRecord.Content = &buf
-
-		recordChan <- requestRecord
-
-		return nil
+		return d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
 	})
 
 	errs.Go(func() error {
-		// initialize the response record
-		var responseRecord = NewRecord()
-		responseRecord.Header.Set("WARC-Type", "response")
-		responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
-
-		var buf bytes.Buffer
-		// read 2MB to memory and if there's more to be read move it to a file
-		read, err := io.CopyN(&buf, respPipe, 2000*1024)
-		if err != io.EOF && err != nil {
-			return err
-		}
-
-		if read == 2000*1024 {
-			rest_of_file := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[1])
-
-			//TODO: investigate why files that are incredibly large claim to only take 50ms when we actually have to take much longer
-
-			//Send headers through content so they can be written first as well as read for later steps (status code and proper Payload-Digest)
-			buf = *bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[0])
-			responseRecord.Content = &buf
-
-			tmpFile, err := os.CreateTemp(d.client.WARCTempDir, "warc-temp-*")
-			if err != nil {
-				return err
-			}
-
-			_, err = io.Copy(tmpFile, rest_of_file)
-			if err != nil {
-				os.Remove(tmpFile.Name())
-				return err
-			}
-
-			_, err = io.Copy(tmpFile, respPipe)
-			if err != nil {
-				os.Remove(tmpFile.Name())
-				return err
-			}
-
-			responseRecord.PayloadPath = tmpFile.Name()
-			tmpFile.Close()
-		} else {
-			responseRecord.Content = &buf
-		}
-
-		// Define resp here so that we can define it for both methods of writing to WARC
-		var resp *http.Response
-
-		// generate WARC-Payload-Digest and check status code
-		// here we are checking how we are putting the data into the WARC and reading the HTTP response correctly, either from file, or reading the buffer.
-		if responseRecord.PayloadPath != "" {
-			tmpBytes, err := os.ReadFile(responseRecord.PayloadPath)
-			if err != nil {
-				return err
-			}
-
-			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(append(append(buf.Bytes(), []byte("\r\n\r\n")...), tmpBytes...))), nil)
-			if err != nil {
-				return err
-			}
-		} else {
-			resp, err = http.ReadResponse(bufio.NewReader(bytes.NewReader(buf.Bytes())), nil)
-			if err != nil {
-				return err
-			}
-		}
-
-		for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
-			if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
-				return errors.New("warc: response code was blocked by config")
-			}
-		}
-
-		payloadDigest := GetSHA1FromReader(resp.Body)
-
-		responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
-		resp.Body.Close()
-
-		var revisit = revisitRecord{}
-		if d.client.dedupeOptions.LocalDedupe {
-			revisit = d.checkLocalRevisit(payloadDigest)
-		}
-
-		// grab the WARC-Target-URI and send it back for records post-processing
-		var warcTargetURI = <-warcTargetURIChannel
-		warcTargetURIChannel <- warcTargetURI
-
-		if revisit.targetURI == "" {
-			if d.client.dedupeOptions.CDXDedupe {
-				revisit, err = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
-				if err != nil {
-					// possibly ignore in the future?
-					return err
-				}
-			}
-		}
-
-		if revisit.targetURI != "" {
-			responseRecord.Header.Set("WARC-Type", "revisit")
-			responseRecord.Header.Set("WARC-Refers-To-Target-URI", revisit.targetURI)
-			responseRecord.Header.Set("WARC-Refers-To-Date", revisit.date.UTC().Format(time.RFC3339))
-
-			if revisit.responseUUID != "" {
-				responseRecord.Header.Set("WARC-Refers-To", "<urn:uuid:"+revisit.responseUUID+">")
-			}
-
-			responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
-			responseRecord.Header.Set("WARC-Truncated", "length")
-
-			//just headers
-			headers := bytes.NewBuffer(bytes.Split(buf.Bytes(), []byte("\r\n\r\n"))[0])
-
-			if responseRecord.PayloadPath != "" {
-				os.Remove(responseRecord.PayloadPath)
-				// This isn't required as Content is checked first, but we are going to delete it, so it seems like the correct thing to do.
-				responseRecord.PayloadPath = ""
-			}
-
-			responseRecord.Content = headers
-		}
-
-		recordChan <- responseRecord
-
-		return nil
+		return d.readResponse(respPipe, warcTargetURIChannel, recordChan)
 	})
 
 	err = errs.Wait()
@@ -370,6 +184,140 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	d.client.WARCWriter <- batch
+
+	return nil
+}
+
+func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
+	// initialize the response record
+	var responseRecord = NewRecord()
+	responseRecord.Header.Set("WARC-Type", "response")
+	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
+
+	// read 2MB to memory and if there's more to be read move it to a file
+	_, err := io.Copy(responseRecord.Content, respPipe)
+	if err != io.EOF && err != nil {
+		return err
+	}
+
+	// generate WARC-Payload-Digest and check status code
+	// here we are checking how we are putting the data into the WARC and reading the HTTP response correctly, either from file, or reading the buffer.
+	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
+	if err != nil {
+		return err
+	}
+
+	payloadDigest := GetSHA1FromReader(resp.Body)
+	resp.Body.Close()
+	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
+
+	for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
+		if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
+			return errors.New("warc: response code was blocked by config")
+		}
+	}
+
+	var revisit = revisitRecord{}
+	if d.client.dedupeOptions.LocalDedupe {
+		revisit = d.checkLocalRevisit(payloadDigest)
+	}
+
+	// grab the WARC-Target-URI and send it back for records post-processing
+	var warcTargetURI = <-warcTargetURIChannel
+	warcTargetURIChannel <- warcTargetURI
+
+	if revisit.targetURI == "" {
+		if d.client.dedupeOptions.CDXDedupe {
+			revisit, err = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
+			if err != nil {
+				// possibly ignore in the future?
+				return err
+			}
+		}
+	}
+
+	if revisit.targetURI != "" {
+		responseRecord.Header.Set("WARC-Type", "revisit")
+		responseRecord.Header.Set("WARC-Refers-To-Target-URI", revisit.targetURI)
+		responseRecord.Header.Set("WARC-Refers-To-Date", revisit.date.UTC().Format(time.RFC3339))
+
+		if revisit.responseUUID != "" {
+			responseRecord.Header.Set("WARC-Refers-To", "<urn:uuid:"+revisit.responseUUID+">")
+		}
+
+		responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
+		responseRecord.Header.Set("WARC-Truncated", "length")
+
+		endOfHeadersOffset := bytes.Index(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))
+		headers := bytes.NewBuffer(responseRecord.Content.Bytes()[:endOfHeadersOffset])
+		responseRecord.Content = headers
+	}
+
+	recordChan <- responseRecord
+
+	return nil
+}
+
+func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
+	var warcTargetURI = scheme + "://"
+
+	// initialize the request record
+	var requestRecord = NewRecord()
+	requestRecord.Header.Set("WARC-Type", "request")
+	requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
+
+	_, err := io.Copy(requestRecord.Content, reqPipe)
+	if err != nil {
+		return err
+	}
+
+	// parse data for WARC-Target-URI
+	scanner := bufio.NewScanner(bytes.NewReader(requestRecord.Content.Bytes()))
+	for scanner.Scan() {
+		t := scanner.Text()
+		if strings.HasPrefix(t, "GET ") && (strings.HasSuffix(t, "HTTP/1.0") || strings.HasSuffix(t, "HTTP/1.1")) {
+			target = strings.Split(t, " ")[1]
+
+			if host != "" && target != "" {
+				break
+			} else {
+				continue
+			}
+		}
+
+		if strings.HasPrefix(t, "Host: ") {
+			host = strings.TrimPrefix(t, "Host: ")
+
+			if host != "" && target != "" {
+				break
+			} else {
+				continue
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	// check that we achieved to parse all the necessary data
+	if host != "" && target != "" {
+		// HTTP's request first line can include a complete path, we check that
+		if strings.HasPrefix(target, scheme+"://"+host) {
+			warcTargetURI = target
+		} else {
+			warcTargetURI += host
+			warcTargetURI += target
+		}
+	} else {
+		return errors.New("unable to parse data necessary for WARC-Target-URI")
+	}
+
+	// send the WARC-Target-URI to a channel so that it can be picked-up
+	// by the goroutine responsible for writing the response
+	warcTargetURIChannel <- warcTargetURI
+
+	recordChan <- requestRecord
 
 	return nil
 }

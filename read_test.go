@@ -3,7 +3,6 @@ package warc
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -23,7 +22,7 @@ func testFileHash(t *testing.T, path string) {
 	}
 
 	for {
-		record, err := reader.ReadRecord(false)
+		record, err := reader.ReadRecord()
 		if err != nil {
 			if err != io.EOF {
 				t.Fatalf("failed to read all record content: %v", err)
@@ -31,12 +30,7 @@ func testFileHash(t *testing.T, path string) {
 			break
 		}
 
-		content, err := ioutil.ReadAll(record.Content)
-		if err != nil {
-			t.Fatalf("failed to read all record content: %v", err)
-		}
-
-		hash := fmt.Sprintf("sha1:%s", GetSHA1(content))
+		hash := fmt.Sprintf("sha1:%s", GetSHA1FromReader(record.Content))
 		if hash != record.Header["WARC-Block-Digest"] {
 			t.Fatalf("expected %s, got %s", record.Header.Get("WARC-Block-Digest"), hash)
 		}
@@ -57,7 +51,7 @@ func testFileScan(t *testing.T, path string) {
 
 	total := 0
 	for {
-		if _, err := reader.ReadRecord(false); err != nil {
+		if _, err := reader.ReadRecord(); err != nil {
 			break
 		}
 		total++
@@ -82,7 +76,7 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTot
 	total_read := 0
 
 	for {
-		record, err := reader.ReadRecord(false)
+		record, err := reader.ReadRecord()
 		if err == io.EOF {
 			if total_read == expectedTotal {
 				// We've read the expected amount and reached the end of the WARC file. Time to break out.

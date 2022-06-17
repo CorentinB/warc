@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
-	"io/ioutil"
-	"os"
 )
 
 // Reader store the bufio.Reader and gzip.Reader for a WARC file
@@ -61,37 +59,12 @@ func readUntilDelim(r reader, delim []byte) (line []byte, err error) {
 // If onDisk is set to true, then the record's payload will be
 // written to a temp file on disk, and specified in the *Record.PayloadPath,
 // else, everything happen in memory.
-func (r *Reader) ReadRecord(onDisk bool) (*Record, error) {
+func (r *Reader) ReadRecord() (*Record, error) {
 	var err error
 	var tempReader *bufio.Reader
 
 	r.gzipReader.Multistream(false)
-
-	// If onDisk is specified, dump gzip block to a temporary file
-	if onDisk {
-		tempFile, err := ioutil.TempFile("", "warc-reading-*")
-		if err != nil {
-			return nil, err
-		}
-		defer os.Remove(tempFile.Name())
-
-		if _, err := io.Copy(tempFile, r.gzipReader); err != nil {
-			tempFile.Close()
-			return nil, err
-		}
-		tempFile.Close()
-
-		// Open temp file and start parsing it
-		file, err := os.Open(tempFile.Name())
-		if err != nil {
-			return nil, err
-		}
-		defer file.Close()
-
-		tempReader = bufio.NewReader(file)
-	} else {
-		tempReader = bufio.NewReader(r.gzipReader)
-	}
+	tempReader = bufio.NewReader(r.gzipReader)
 
 	// Skip first line (WARC version)
 	// TODO: add check for WARC version
@@ -118,62 +91,16 @@ func (r *Reader) ReadRecord(onDisk bool) (*Record, error) {
 		}
 	}
 
-	// If onDisk is specified, then we write the payload to a new temp file
-	if onDisk {
-		payloadTempFile, err := ioutil.TempFile("", "warc-reading-*")
-		if err != nil {
-			return nil, err
-		}
-		defer payloadTempFile.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(tempReader); err != nil {
+		return nil, err
+	}
 
-		// Copy all the payload (including the potential trailing CRLF)
-		// to a newly created temporary file
-		_, err = io.Copy(payloadTempFile, tempReader)
-		if err != nil {
-			payloadTempFile.Close()
-			os.Remove(payloadTempFile.Name())
-			return nil, err
-		}
+	buf.Truncate(bytes.Index(buf.Bytes(), []byte("\r\n\r\n")))
 
-		// Check if the last 4 bytes are \r\n\r\n,
-		// if yes, then we truncate the last 4 bytes
-		buf := make([]byte, 16)
-		stats, err := os.Stat(payloadTempFile.Name())
-		if err != nil {
-			payloadTempFile.Close()
-			os.Remove(payloadTempFile.Name())
-			return nil, err
-		}
-
-		start := stats.Size() - 16
-		_, err = payloadTempFile.ReadAt(buf, start)
-		if err != nil {
-			payloadTempFile.Close()
-			os.Remove(payloadTempFile.Name())
-			return nil, err
-		}
-
-		if bytes.HasSuffix(buf, []byte("\r\n\r\n")) {
-			os.Truncate(payloadTempFile.Name(), stats.Size()-4)
-		}
-
-		r.record = &Record{
-			Header:      header,
-			Content:     nil,
-			PayloadPath: payloadTempFile.Name(),
-		}
-	} else {
-		content, err := ioutil.ReadAll(tempReader)
-		if err != nil {
-			return nil, err
-		}
-
-		content = bytes.TrimSuffix(content, []byte("\r\n\r\n"))
-
-		r.record = &Record{
-			Header:  header,
-			Content: bytes.NewReader(content),
-		}
+	r.record = &Record{
+		Header:  header,
+		Content: &buf,
 	}
 
 	// Reset the reader for the next block

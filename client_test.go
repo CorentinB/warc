@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path"
 	"path/filepath"
 	"sync"
@@ -377,6 +378,7 @@ func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", 1)
+		os.Remove(path)
 	}
 }
 
@@ -387,27 +389,27 @@ func Test1MConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-	
+
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-	
+
 	// init WARC rotator settings
 	var rotatorSettings = NewRotatorSettings()
 	var err error
-	
+
 	rotatorSettings.OutputDirectory = "warcs"
 	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "CONCTEST2MB"
-	
+
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
-	
+
 	var (
 		concurrency = 256
 		todo        = 1000000
@@ -459,5 +461,6 @@ func Test1MConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", 1)
+		os.Remove(path)
 	}
 }
