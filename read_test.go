@@ -3,7 +3,6 @@ package warc
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -31,12 +30,7 @@ func testFileHash(t *testing.T, path string) {
 			break
 		}
 
-		content, err := ioutil.ReadAll(record.Content)
-		if err != nil {
-			t.Fatalf("failed to read all record content: %v", err)
-		}
-
-		hash := fmt.Sprintf("sha1:%s", GetSHA1(content))
+		hash := fmt.Sprintf("sha1:%s", GetSHA1(record.Content.Bytes()))
 		if hash != record.Header["WARC-Block-Digest"] {
 			t.Fatalf("expected %s, got %s", record.Header.Get("WARC-Block-Digest"), hash)
 		}

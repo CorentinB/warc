@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -74,7 +73,6 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	// lives on disk
 	if r.PayloadPath != "" {
 		file, err := os.Open(r.PayloadPath)
-		var headers []byte
 
 		if err != nil {
 			return recordID, err
@@ -89,12 +87,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		}
 
 		// Allow the headers to be sent through Content because we can't prepend to files due to a Go limit (or maybe OS limitation). This is required.
-		if r.Content != nil {
-			headers, err = ioutil.ReadAll(r.Content)
-			if err != nil {
-				return recordID, err
-			}
-		}
+		headers := r.Content.Bytes()
 
 		if r.Header.Get("Content-Length") == "" {
 			if headers != nil {
@@ -142,10 +135,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 			return recordID, err
 		}
 	} else {
-		data, err := ioutil.ReadAll(r.Content)
-		if err != nil {
-			return recordID, err
-		}
+		data := r.Content.Bytes()
 
 		// Write headers
 		if r.Header.Get("Content-Length") == "" {
@@ -192,14 +182,12 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	infoRecord.Header.Set("Content-Type", "application/warc-fields")
 
 	// Write the payload
-	warcInfoContent := new(bytes.Buffer)
 	for k, v := range payload {
-		warcInfoContent.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+		infoRecord.Content.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
 	}
-	infoRecord.Content = warcInfoContent
 
 	// Generate WARC-Block-Digest
-	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(warcInfoContent.Bytes()))
+	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(infoRecord.Content.Bytes()))
 
 	// Finally, write the record and flush the data
 	recordID, err = w.WriteRecord(infoRecord)

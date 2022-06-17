@@ -198,7 +198,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		}
 
 		if read == 2000*1024 {
-			//TODO: investigate why files that are incredibly large claim to only take 50ms when we actually have to take much longer
+			// TODO: investigate why files that are incredibly large claim to only take 50ms when we actually have to take much longer
 
 			// find the position of the end of the headers
 			endOfHeadersOffset := bytes.Index(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))

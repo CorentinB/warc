@@ -98,7 +98,7 @@ func (r *Reader) ReadRecord(onDisk bool) (*Record, error) {
 	_, err = readUntilDelim(tempReader, []byte("\r\n"))
 	if err != nil {
 		if err == io.EOF {
-			return &Record{Header: nil, Content: nil}, err
+			return &Record{Header: nil}, err
 		}
 		return nil, err
 	}
@@ -159,7 +159,6 @@ func (r *Reader) ReadRecord(onDisk bool) (*Record, error) {
 
 		r.record = &Record{
 			Header:      header,
-			Content:     nil,
 			PayloadPath: payloadTempFile.Name(),
 		}
 	} else {
@@ -172,7 +171,7 @@ func (r *Reader) ReadRecord(onDisk bool) (*Record, error) {
 
 		r.record = &Record{
 			Header:  header,
-			Content: bytes.NewReader(content),
+			Content: *bytes.NewBuffer(content),
 		}
 	}
 
