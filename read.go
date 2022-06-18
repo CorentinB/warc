@@ -96,7 +96,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		return nil, err
 	}
 
-	buf.Truncate(bytes.Index(buf.Bytes(), []byte("\r\n\r\n")))
+	buf.Truncate(bytes.LastIndex(buf.Bytes(), []byte("\r\n\r\n")))
 
 	r.record = &Record{
 		Header:  header,
