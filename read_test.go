@@ -8,8 +8,6 @@ import (
 )
 
 func testFileHash(t *testing.T, path string) {
-	t.Logf("testFileHash on %q", path)
-
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("failed to open %q: %v", path, err)
