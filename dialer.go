@@ -22,6 +22,15 @@ type customDialer struct {
 	client *CustomHTTPClient
 }
 
+func newCustomDialer(httpClient *CustomHTTPClient) *customDialer {
+	var d = new(customDialer)
+
+	d.Timeout = 5 * time.Second
+	d.client = httpClient
+
+	return d
+}
+
 type customConnection struct {
 	net.Conn
 	io.Reader
@@ -132,7 +141,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	close(recordChan)
 
 	if err != nil {
-		// note: at the moment these errors don't go anywhere because wrapConnection calls us as a goroutine
+		// Note: at the moment these errors don't go anywhere because wrapConnection calls us as a goroutine
 		return err
 	}
 
@@ -189,19 +198,18 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 }
 
 func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
-	// initialize the response record
+	// Initialize the response record
 	var responseRecord = NewRecord()
 	responseRecord.Header.Set("WARC-Type", "response")
 	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
-	// read 2MB to memory and if there's more to be read move it to a file
+	// Read 2MB to memory and if there's more to be read move it to a file
 	_, err := io.Copy(responseRecord.Content, respPipe)
 	if err != io.EOF && err != nil {
 		return err
 	}
 
-	// generate WARC-Payload-Digest and check status code
-	// here we are checking how we are putting the data into the WARC and reading the HTTP response correctly, either from file, or reading the buffer.
+	// Generate WARC-Payload-Digest and check status code
 	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
 	if err != nil {
 		return err
@@ -222,7 +230,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		revisit = d.checkLocalRevisit(payloadDigest)
 	}
 
-	// grab the WARC-Target-URI and send it back for records post-processing
+	// Grab the WARC-Target-URI and send it back for records post-processing
 	var warcTargetURI = <-warcTargetURIChannel
 	warcTargetURIChannel <- warcTargetURI
 
@@ -230,7 +238,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		if d.client.dedupeOptions.CDXDedupe {
 			revisit, err = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
 			if err != nil {
-				// possibly ignore in the future?
+				// Possibly ignore in the future?
 				return err
 			}
 		}
@@ -259,19 +267,22 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 }
 
 func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
-	var warcTargetURI = scheme + "://"
+	var (
+		warcTargetURI = scheme + "://"
+		requestRecord = NewRecord()
+	)
 
-	// initialize the request record
-	var requestRecord = NewRecord()
+	// Initialize the request record
 	requestRecord.Header.Set("WARC-Type", "request")
 	requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
 
+	// Copy the content from the pipe
 	_, err := io.Copy(requestRecord.Content, reqPipe)
 	if err != nil {
 		return err
 	}
 
-	// parse data for WARC-Target-URI
+	// Parse data for WARC-Target-URI
 	scanner := bufio.NewScanner(bytes.NewReader(requestRecord.Content.Bytes()))
 	for scanner.Scan() {
 		t := scanner.Text()
@@ -300,7 +311,7 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 		return err
 	}
 
-	// check that we achieved to parse all the necessary data
+	// Check that we achieved to parse all the necessary data
 	if host != "" && target != "" {
 		// HTTP's request first line can include a complete path, we check that
 		if strings.HasPrefix(target, scheme+"://"+host) {
@@ -313,20 +324,11 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 		return errors.New("unable to parse data necessary for WARC-Target-URI")
 	}
 
-	// send the WARC-Target-URI to a channel so that it can be picked-up
+	// Send the WARC-Target-URI to a channel so that it can be picked-up
 	// by the goroutine responsible for writing the response
 	warcTargetURIChannel <- warcTargetURI
 
 	recordChan <- requestRecord
 
 	return nil
-}
-
-func newCustomDialer(httpClient *CustomHTTPClient) *customDialer {
-	var d = new(customDialer)
-
-	d.Timeout = 5 * time.Second
-	d.client = httpClient
-
-	return d
 }

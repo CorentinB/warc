@@ -14,6 +14,15 @@ type Reader struct {
 	record     *Record
 }
 
+// Close closes the reader.
+func (r *Reader) Close() {
+	r.gzipReader.Close()
+}
+
+type reader interface {
+	ReadString(delim byte) (line string, err error)
+}
+
 // NewReader returns a new WARC reader
 func NewReader(reader io.Reader) (*Reader, error) {
 	bufioReader := bufio.NewReader(reader)
@@ -28,15 +37,6 @@ func NewReader(reader io.Reader) (*Reader, error) {
 		reader:     bufioReader,
 		gzipReader: zr,
 	}, nil
-}
-
-// Close closes the reader.
-func (r *Reader) Close() {
-	r.gzipReader.Close()
-}
-
-type reader interface {
-	ReadString(delim byte) (line string, err error)
 }
 
 func readUntilDelim(r reader, delim []byte) (line []byte, err error) {
@@ -60,8 +60,10 @@ func readUntilDelim(r reader, delim []byte) (line []byte, err error) {
 // written to a temp file on disk, and specified in the *Record.PayloadPath,
 // else, everything happen in memory.
 func (r *Reader) ReadRecord() (*Record, error) {
-	var err error
-	var tempReader *bufio.Reader
+	var (
+		err        error
+		tempReader *bufio.Reader
+	)
 
 	r.gzipReader.Multistream(false)
 	tempReader = bufio.NewReader(r.gzipReader)
@@ -76,7 +78,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		return nil, err
 	}
 
-	// Parse the record header
+	// Parse the record headers
 	header := NewHeader()
 	for {
 		line, err := readUntilDelim(tempReader, []byte("\r\n"))
@@ -91,6 +93,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		}
 	}
 
+	// Parse the record content
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(tempReader); err != nil {
 		return nil, err
