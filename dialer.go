@@ -154,12 +154,12 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		return errors.New("warc: there was a problem creating one of the WARC records")
 	}
 
-	// get the WARC-Target-URI value
+	// Get the WARC-Target-URI value
 	var warcTargetURI = <-warcTargetURIChannel
 
-	// add headers
+	// Add headers
 	for i, r := range batch.Records {
-		// generate WARC-IP-Address
+		// Generate WARC-IP-Address
 		switch addr := conn.RemoteAddr().(type) {
 		case *net.UDPAddr:
 			IP := addr.IP.String()
@@ -169,7 +169,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			r.Header.Set("WARC-IP-Address", IP)
 		}
 
-		// set WARC-Record-ID and WARC-Concurrent-To
+		// Set WARC-Record-ID and WARC-Concurrent-To
 		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordIDs[i]+">")
 
 		if i == len(recordIDs)-1 {
@@ -178,7 +178,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			r.Header.Set("WARC-Concurrent-To", "<urn:uuid:"+recordIDs[1]+">")
 		}
 
-		// add WARC-Target-URI
+		// Add WARC-Target-URI
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
 
 		if d.client.dedupeOptions.LocalDedupe {
@@ -203,44 +203,43 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	responseRecord.Header.Set("WARC-Type", "response")
 	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
-	// Read 2MB to memory and if there's more to be read move it to a file
+	// Read the response from the pipe
 	_, err := io.Copy(responseRecord.Content, respPipe)
-	if err != io.EOF && err != nil {
+	if err != nil {
 		return err
 	}
 
-	// Generate WARC-Payload-Digest and check status code
+	// The ReadResponse is needed to remove the Transfer-Encoding before calculating the WARC-Payload-Digest
 	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
 	if err != nil {
 		return err
 	}
 
-	payloadDigest := GetSHA1FromReader(resp.Body)
-	resp.Body.Close()
-	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
-
+	// If the HTTP status code is to be excluded as per client's settings, we stop here
 	for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
 		if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
 			return errors.New("warc: response code was blocked by config")
 		}
 	}
 
-	var revisit = revisitRecord{}
-	if d.client.dedupeOptions.LocalDedupe {
-		revisit = d.checkLocalRevisit(payloadDigest)
-	}
+	// Calculate the WARC-Payload-Digest
+	payloadDigest := GetSHA1FromReader(resp.Body)
+	resp.Body.Close()
+	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
 	// Grab the WARC-Target-URI and send it back for records post-processing
 	var warcTargetURI = <-warcTargetURIChannel
 	warcTargetURIChannel <- warcTargetURI
 
-	if revisit.targetURI == "" {
-		if d.client.dedupeOptions.CDXDedupe {
-			revisit, err = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
-			if err != nil {
-				// Possibly ignore in the future?
-				return err
-			}
+	// Write revisit record if local or CDX dedupe is activated
+	var revisit = revisitRecord{}
+	if d.client.dedupeOptions.LocalDedupe {
+		revisit = d.checkLocalRevisit(payloadDigest)
+	} else if d.client.dedupeOptions.CDXDedupe {
+		revisit, err = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
+		if err != nil {
+			// Possibly ignore in the future?
+			return err
 		}
 	}
 
