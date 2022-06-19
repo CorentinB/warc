@@ -1,7 +1,3 @@
-/*
-Package warc provides methods for reading and writing WARC files (https://iipc.github.io/warc-specifications/) in Go.
-This module is based on nlevitt's WARC module (https://github.com/nlevitt/warc).
-*/
 package warc
 
 import (
