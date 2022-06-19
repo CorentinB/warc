@@ -6,8 +6,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -36,9 +34,8 @@ type RecordBatch struct {
 
 // Record represents a WARC record.
 type Record struct {
-	Header      Header
-	Content     io.Reader
-	PayloadPath string
+	Header  Header
+	Content *bytes.Buffer
 }
 
 // WriteRecord writes a record to the underlying WARC file.
@@ -65,112 +62,34 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordID+">")
 	}
 
-	_, err = io.WriteString(w.FileWriter, "WARC/1.1\r\n")
-	if err != nil {
+	if _, err := io.WriteString(w.FileWriter, "WARC/1.1\r\n"); err != nil {
 		return recordID, err
 	}
 
-	// If PayloadPath isn't empty, it means that the payload we need to write
-	// lives on disk
-	if r.PayloadPath != "" {
-		file, err := os.Open(r.PayloadPath)
-		var headers []byte
+	// Write headers
+	if r.Header.Get("Content-Length") == "" {
+		r.Header.Set("Content-Length", strconv.Itoa(r.Content.Len()))
+	}
 
-		if err != nil {
-			return recordID, err
-		}
-		defer file.Close()
-		defer os.Remove(file.Name())
+	if r.Header.Get("WARC-Block-Digest") == "" {
+		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content.Bytes()))
+	}
 
-		// Write headers
-		fileStats, err := file.Stat()
-		if err != nil {
-			return recordID, err
-		}
-
-		// Allow the headers to be sent through Content because we can't prepend to files due to a Go limit (or maybe OS limitation). This is required.
-		if r.Content != nil {
-			headers, err = ioutil.ReadAll(r.Content)
-			if err != nil {
-				return recordID, err
-			}
-		}
-
-		if r.Header.Get("Content-Length") == "" {
-			if headers != nil {
-				// We need to have a correct Content-Length, to do so we need to add, obviously, the headers, plus the 8 bytes for the CLRF, with this, everything plays back correctly and has the "correct" content-length!
-				r.Header.Set("Content-Length", strconv.Itoa(int(fileStats.Size())+len(headers)+8))
-			} else {
-				// If we aren't using headers through r.Content, we obviously don't need to add it.
-				r.Header.Set("Content-Length", strconv.Itoa(int(fileStats.Size())))
-			}
-
-		}
-
-		if r.Header.Get("WARC-Block-Digest") == "" {
-			// Generate WARC-Block-Digest
-			digest, err := GetSHA1FromFile(r.PayloadPath, headers)
-			if err == nil {
-				r.Header.Set("WARC-Block-Digest", "sha1:"+digest)
-			} else {
-				return recordID, err
-			}
-		}
-
-		// Write headers
-		for key, value := range r.Header {
-			_, err = io.WriteString(w.FileWriter, strings.Title(key)+": "+value+"\r\n")
-			if err != nil {
-				return recordID, err
-			}
-		}
-
-		_, err = io.WriteString(w.FileWriter, "\r\n")
-		if err != nil {
-			return recordID, err
-		}
-
-		if headers != nil {
-			_, err = io.WriteString(w.FileWriter, string(headers)+"\r\n\r\n")
-			if err != nil {
-				return recordID, err
-			}
-		}
-
-		_, err = io.Copy(w.FileWriter, file)
-		if err != nil {
-			return recordID, err
-		}
-	} else {
-		data, err := ioutil.ReadAll(r.Content)
-		if err != nil {
-			return recordID, err
-		}
-
-		// Write headers
-		if r.Header.Get("Content-Length") == "" {
-			r.Header.Set("Content-Length", strconv.Itoa(len(data)))
-		}
-
-		if r.Header.Get("WARC-Block-Digest") == "" {
-			r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(data))
-		}
-
-		for key, value := range r.Header {
-			_, err = io.WriteString(w.FileWriter, strings.Title(key)+": "+value+"\r\n")
-			if err != nil {
-				return recordID, err
-			}
-		}
-
-		_, err = io.WriteString(w.FileWriter, "\r\n"+string(data))
-		if err != nil {
+	for key, value := range r.Header {
+		if _, err = io.WriteString(w.FileWriter, strings.Title(key)+": "+value+"\r\n"); err != nil {
 			return recordID, err
 		}
 	}
 
-	_, err = io.WriteString(w.FileWriter, "\r\n\r\n")
-	if err != nil {
+	if _, err := io.WriteString(w.FileWriter, "\r\n"); err != nil {
+		return recordID, err
+	}
+
+	if _, err := io.Copy(w.FileWriter, r.Content); err != nil {
+		return recordID, err
+	}
+
+	if _, err := io.WriteString(w.FileWriter, "\r\n\r\n"); err != nil {
 		return recordID, err
 	}
 

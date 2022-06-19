@@ -3,14 +3,11 @@ package warc
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 )
 
 func testFileHash(t *testing.T, path string) {
-	t.Logf("testFileHash on %q", path)
-
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("failed to open %q: %v", path, err)
@@ -23,7 +20,7 @@ func testFileHash(t *testing.T, path string) {
 	}
 
 	for {
-		record, err := reader.ReadRecord(false)
+		record, err := reader.ReadRecord()
 		if err != nil {
 			if err != io.EOF {
 				t.Fatalf("failed to read all record content: %v", err)
@@ -31,12 +28,7 @@ func testFileHash(t *testing.T, path string) {
 			break
 		}
 
-		content, err := ioutil.ReadAll(record.Content)
-		if err != nil {
-			t.Fatalf("failed to read all record content: %v", err)
-		}
-
-		hash := fmt.Sprintf("sha1:%s", GetSHA1(content))
+		hash := fmt.Sprintf("sha1:%s", GetSHA1FromReader(record.Content))
 		if hash != record.Header["WARC-Block-Digest"] {
 			t.Fatalf("expected %s, got %s", record.Header.Get("WARC-Block-Digest"), hash)
 		}
@@ -57,13 +49,56 @@ func testFileScan(t *testing.T, path string) {
 
 	total := 0
 	for {
-		if _, err := reader.ReadRecord(false); err != nil {
+		if _, err := reader.ReadRecord(); err != nil {
 			break
 		}
 		total++
 	}
 	if total != 10 {
 		t.Fatalf("expected 50 records, got %v", total)
+	}
+}
+
+func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTotal int) {
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("failed to open %q: %v", path, err)
+	}
+	defer file.Close()
+
+	reader, err := NewReader(file)
+	if err != nil {
+		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
+	}
+
+	total_read := 0
+
+	for {
+		record, err := reader.ReadRecord()
+		if err == io.EOF {
+			if total_read == expectedTotal {
+				// We've read the expected amount and reached the end of the WARC file. Time to break out.
+				break
+			} else {
+				t.Fatalf("warc: unexpected number of records read")
+			}
+		}
+
+		if err != nil {
+			t.Fatalf("warc.ReadRecord failed: %v", err)
+			break
+		}
+
+		if record.Header.Get("WARC-Type") != "response" && record.Header.Get("WARC-Type") != "revisit" {
+			// We're not currently interesting in anything but response and revisit records at the moment.
+			continue
+		}
+
+		if record.Header.Get("WARC-Payload-Digest") != hash {
+			t.Fatalf("WARC-Payload-Digest doesn't match intended result %s != %s", record.Header.Get("WARC-Payload-Digest"), hash)
+		}
+
+		total_read++
 	}
 }
 

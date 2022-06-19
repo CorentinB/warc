@@ -2,6 +2,7 @@ package warc
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"encoding/base32"
@@ -101,7 +102,8 @@ func NewWriter(writer io.Writer, fileName string, compression string) (*Writer, 
 // NewRecord creates a new WARC record.
 func NewRecord() *Record {
 	return &Record{
-		Header: NewHeader(),
+		Header:  NewHeader(),
+		Content: bytes.NewBuffer(nil),
 	}
 }
 
