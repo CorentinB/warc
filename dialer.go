@@ -209,7 +209,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		return err
 	}
 
-	// The ReadResponse is needed to remove the Transfer-Encoding before calculating the WARC-Payload-Digest
+	// The ReadResponse is needed to remove the possible Transfer-Encoding before calculating the WARC-Payload-Digest
 	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
 	if err != nil {
 		return err
