@@ -9,7 +9,7 @@ import (
 )
 
 func testFileHash(t *testing.T, path string) {
-	t.Logf("testFileHash on %q", path)
+	t.Logf("checking 'WARC-Block-Digest' on %q", path)
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -63,11 +63,17 @@ func testFileScan(t *testing.T, path string) {
 }
 
 func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTotal int) int {
+
+	// This function tests the Block-Digest vs this functions which checks Payload-Digest :)
+	testFileHash(t, path)
+
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("failed to open %q: %v", path, err)
 	}
 	defer file.Close()
+
+	t.Logf("checking 'WARC-Payload-Digest' on %q", path)
 
 	reader, err := NewReader(file)
 	if err != nil {
