@@ -64,7 +64,7 @@ func testFileScan(t *testing.T, path string) {
 
 func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTotal int) int {
 
-	// This function tests the Block-Digest vs this functions which checks Payload-Digest :)
+	// This function tests the Block-Digest vs this function which checks Payload-Digest :)
 	testFileHash(t, path)
 
 	file, err := os.Open(path)

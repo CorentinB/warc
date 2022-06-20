@@ -323,7 +323,7 @@ func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
 
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if 429s aren't being filtered correctly!
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 0)
+		testFileSingleHashCheck(t, path, "n/a", 0)
 	}
 }
 
@@ -381,7 +381,7 @@ func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	}
 }
 
-func Test1MConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
+func TestConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
