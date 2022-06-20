@@ -57,13 +57,13 @@ func testFileScan(t *testing.T, path string) {
 		}
 		total++
 	}
+
 	if total != 3 {
 		t.Fatalf("expected 3 records, got %v", total)
 	}
 }
 
 func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTotal int) int {
-
 	// The below function validates the Block-Digest per record while the function we are in checks for a specific Payload-Digest in records :)
 	testFileHash(t, path)
 
@@ -122,10 +122,8 @@ func TestReader(t *testing.T) {
 	var paths = []string{
 		"testdata/test.warc.gz",
 	}
-
 	for _, path := range paths {
 		testFileHash(t, path)
 		testFileScan(t, path)
 	}
 }
-
