@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"testing"
 )
 
 func testFileHash(t *testing.T, path string) {
+	t.Logf("testFileHash on %q", path)
+
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("failed to open %q: %v", path, err)
@@ -59,7 +62,7 @@ func testFileScan(t *testing.T, path string) {
 	}
 }
 
-func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTotal int) {
+func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTotal int) int {
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("failed to open %q: %v", path, err)
@@ -71,16 +74,22 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTot
 		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
 	}
 
-	total_read := 0
+	totalRead := 0
 
 	for {
 		record, err := reader.ReadRecord()
 		if err == io.EOF {
-			if total_read == expectedTotal {
+			if expectedTotal == -1 {
+				// This is expected for multiple file WARCs as we need to count the total count outside of this function.
+				return totalRead
+			}
+
+			if totalRead == expectedTotal {
 				// We've read the expected amount and reached the end of the WARC file. Time to break out.
 				break
 			} else {
-				t.Fatalf("warc: unexpected number of records read")
+				t.Fatalf("warc: unexpected number of records read. read: " + strconv.Itoa(totalRead) + " expected: " + strconv.Itoa(expectedTotal))
+				return -1
 			}
 		}
 
@@ -98,8 +107,9 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTot
 			t.Fatalf("WARC-Payload-Digest doesn't match intended result %s != %s", record.Header.Get("WARC-Payload-Digest"), hash)
 		}
 
-		total_read++
+		totalRead++
 	}
+	return -1
 }
 
 func TestReader(t *testing.T) {
