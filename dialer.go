@@ -236,11 +236,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	if d.client.dedupeOptions.LocalDedupe {
 		revisit = d.checkLocalRevisit(payloadDigest)
 	} else if d.client.dedupeOptions.CDXDedupe {
-		revisit, err = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
-		if err != nil {
-			// Possibly ignore in the future?
-			return err
-		}
+		revisit, _ = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
 	}
 
 	if revisit.targetURI != "" {
