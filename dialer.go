@@ -254,6 +254,12 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		responseRecord.Header.Set("WARC-Truncated", "length")
 
 		endOfHeadersOffset := bytes.Index(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))
+
+		// This should really never happen! This could be the result of a malfunctioning HTTP server or something currently unknown!
+		if endOfHeadersOffset == -1 {
+			return errors.New("warc: CRLF not found on response content")
+		}
+
 		headers := bytes.NewBuffer(responseRecord.Content.Bytes()[:endOfHeadersOffset])
 		responseRecord.Content = headers
 	}
