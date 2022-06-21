@@ -116,7 +116,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	return d.wrapConnection(tlsConn, "https"), nil
 }
 
-func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader, scheme string, conn net.Conn) (err error) {
+func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader, scheme string, conn net.Conn) {
 	defer d.client.WaitGroup.Done()
 
 	var (
@@ -137,12 +137,12 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		return d.readResponse(respPipe, warcTargetURIChannel, recordChan)
 	})
 
-	err = errs.Wait()
+	err := errs.Wait()
 	close(recordChan)
 
 	if err != nil {
-		// Note: at the moment these errors don't go anywhere because wrapConnection calls us as a goroutine
-		return err
+		d.client.errChan <- err
+		return
 	}
 
 	for record := range recordChan {
@@ -151,7 +151,8 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	if len(batch.Records) != 2 {
-		return errors.New("warc: there was a problem creating one of the WARC records")
+		d.client.errChan <- errors.New("warc: there was an unspecified problem creating one of the WARC records")
+		return
 	}
 
 	// Get the WARC-Target-URI value
@@ -194,7 +195,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 	d.client.WARCWriter <- batch
 
-	return nil
+	return
 }
 
 func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
@@ -252,6 +253,12 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		responseRecord.Header.Set("WARC-Truncated", "length")
 
 		endOfHeadersOffset := bytes.Index(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))
+
+		// This should really never happen! This could be the result of a malfunctioning HTTP server or something currently unknown!
+		if endOfHeadersOffset == -1 {
+			return errors.New("warc: CRLF not found on response content")
+		}
+
 		headers := bytes.NewBuffer(responseRecord.Content.Bytes()[:endOfHeadersOffset])
 		responseRecord.Content = headers
 	}

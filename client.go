@@ -13,6 +13,7 @@ type CustomHTTPClient struct {
 	dedupeHashTable     *sync.Map
 	dedupeOptions       DedupeOptions
 	skipHTTPStatusCodes []int
+	errChan             chan error
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -20,10 +21,11 @@ func (c *CustomHTTPClient) Close() error {
 	c.CloseIdleConnections()
 	close(c.WARCWriter)
 	<-c.WARCWriterFinish
+	close(c.errChan)
 	return nil
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCodes []int) (httpClient *CustomHTTPClient, err error) {
+func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCodes []int) (httpClient *CustomHTTPClient, err error, errChan chan error) {
 	httpClient = new(CustomHTTPClient)
 
 	// Toggle deduplication options and create map for deduplication records.
@@ -33,13 +35,17 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 	// Configure HTTP status code skipping (usually 429)
 	httpClient.skipHTTPStatusCodes = skipHTTPStatusCodes
 
+	// Create an error channel for sending WARC errors through
+	errChan = make(chan error)
+	httpClient.errChan = errChan
+
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
 
 	// Configure WARC writer
 	httpClient.WARCWriter, httpClient.WARCWriterFinish, err = rotatorSettings.NewWARCRotator()
 	if err != nil {
-		return nil, err
+		return nil, err, errChan
 	}
 
 	// Configure HTTP client
@@ -51,10 +57,10 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 	customDialer := newCustomDialer(httpClient)
 	customTransport, err := newCustomTransport(customDialer, proxy, decompressBody)
 	if err != nil {
-		return nil, err
+		return nil, err, errChan
 	}
 
 	httpClient.Transport = customTransport
 
-	return httpClient, nil
+	return httpClient, nil, errChan
 }
