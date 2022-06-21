@@ -141,7 +141,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	close(recordChan)
 
 	if err != nil {
-		// Note: at the moment these errors don't go anywhere because wrapConnection calls us as a goroutine
+		d.client.errorChannel <- err
 		return err
 	}
 
@@ -151,7 +151,9 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	if len(batch.Records) != 2 {
-		return errors.New("warc: there was a problem creating one of the WARC records")
+		err = errors.New("warc: there was an unspecified problem creating one of the WARC records")
+		d.client.errorChannel <- err
+		return err
 	}
 
 	// Get the WARC-Target-URI value
