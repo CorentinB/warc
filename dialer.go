@@ -116,7 +116,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	return d.wrapConnection(tlsConn, "https"), nil
 }
 
-func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader, scheme string, conn net.Conn) (err error) {
+func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader, scheme string, conn net.Conn) {
 	defer d.client.WaitGroup.Done()
 
 	var (
@@ -137,12 +137,12 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		return d.readResponse(respPipe, warcTargetURIChannel, recordChan)
 	})
 
-	err = errs.Wait()
+	err := errs.Wait()
 	close(recordChan)
 
 	if err != nil {
 		d.client.errChan <- err
-		return nil
+		return
 	}
 
 	for record := range recordChan {
@@ -152,7 +152,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 	if len(batch.Records) != 2 {
 		d.client.errChan <- errors.New("warc: there was an unspecified problem creating one of the WARC records")
-		return nil
+		return
 	}
 
 	// Get the WARC-Target-URI value
@@ -195,7 +195,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 	d.client.WARCWriter <- batch
 
-	return nil
+	return
 }
 
 func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
