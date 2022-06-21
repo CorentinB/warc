@@ -45,9 +45,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	go func() {
 		defer errorWg.Done()
 		for err := range errorChannel {
-			if err.Error() != "warc: response code was blocked by config" {
-				t.Errorf("Error writing to WARC: %s", err)
-			}
+			t.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
@@ -136,9 +134,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	go func() {
 		defer errorWg.Done()
 		for err := range errorChannel {
-			if err.Error() != "warc: response code was blocked by config" {
-				t.Errorf("Error writing to WARC: %s", err)
-			}
+			t.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
@@ -200,9 +196,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 	go func() {
 		defer errorWg.Done()
 		for err := range errorChannel {
-			if err.Error() != "warc: response code was blocked by config" {
-				t.Errorf("Error writing to WARC: %s", err)
-			}
+			t.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
@@ -282,9 +276,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	go func() {
 		defer errorWg.Done()
 		for err := range errorChannel {
-			if err.Error() != "warc: response code was blocked by config" {
-				t.Errorf("Error writing to WARC: %s", err)
-			}
+			t.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
@@ -415,9 +407,7 @@ func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	go func() {
 		defer errorWg.Done()
 		for err := range errorChannel {
-			if err.Error() != "warc: response code was blocked by config" {
-				t.Errorf("Error writing to WARC: %s", err)
-			}
+			t.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
@@ -480,9 +470,7 @@ func TestConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	go func() {
 		defer errorWg.Done()
 		for err := range errorChannel {
-			if err.Error() != "warc: response code was blocked by config" {
-				t.Errorf("Error writing to WARC: %s", err)
-			}
+			t.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
