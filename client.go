@@ -15,7 +15,7 @@ type CustomHTTPClient struct {
 	dedupeHashTable     *sync.Map
 	dedupeOptions       DedupeOptions
 	skipHTTPStatusCodes []int
-	errorChannel        chan error
+	errChan             chan error
 	WARCTempDir         string
 }
 
@@ -23,12 +23,12 @@ func (c *CustomHTTPClient) Close() error {
 	c.WaitGroup.Wait()
 	c.CloseIdleConnections()
 	close(c.WARCWriter)
-	close(c.errorChannel)
 	<-c.WARCWriterFinish
+	close(c.errChan)
 	return nil
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCodes []int) (httpClient *CustomHTTPClient, err error, errorChannel chan error) {
+func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCodes []int) (httpClient *CustomHTTPClient, err error, errChan chan error) {
 	httpClient = new(CustomHTTPClient)
 
 	// Toggle deduplication options and create map for deduplication records.
@@ -38,9 +38,9 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 	// Configure HTTP status code skipping (usually 429)
 	httpClient.skipHTTPStatusCodes = skipHTTPStatusCodes
 
-	// Create a error channel for sending WARC errors through
-	errorChannel = make(chan error)
-	httpClient.errorChannel = errorChannel
+	// Create an error channel for sending WARC errors through
+	errChan = make(chan error)
+	httpClient.errChan = errChan
 
 	// Configure WARC temporary file directory from RotatorSettings.
 	if path.Dir(rotatorSettings.OutputDirectory) == "." {
@@ -61,7 +61,7 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 	// Configure WARC writer
 	httpClient.WARCWriter, httpClient.WARCWriterFinish, err = rotatorSettings.NewWARCRotator()
 	if err != nil {
-		return nil, err, errorChannel
+		return nil, err, errChan
 	}
 
 	// Configure HTTP client
@@ -73,10 +73,10 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 	customDialer := newCustomDialer(httpClient)
 	customTransport, err := newCustomTransport(customDialer, proxy, decompressBody)
 	if err != nil {
-		return nil, err, errorChannel
+		return nil, err, errChan
 	}
 
 	httpClient.Transport = customTransport
 
-	return httpClient, nil, errorChannel
+	return httpClient, nil, errChan
 }

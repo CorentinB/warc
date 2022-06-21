@@ -40,10 +40,10 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errorWg sync.WaitGroup
-	errorWg.Add(1)
+	var errWg sync.WaitGroup
+	errWg.Add(1)
 	go func() {
-		defer errorWg.Done()
+		defer errWg.Done()
 		for err := range errorChannel {
 			t.Errorf("Error writing to WARC: %s", err)
 		}
@@ -129,10 +129,10 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errorWg sync.WaitGroup
-	errorWg.Add(1)
+	var errWg sync.WaitGroup
+	errWg.Add(1)
 	go func() {
-		defer errorWg.Done()
+		defer errWg.Done()
 		for err := range errorChannel {
 			t.Errorf("Error writing to WARC: %s", err)
 		}
@@ -191,10 +191,10 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errorWg sync.WaitGroup
-	errorWg.Add(1)
+	var errWg sync.WaitGroup
+	errWg.Add(1)
 	go func() {
-		defer errorWg.Done()
+		defer errWg.Done()
 		for err := range errorChannel {
 			t.Errorf("Error writing to WARC: %s", err)
 		}
@@ -271,10 +271,10 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errorWg sync.WaitGroup
-	errorWg.Add(1)
+	var errWg sync.WaitGroup
+	errWg.Add(1)
 	go func() {
-		defer errorWg.Done()
+		defer errWg.Done()
 		for err := range errorChannel {
 			t.Errorf("Error writing to WARC: %s", err)
 		}
@@ -337,10 +337,10 @@ func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errorWg sync.WaitGroup
-	errorWg.Add(1)
+	var errWg sync.WaitGroup
+	errWg.Add(1)
 	go func() {
-		defer errorWg.Done()
+		defer errWg.Done()
 		for err := range errorChannel {
 			if err.Error() != "warc: response code was blocked by config" {
 				t.Errorf("Error writing to WARC: %s", err)
@@ -402,10 +402,10 @@ func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errorWg sync.WaitGroup
-	errorWg.Add(1)
+	var errWg sync.WaitGroup
+	errWg.Add(1)
 	go func() {
-		defer errorWg.Done()
+		defer errWg.Done()
 		for err := range errorChannel {
 			t.Errorf("Error writing to WARC: %s", err)
 		}
@@ -465,10 +465,10 @@ func TestConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errorWg sync.WaitGroup
-	errorWg.Add(1)
+	var errWg sync.WaitGroup
+	errWg.Add(1)
 	go func() {
-		defer errorWg.Done()
+		defer errWg.Done()
 		for err := range errorChannel {
 			t.Errorf("Error writing to WARC: %s", err)
 		}

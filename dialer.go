@@ -141,8 +141,8 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	close(recordChan)
 
 	if err != nil {
-		d.client.errorChannel <- err
-		return err
+		d.client.errChan <- err
+		return nil
 	}
 
 	for record := range recordChan {
@@ -151,9 +151,8 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	if len(batch.Records) != 2 {
-		err = errors.New("warc: there was an unspecified problem creating one of the WARC records")
-		d.client.errorChannel <- err
-		return err
+		d.client.errChan <- errors.New("warc: there was an unspecified problem creating one of the WARC records")
+		return nil
 	}
 
 	// Get the WARC-Target-URI value
