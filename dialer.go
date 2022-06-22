@@ -130,11 +130,21 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	)
 
 	errs.Go(func() error {
-		return d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
+		requestRecord, err := d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
+		if err != nil && d.client.debug {
+			d.client.writeDebugFile(requestRecord, err)
+		}
+
+		return err
 	})
 
 	errs.Go(func() error {
-		return d.readResponse(respPipe, warcTargetURIChannel, recordChan)
+		responseRecord, err := d.readResponse(respPipe, warcTargetURIChannel, recordChan)
+		if err != nil && d.client.debug {
+			d.client.writeDebugFile(responseRecord, err)
+		}
+
+		return err
 	})
 
 	err := errs.Wait()
@@ -194,11 +204,9 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	d.client.WARCWriter <- batch
-
-	return
 }
 
-func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) (*Record, error) {
 	// Initialize the response record
 	var responseRecord = NewRecord()
 	responseRecord.Header.Set("WARC-Type", "response")
@@ -207,19 +215,19 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	// Read the response from the pipe
 	_, err := io.Copy(responseRecord.Content, respPipe)
 	if err != nil {
-		return err
+		return responseRecord, err
 	}
 
 	// The ReadResponse is needed to remove the possible Transfer-Encoding before calculating the WARC-Payload-Digest
 	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
 	if err != nil {
-		return err
+		return responseRecord, err
 	}
 
 	// If the HTTP status code is to be excluded as per client's settings, we stop here
 	for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
 		if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
-			return errors.New("warc: response code was blocked by config")
+			return responseRecord, errors.New("warc: response code was blocked by config")
 		}
 	}
 
@@ -256,7 +264,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 
 		// This should really never happen! This could be the result of a malfunctioning HTTP server or something currently unknown!
 		if endOfHeadersOffset == -1 {
-			return errors.New("warc: CRLF not found on response content")
+			return responseRecord, errors.New("warc: CRLF not found on response content")
 		}
 
 		headers := bytes.NewBuffer(responseRecord.Content.Bytes()[:endOfHeadersOffset])
@@ -265,10 +273,10 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 
 	recordChan <- responseRecord
 
-	return nil
+	return nil, nil
 }
 
-func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) (*Record, error) {
 	var (
 		warcTargetURI = scheme + "://"
 		requestRecord = NewRecord()
@@ -281,7 +289,7 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 	// Copy the content from the pipe
 	_, err := io.Copy(requestRecord.Content, reqPipe)
 	if err != nil {
-		return err
+		return requestRecord, err
 	}
 
 	// Parse data for WARC-Target-URI
@@ -310,7 +318,7 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 	}
 
 	if err := scanner.Err(); err != nil {
-		return err
+		return requestRecord, err
 	}
 
 	// Check that we achieved to parse all the necessary data
@@ -323,7 +331,7 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 			warcTargetURI += target
 		}
 	} else {
-		return errors.New("unable to parse data necessary for WARC-Target-URI")
+		return requestRecord, errors.New("unable to parse data necessary for WARC-Target-URI")
 	}
 
 	// Send the WARC-Target-URI to a channel so that it can be picked-up
@@ -332,5 +340,5 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 
 	recordChan <- requestRecord
 
-	return nil
+	return nil, nil
 }

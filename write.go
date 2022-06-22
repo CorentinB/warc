@@ -34,8 +34,8 @@ type RecordBatch struct {
 
 // Record represents a WARC record.
 type Record struct {
-	Header  Header
-	Content *bytes.Buffer
+	Header  Header        `json:"header"`
+	Content *bytes.Buffer `json:"content"`
 }
 
 // WriteRecord writes a record to the underlying WARC file.

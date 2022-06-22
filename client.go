@@ -2,12 +2,15 @@ package warc
 
 import (
 	"net/http"
+	"os"
+	"path"
 	"sync"
 )
 
 type CustomHTTPClient struct {
 	http.Client
 	debug               bool
+	debugDir            string
 	WARCWriter          chan *RecordBatch
 	WARCWriterFinish    chan bool
 	errChan             chan error
@@ -31,6 +34,17 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 		httpClient = new(CustomHTTPClient)
 		err        error
 	)
+
+	// If debug is true, then we create the debug directory in which we will write debug files
+	if debug {
+		httpClient.debug = true
+		httpClient.debugDir = path.Join(rotatorSettings.OutputDirectory, "debug")
+
+		err = os.MkdirAll(httpClient.debugDir, os.ModePerm)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 
 	// Toggle deduplication options and create map for deduplication records.
 	httpClient.dedupeOptions = dedupeOptions
