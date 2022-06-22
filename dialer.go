@@ -9,10 +9,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/djherbis/buffer"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/sync/errgroup"
 )
@@ -211,7 +214,25 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	}
 
 	// The ReadResponse is needed to remove the possible Transfer-Encoding before calculating the WARC-Payload-Digest
-	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
+	var (
+		tempBytes = make([]byte, responseRecord.Content.Len())
+		length    = responseRecord.Content.Len()
+	)
+
+	n, err := responseRecord.Content.Read(tempBytes)
+	if n != int(length) {
+		return errors.New("unable to read all of the buffer's content, read " + strconv.Itoa(n))
+	}
+
+	if err != nil && err != io.EOF {
+		return err
+	}
+
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(tempBytes)), nil)
 	if err != nil {
 		return err
 	}
@@ -219,7 +240,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	// If the HTTP status code is to be excluded as per client's settings, we stop here
 	for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
 		if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
-			return errors.New("warc: response code was blocked by config")
+			return errors.New("response code was blocked by config")
 		}
 	}
 
@@ -252,15 +273,57 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
 		responseRecord.Header.Set("WARC-Truncated", "length")
 
-		endOfHeadersOffset := bytes.Index(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))
+		// Find the position of the end of the headers
+		block := make([]byte, 4)
+		endOfHeadersOffset := 0
+		for {
+			n, err := responseRecord.Content.Read(block)
+			if n > 0 {
+				if reflect.DeepEqual(block, []byte("\r\n\r\n")) {
+					break
+				} else {
+					endOfHeadersOffset += n
+				}
+			}
+
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				return err
+			}
+		}
 
 		// This should really never happen! This could be the result of a malfunctioning HTTP server or something currently unknown!
 		if endOfHeadersOffset == -1 {
-			return errors.New("warc: CRLF not found on response content")
+			return errors.New("CRLF not found on response content")
 		}
 
-		headers := bytes.NewBuffer(responseRecord.Content.Bytes()[:endOfHeadersOffset])
-		responseRecord.Content = headers
+		// Write the data up until the end of the headers to a temporary buffer
+		tempBuffer := buffer.NewUnboundedBuffer(1024*1024, 100*1024*1024)
+		block = make([]byte, 8)
+		for {
+			n, err := responseRecord.Content.Read(block)
+			if n > 0 {
+				_, err = tempBuffer.Write(block)
+				if err != nil {
+					return err
+				}
+			}
+
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				return err
+			}
+		}
+
+		// Reset old buffer
+		responseRecord.Content.Reset()
+		responseRecord.Content = tempBuffer
 	}
 
 	recordChan <- responseRecord
@@ -285,32 +348,50 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 	}
 
 	// Parse data for WARC-Target-URI
-	scanner := bufio.NewScanner(bytes.NewReader(requestRecord.Content.Bytes()))
-	for scanner.Scan() {
-		t := scanner.Text()
-		if strings.HasPrefix(t, "GET ") && (strings.HasSuffix(t, "HTTP/1.0") || strings.HasSuffix(t, "HTTP/1.1")) {
-			target = strings.Split(t, " ")[1]
+	var (
+		block = make([]byte, 1)
+		line  string
+	)
 
-			if host != "" && target != "" {
-				break
+	for {
+		n, err := requestRecord.Content.Read(block)
+		if n > 0 {
+			if reflect.DeepEqual(block, "\n") {
+				if strings.HasPrefix(line, "GET ") && (strings.HasSuffix(line, "HTTP/1.0") || strings.HasSuffix(line, "HTTP/1.1")) {
+					target = strings.Split(line, " ")[1]
+
+					if host != "" && target != "" {
+						break
+					} else {
+						continue
+					}
+				}
+
+				if strings.HasPrefix(line, "Host: ") {
+					host = strings.TrimPrefix(line, "Host: ")
+
+					if host != "" && target != "" {
+						break
+					} else {
+						continue
+					}
+				}
+
+				line = ""
 			} else {
-				continue
+				line += string(block)
 			}
+		} else {
+			break
 		}
 
-		if strings.HasPrefix(t, "Host: ") {
-			host = strings.TrimPrefix(t, "Host: ")
-
-			if host != "" && target != "" {
-				break
-			} else {
-				continue
-			}
+		if err == io.EOF {
+			break
 		}
-	}
 
-	if err := scanner.Err(); err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	// Check that we achieved to parse all the necessary data

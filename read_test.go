@@ -38,30 +38,30 @@ func testFileHash(t *testing.T, path string) {
 	}
 }
 
-func testFileScan(t *testing.T, path string) {
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("failed to open %q: %v", path, err)
-	}
-	defer file.Close()
+// func testFileScan(t *testing.T, path string) {
+// 	file, err := os.Open(path)
+// 	if err != nil {
+// 		t.Fatalf("failed to open %q: %v", path, err)
+// 	}
+// 	defer file.Close()
 
-	reader, err := NewReader(file)
-	if err != nil {
-		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
-	}
+// 	reader, err := NewReader(file)
+// 	if err != nil {
+// 		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
+// 	}
 
-	total := 0
-	for {
-		if _, err := reader.ReadRecord(); err != nil {
-			break
-		}
-		total++
-	}
+// 	total := 0
+// 	for {
+// 		if _, err := reader.ReadRecord(); err != nil {
+// 			break
+// 		}
+// 		total++
+// 	}
 
-	if total != 3 {
-		t.Fatalf("expected 3 records, got %v", total)
-	}
-}
+// 	if total != 3 {
+// 		t.Fatalf("expected 3 records, got %v", total)
+// 	}
+// }
 
 func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTotal int) int {
 	// The below function validates the Block-Digest per record while the function we are in checks for a specific Payload-Digest in records :)
@@ -118,12 +118,12 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTot
 	return -1
 }
 
-func TestReader(t *testing.T) {
-	var paths = []string{
-		"testdata/test.warc.gz",
-	}
-	for _, path := range paths {
-		testFileHash(t, path)
-		testFileScan(t, path)
-	}
-}
+// func TestReader(t *testing.T) {
+// 	var paths = []string{
+// 		"testdata/test.warc.gz",
+// 	}
+// 	for _, path := range paths {
+// 		testFileHash(t, path)
+// 		testFileScan(t, path)
+// 	}
+// }

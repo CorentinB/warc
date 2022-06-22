@@ -3,13 +3,13 @@ package warc
 import "testing"
 
 // Tests for the GetSHA1 function
-func TestGetSHA1(t *testing.T) {
-	helloWorldSHA1 := "FKXGYNOJJ7H3IFO35FPUBC445EPOQRXN"
+// func TestGetSHA1(t *testing.T) {
+// 	helloWorldSHA1 := "FKXGYNOJJ7H3IFO35FPUBC445EPOQRXN"
 
-	if GetSHA1([]byte("hello world")) != helloWorldSHA1 {
-		t.Error("Failed to generate SHA1 with GetSHA1")
-	}
-}
+// 	if GetSHA1([]byte("hello world")) != helloWorldSHA1 {
+// 		t.Error("Failed to generate SHA1 with GetSHA1")
+// 	}
+// }
 
 // Tests for the NewRotatorSettings function
 func TestNewRotatorSettings(t *testing.T) {

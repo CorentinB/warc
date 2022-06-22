@@ -2,7 +2,6 @@ package warc
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"encoding/base32"
@@ -14,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/djherbis/buffer"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -27,10 +27,24 @@ func GetSHA1FromReader(r io.Reader) string {
 
 // GetSHA1 return the SHA1 of a []byte,
 // can be used to fill the WARC-Block-Digest header
-func GetSHA1(content []byte) string {
+func GetSHA1(b buffer.Buffer) string {
 	sha := sha1.New()
 
-	sha.Write(content)
+	block := make([]byte, 256)
+	for {
+		n, err := b.Read(block)
+		if n > 0 {
+			sha.Write(block[:n])
+		}
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return "ERROR"
+		}
+	}
 
 	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
 }
@@ -102,8 +116,9 @@ func NewWriter(writer io.Writer, fileName string, compression string) (*Writer, 
 // NewRecord creates a new WARC record.
 func NewRecord() *Record {
 	return &Record{
-		Header:  NewHeader(),
-		Content: bytes.NewBuffer(nil),
+		Header: NewHeader(),
+		// Buffer 1MB to Memory, after that buffer to 100MB chunked files
+		Content: buffer.NewUnboundedBuffer(1024*1024, 100*1024*1024),
 	}
 }
 

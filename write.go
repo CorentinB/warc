@@ -2,7 +2,6 @@ package warc
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/djherbis/buffer"
 	"github.com/klauspost/compress/zstd"
 	uuid "github.com/satori/go.uuid"
 )
@@ -35,7 +35,7 @@ type RecordBatch struct {
 // Record represents a WARC record.
 type Record struct {
 	Header  Header
-	Content *bytes.Buffer
+	Content buffer.Buffer
 }
 
 // WriteRecord writes a record to the underlying WARC file.
@@ -68,11 +68,11 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 	// Write headers
 	if r.Header.Get("Content-Length") == "" {
-		r.Header.Set("Content-Length", strconv.Itoa(r.Content.Len()))
+		r.Header.Set("Content-Length", strconv.Itoa(int(r.Content.Len())))
 	}
 
 	if r.Header.Get("WARC-Block-Digest") == "" {
-		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content.Bytes()))
+		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content))
 	}
 
 	for key, value := range r.Header {
@@ -111,14 +111,12 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	infoRecord.Header.Set("Content-Type", "application/warc-fields")
 
 	// Write the payload
-	warcInfoContent := new(bytes.Buffer)
 	for k, v := range payload {
-		warcInfoContent.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+		infoRecord.Content.Write([]byte(fmt.Sprintf("%s: %s\r\n", k, v)))
 	}
-	infoRecord.Content = warcInfoContent
 
 	// Generate WARC-Block-Digest
-	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(warcInfoContent.Bytes()))
+	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(infoRecord.Content))
 
 	// Finally, write the record and flush the data
 	recordID, err = w.WriteRecord(infoRecord)
