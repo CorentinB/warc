@@ -2,7 +2,6 @@ package warc
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -10,13 +9,12 @@ import (
 	"net"
 	"net/http"
 	"reflect"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/djherbis/buffer"
 	uuid "github.com/satori/go.uuid"
+	"github.com/tgulacsi/go/temp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -213,26 +211,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		return err
 	}
 
-	// The ReadResponse is needed to remove the possible Transfer-Encoding before calculating the WARC-Payload-Digest
-	var (
-		tempBytes = make([]byte, responseRecord.Content.Len())
-		length    = responseRecord.Content.Len()
-	)
-
-	n, err := responseRecord.Content.Read(tempBytes)
-	if n != int(length) {
-		return errors.New("unable to read all of the buffer's content, read " + strconv.Itoa(n))
-	}
-
-	if err != nil && err != io.EOF {
-		return err
-	}
-
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(tempBytes)), nil)
+	resp, err := http.ReadResponse(bufio.NewReader(responseRecord.Content), nil)
 	if err != nil {
 		return err
 	}
@@ -301,7 +280,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		}
 
 		// Write the data up until the end of the headers to a temporary buffer
-		tempBuffer := buffer.NewUnboundedBuffer(1024*1024, 100*1024*1024)
+		tempBuffer := temp.NewMemorySlurper("blobref?")
 		block = make([]byte, 8)
 		for {
 			n, err := responseRecord.Content.Read(block)
@@ -321,8 +300,8 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 			}
 		}
 
-		// Reset old buffer
-		responseRecord.Content.Reset()
+		// Close old buffer
+		responseRecord.Content.Close()
 		responseRecord.Content = tempBuffer
 	}
 

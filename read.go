@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
-
-	"github.com/djherbis/buffer"
 )
 
 // Reader store the bufio.Reader and gzip.Reader for a WARC file
@@ -103,7 +101,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 
 	tempBuf.Truncate(bytes.LastIndex(tempBuf.Bytes(), []byte("\r\n\r\n")))
 
-	buf := buffer.NewUnboundedBuffer(1024*1024, 100*1024*1024)
+	buf := NewMemorySlurper("blobref?")
 	_, err = buf.Write(tempBuf.Bytes())
 	if err != nil {
 		return nil, err

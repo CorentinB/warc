@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/djherbis/buffer"
 	"github.com/klauspost/compress/zstd"
 	uuid "github.com/satori/go.uuid"
 )
@@ -35,7 +34,7 @@ type RecordBatch struct {
 // Record represents a WARC record.
 type Record struct {
 	Header  Header
-	Content buffer.Buffer
+	Content ReadWriteSeekCloser
 }
 
 // WriteRecord writes a record to the underlying WARC file.
@@ -68,11 +67,11 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 	// Write headers
 	if r.Header.Get("Content-Length") == "" {
-		r.Header.Set("Content-Length", strconv.Itoa(int(r.Content.Len())))
+		r.Header.Set("Content-Length", strconv.Itoa(int(getSize(r.Content))))
 	}
 
 	if r.Header.Get("WARC-Block-Digest") == "" {
-		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content))
+		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1FromReader(r.Content))
 	}
 
 	for key, value := range r.Header {
@@ -116,7 +115,7 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	}
 
 	// Generate WARC-Block-Digest
-	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(infoRecord.Content))
+	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1FromReader(infoRecord.Content))
 
 	// Finally, write the record and flush the data
 	recordID, err = w.WriteRecord(infoRecord)

@@ -2,6 +2,7 @@ package warc
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"encoding/base32"
@@ -118,7 +119,7 @@ func NewRecord() *Record {
 	return &Record{
 		Header: NewHeader(),
 		// Buffer 1MB to Memory, after that buffer to 100MB chunked files
-		Content: buffer.NewUnboundedBuffer(1024*1024, 100*1024*1024),
+		Content: NewMemorySlurper("blobref?"),
 	}
 }
 
@@ -251,4 +252,12 @@ func generateWarcFileName(prefix string, compression string, serial int) (fileNa
 		}
 	}
 	return prefix + "-" + date + "-" + formattedSerial + "-" + hostName + ".warc.open"
+}
+
+// https://stackoverflow.com/questions/39064343/how-to-get-the-size-of-an-io-reader-object
+// not great! looking for something better
+func getSize(stream io.Reader) int {
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(stream)
+	return buf.Len()
 }
