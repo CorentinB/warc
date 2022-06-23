@@ -356,23 +356,26 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 	for {
 		n, err := requestRecord.Content.Read(block)
 		if n > 0 {
-			if reflect.DeepEqual(block, "\n") {
-				if strings.HasPrefix(line, "GET ") && (strings.HasSuffix(line, "HTTP/1.0") || strings.HasSuffix(line, "HTTP/1.1")) {
+			if string(block) == "\n" {
+				if strings.HasPrefix(line, "GET ") && (strings.HasSuffix(line, "HTTP/1.0\r") || strings.HasSuffix(line, "HTTP/1.1\r")) {
 					target = strings.Split(line, " ")[1]
 
 					if host != "" && target != "" {
 						break
 					} else {
+						line = ""
 						continue
 					}
 				}
 
 				if strings.HasPrefix(line, "Host: ") {
 					host = strings.TrimPrefix(line, "Host: ")
+					host = strings.TrimSuffix(host, "\r")
 
 					if host != "" && target != "" {
 						break
 					} else {
+						line = ""
 						continue
 					}
 				}
