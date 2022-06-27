@@ -49,7 +49,7 @@ func newCustomTransport(dialer *customDialer, proxy string, decompressBody bool)
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: dialer.client.verifyCertificates,
 		},
 		DisableCompression:  true,
 		ForceAttemptHTTP2:   false,
