@@ -48,14 +48,11 @@ func newCustomTransport(dialer *customDialer, proxy string, decompressBody bool)
 		TLSHandshakeTimeout:   15 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-		DisableCompression:  true,
-		ForceAttemptHTTP2:   false,
-		MaxIdleConns:        -1,
-		MaxIdleConnsPerHost: -1,
-		DisableKeepAlives:   true,
+		DisableCompression:    true,
+		ForceAttemptHTTP2:     false,
+		MaxIdleConns:          -1,
+		MaxIdleConnsPerHost:   -1,
+		DisableKeepAlives:     true,
 	}
 
 	// add proxy if specified

@@ -88,6 +88,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	cfg := new(tls.Config)
 	serverName := address[:strings.LastIndex(address, ":")]
 	cfg.ServerName = serverName
+	cfg.InsecureSkipVerify = d.client.verifyCerts
 
 	tlsConn := tls.Client(plainConn, cfg)
 
@@ -104,13 +105,6 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	if err := <-errc; err != nil {
 		plainConn.Close()
 		return nil, err
-	}
-
-	if !cfg.InsecureSkipVerify {
-		if err := tlsConn.VerifyHostname(cfg.ServerName); err != nil {
-			plainConn.Close()
-			return nil, err
-		}
 	}
 
 	return d.wrapConnection(tlsConn, "https"), nil
