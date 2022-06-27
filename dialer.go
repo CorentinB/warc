@@ -88,7 +88,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	cfg := new(tls.Config)
 	serverName := address[:strings.LastIndex(address, ":")]
 	cfg.ServerName = serverName
-	cfg.InsecureSkipVerify = d.client.verifyCertificates
+	cfg.InsecureSkipVerify = d.client.verifyCerts
 
 	tlsConn := tls.Client(plainConn, cfg)
 
