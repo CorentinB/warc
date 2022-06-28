@@ -310,6 +310,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		tempBuffer := NewSpooledTempFile("warc")
 		block = make([]byte, 1)
 		wrote := 0
+		responseRecord.Content.Seek(0, 0)
 		for {
 			n, err := responseRecord.Content.Read(block)
 			if n > 0 {
