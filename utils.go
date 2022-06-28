@@ -2,6 +2,7 @@ package warc
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"encoding/base32"
@@ -243,5 +244,16 @@ func generateWarcFileName(prefix string, compression string, serial int) (fileNa
 }
 
 func getContentLength(rwsc ReadWriteSeekCloser) int {
+	if rwsc.FileName() == "" {
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(rwsc)
+		return buf.Len()
+	} else {
+		fileInfo, err := os.Stat(rwsc.FileName())
+		if err != nil {
+			panic(err)
+		}
 
+		return int(fileInfo.Size())
+	}
 }

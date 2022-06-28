@@ -30,6 +30,7 @@ type ReadSeekCloser interface {
 	ReaderAt
 	io.Closer
 	Stat() (os.FileInfo, error)
+	FileName() string
 }
 
 // spooledTempFile writes to memory (or to disk if
@@ -190,6 +191,14 @@ func (ms *spooledTempFile) Close() error {
 	}
 
 	return nil
+}
+
+func (ms *spooledTempFile) FileName() string {
+	if ms.file != nil {
+		return ms.file.Name()
+	} else {
+		return ""
+	}
 }
 
 func (ms *spooledTempFile) Stat() (os.FileInfo, error) {
