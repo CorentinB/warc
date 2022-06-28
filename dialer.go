@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -254,6 +255,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		// Find the position of the end of the headers
 		responseRecord.Content.Seek(0, 0)
 		found := false
+		bigBlockPos := 0
 		bigBlock := make([]byte, 4)
 		block := make([]byte, 1)
 		endOfHeadersOffset := 0
@@ -263,26 +265,33 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 				switch len(bigBlock) {
 				case 0:
 					if reflect.DeepEqual(block, "\r") {
-						bigBlock = append(bigBlock, block[0])
+						bigBlock[bigBlockPos] = block[0]
+						bigBlockPos++
 					}
 				case 1:
 					if reflect.DeepEqual(block, "\n") {
-						bigBlock = append(bigBlock, block[0])
+						bigBlock[bigBlockPos] = block[0]
+						bigBlockPos++
 					} else {
 						bigBlock = nil
+						bigBlockPos = 0
 					}
 				case 2:
 					if reflect.DeepEqual(block, "\r") {
-						bigBlock = append(bigBlock, block[0])
+						bigBlock[bigBlockPos] = block[0]
+						bigBlockPos++
 					} else {
 						bigBlock = nil
+						bigBlockPos = 0
 					}
 				case 3:
 					if reflect.DeepEqual(block, "\n") {
-						bigBlock = append(bigBlock, block[0])
+						bigBlock[bigBlockPos] = block[0]
 						found = true
+						fmt.Println("FOUNDNDNNDNDN")
 					} else {
 						bigBlock = nil
+						bigBlockPos = 0
 					}
 				}
 
