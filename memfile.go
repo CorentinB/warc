@@ -137,8 +137,6 @@ func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 			return
 		}
 
-		os.Remove(ms.file.Name())
-
 		_, err = io.Copy(ms.file, ms.buf)
 		if err != nil {
 			ms.file.Close()
