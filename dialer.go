@@ -306,6 +306,8 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 			return errors.New("CRLF not found on response content")
 		}
 
+		endOfHeadersOffset = endOfHeadersOffset - 4
+
 		// Write the data up until the end of the headers to a temporary buffer
 		tempBuffer := NewSpooledTempFile("warc")
 		block = make([]byte, 1)
