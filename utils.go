@@ -39,28 +39,6 @@ func GetSHA1(r io.Reader) string {
 	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
 }
 
-// GetSHA1FromFile return the SHA1 of a file,
-// can be used to fill the WARC-Block-Digest header
-func GetSHA1FromFile(path string, headers []byte) (string, error) {
-	hash := sha1.New()
-
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	if headers != nil {
-		hash.Write(headers)
-		hash.Write([]byte("\r\n\r\n"))
-	}
-
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-
-	return base32.StdEncoding.EncodeToString(hash.Sum(nil)), nil
-}
-
 // splitKeyValue parses WARC record header fields.
 func splitKeyValue(line string) (string, string) {
 	parts := strings.SplitN(line, ":", 2)
