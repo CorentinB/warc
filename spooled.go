@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // MaxInMemorySize is the max number of bytes
@@ -29,14 +28,12 @@ type ReadSeekCloser interface {
 	io.Seeker
 	ReaderAt
 	io.Closer
-	Stat() (os.FileInfo, error)
 	FileName() string
 }
 
 // spooledTempFile writes to memory (or to disk if
 // over MaxInMemorySize) and deletes the file on Close
 type spooledTempFile struct {
-	stat            os.FileInfo
 	buf             *bytes.Buffer
 	mem             *bytes.Reader
 	file            *os.File
@@ -179,35 +176,4 @@ func (ms *spooledTempFile) FileName() string {
 	} else {
 		return ""
 	}
-}
-
-func (ms *spooledTempFile) Stat() (os.FileInfo, error) {
-	return ms.stat, nil
-}
-
-type dummyFileInfo struct {
-	mtime time.Time
-	name  string
-	size  int64
-	mode  os.FileMode
-	isDir bool
-}
-
-func (dfi dummyFileInfo) Name() string {
-	return dfi.name
-}
-func (dfi dummyFileInfo) Size() int64 {
-	return dfi.size
-}
-func (dfi dummyFileInfo) Mode() os.FileMode {
-	return dfi.mode
-}
-func (dfi dummyFileInfo) ModTime() time.Time {
-	return dfi.mtime
-}
-func (dfi dummyFileInfo) IsDir() bool {
-	return dfi.isDir
-}
-func (dfi dummyFileInfo) Sys() interface{} {
-	return nil
 }
