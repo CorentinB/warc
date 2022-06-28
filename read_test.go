@@ -63,7 +63,7 @@ func testFileHash(t *testing.T, path string) {
 // 	}
 // }
 
-func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTotal int) int {
+func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedContentLength string, expectedTotal int) int {
 	// The below function validates the Block-Digest per record while the function we are in checks for a specific Payload-Digest in records :)
 	testFileHash(t, path)
 
@@ -111,6 +111,10 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedTot
 
 		if record.Header.Get("WARC-Payload-Digest") != hash {
 			t.Fatalf("WARC-Payload-Digest doesn't match intended result %s != %s", record.Header.Get("WARC-Payload-Digest"), hash)
+		}
+
+		if record.Header.Get("Content-Length") != expectedContentLength {
+			t.Fatalf("Content-Length doesn't match intended result %s != %s", record.Header.Get("Content-Length"), expectedContentLength)
 		}
 
 		totalRead++

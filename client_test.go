@@ -72,7 +72,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", "26882", 1)
 	}
 }
 
@@ -159,7 +159,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 256)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", "26882", 256)
 	}
 }
 
@@ -225,7 +225,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 2)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", "26882", 2)
 	}
 }
 
@@ -305,7 +305,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 2)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", "26882", 2)
 	}
 }
 
@@ -370,7 +370,7 @@ func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
 
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if 429s aren't being filtered correctly!
-		testFileSingleHashCheck(t, path, "n/a", 0)
+		testFileSingleHashCheck(t, path, "n/a", "0", 0)
 	}
 }
 
@@ -432,7 +432,7 @@ func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", 1)
+		testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", "3096070", 1)
 		os.Remove(path)
 	}
 }
@@ -523,7 +523,7 @@ func TestConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 
 	totalRead := 0
 	for _, path := range files {
-		totalRead = testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", -1) + totalRead
+		totalRead = testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", "3096070", -1) + totalRead
 		os.Remove(path)
 	}
 

@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -252,12 +251,13 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		responseRecord.Header.Set("WARC-Truncated", "length")
 
 		// Find the position of the end of the headers
+		responseRecord.Content.Seek(0, 0)
 		block := make([]byte, 4)
 		endOfHeadersOffset := 0
 		for {
 			n, err := responseRecord.Content.Read(block)
 			if n > 0 {
-				if reflect.DeepEqual(block, []byte("\r\n\r\n")) {
+				if strings.Contains(string(block), "\r\n\r\n") {
 					break
 				} else {
 					endOfHeadersOffset += n
