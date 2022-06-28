@@ -117,41 +117,6 @@ func (ms *spooledTempFile) Seek(offset int64, whence int) (int64, error) {
 	return ms.mem.Seek(offset, whence)
 }
 
-func (ms *spooledTempFile) ReadFrom(r io.Reader) (n int64, err error) {
-	if ms.reading {
-		panic("write after read")
-	}
-
-	if ms.maxInMemorySize <= 0 {
-		ms.maxInMemorySize = MaxInMemorySize
-	}
-
-	var size int64
-	if fh, ok := r.(*os.File); ok {
-		if ms.stat, err = fh.Stat(); err == nil {
-			size = ms.stat.Size()
-		}
-	}
-
-	if ms.file == nil && size > 0 && size < int64(ms.maxInMemorySize) {
-		return io.Copy(ms.buf, r)
-	}
-
-	if ms.file == nil {
-		ms.file, err = ioutil.TempFile("", ms.filePrefix+"-")
-		if err != nil {
-			return 0, err
-		}
-	}
-
-	if n, err = io.Copy(ms.file, r); err != nil {
-		ms.file.Close()
-		ms.file = nil
-	}
-
-	return n, err
-}
-
 func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 	if ms.reading {
 		panic("write after read")
@@ -172,6 +137,8 @@ func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 			return
 		}
 
+		os.Remove(ms.file.Name())
+
 		_, err = io.Copy(ms.file, ms.buf)
 		if err != nil {
 			ms.file.Close()
@@ -184,6 +151,7 @@ func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 			ms.file.Close()
 			ms.file = nil
 		}
+
 		return
 	}
 
