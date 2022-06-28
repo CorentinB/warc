@@ -2,7 +2,6 @@ package warc
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -204,8 +203,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		return err
 	}
 
-	// The ReadResponse is needed to remove the possible Transfer-Encoding before calculating the WARC-Payload-Digest
-	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(responseRecord.Content.Bytes())), nil)
+	resp, err := http.ReadResponse(bufio.NewReader(responseRecord.Content), nil)
 	if err != nil {
 		return err
 	}
@@ -213,12 +211,12 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	// If the HTTP status code is to be excluded as per client's settings, we stop here
 	for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
 		if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
-			return errors.New("warc: response code was blocked by config")
+			return errors.New("response code was blocked by config")
 		}
 	}
 
 	// Calculate the WARC-Payload-Digest
-	payloadDigest := GetSHA1FromReader(resp.Body)
+	payloadDigest := GetSHA1(resp.Body)
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
@@ -246,15 +244,94 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		responseRecord.Header.Set("WARC-Profile", "http://netpreserve.org/warc/1.1/revisit/identical-payload-digest")
 		responseRecord.Header.Set("WARC-Truncated", "length")
 
-		endOfHeadersOffset := bytes.Index(responseRecord.Content.Bytes(), []byte("\r\n\r\n"))
+		// Find the position of the end of the headers
+		responseRecord.Content.Seek(0, 0)
+		found := false
+		bigBlock := make([]byte, 0, 4)
+		block := make([]byte, 1)
+		endOfHeadersOffset := 0
+		for {
+			n, err := responseRecord.Content.Read(block)
+			if n > 0 {
+				switch len(bigBlock) {
+				case 0:
+					if string(block) == "\r" {
+						bigBlock = append(bigBlock, block...)
+					}
+				case 1:
+					if string(block) == "\n" {
+						bigBlock = append(bigBlock, block...)
+					} else {
+						bigBlock = nil
+					}
+				case 2:
+					if string(block) == "\r" {
+						bigBlock = append(bigBlock, block...)
+					} else {
+						bigBlock = nil
+					}
+				case 3:
+					if string(block) == "\n" {
+						bigBlock = append(bigBlock, block...)
+						found = true
+					} else {
+						bigBlock = nil
+					}
+				}
+
+				endOfHeadersOffset++
+
+				if found {
+					break
+				}
+			}
+
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				return err
+			}
+		}
 
 		// This should really never happen! This could be the result of a malfunctioning HTTP server or something currently unknown!
 		if endOfHeadersOffset == -1 {
-			return errors.New("warc: CRLF not found on response content")
+			return errors.New("CRLF not found on response content")
 		}
 
-		headers := bytes.NewBuffer(responseRecord.Content.Bytes()[:endOfHeadersOffset])
-		responseRecord.Content = headers
+		// Write the data up until the end of the headers to a temporary buffer
+		tempBuffer := NewSpooledTempFile("warc")
+		block = make([]byte, 1)
+		wrote := 0
+		responseRecord.Content.Seek(0, 0)
+		for {
+			n, err := responseRecord.Content.Read(block)
+			if n > 0 {
+				_, err = tempBuffer.Write(block)
+				if err != nil {
+					return err
+				}
+			}
+
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				return err
+			}
+
+			wrote++
+
+			if wrote == endOfHeadersOffset {
+				break
+			}
+		}
+
+		// Close old buffer
+		responseRecord.Content.Close()
+		responseRecord.Content = tempBuffer
 	}
 
 	recordChan <- responseRecord
@@ -279,32 +356,53 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 	}
 
 	// Parse data for WARC-Target-URI
-	scanner := bufio.NewScanner(bytes.NewReader(requestRecord.Content.Bytes()))
-	for scanner.Scan() {
-		t := scanner.Text()
-		if strings.HasPrefix(t, "GET ") && (strings.HasSuffix(t, "HTTP/1.0") || strings.HasSuffix(t, "HTTP/1.1")) {
-			target = strings.Split(t, " ")[1]
+	var (
+		block = make([]byte, 1)
+		line  string
+	)
 
-			if host != "" && target != "" {
-				break
+	for {
+		n, err := requestRecord.Content.Read(block)
+		if n > 0 {
+			if string(block) == "\n" {
+				if strings.HasPrefix(line, "GET ") && (strings.HasSuffix(line, "HTTP/1.0\r") || strings.HasSuffix(line, "HTTP/1.1\r")) {
+					target = strings.Split(line, " ")[1]
+
+					if host != "" && target != "" {
+						break
+					} else {
+						line = ""
+						continue
+					}
+				}
+
+				if strings.HasPrefix(line, "Host: ") {
+					host = strings.TrimPrefix(line, "Host: ")
+					host = strings.TrimSuffix(host, "\r")
+
+					if host != "" && target != "" {
+						break
+					} else {
+						line = ""
+						continue
+					}
+				}
+
+				line = ""
 			} else {
-				continue
+				line += string(block)
 			}
+		} else {
+			break
 		}
 
-		if strings.HasPrefix(t, "Host: ") {
-			host = strings.TrimPrefix(t, "Host: ")
-
-			if host != "" && target != "" {
-				break
-			} else {
-				continue
-			}
+		if err == io.EOF {
+			break
 		}
-	}
 
-	if err := scanner.Err(); err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	// Check that we achieved to parse all the necessary data

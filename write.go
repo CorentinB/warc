@@ -2,7 +2,6 @@ package warc
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -35,7 +34,7 @@ type RecordBatch struct {
 // Record represents a WARC record.
 type Record struct {
 	Header  Header
-	Content *bytes.Buffer
+	Content ReadWriteSeekCloser
 }
 
 // WriteRecord writes a record to the underlying WARC file.
@@ -68,11 +67,12 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 	// Write headers
 	if r.Header.Get("Content-Length") == "" {
-		r.Header.Set("Content-Length", strconv.Itoa(r.Content.Len()))
+		r.Header.Set("Content-Length", strconv.Itoa(getContentLength(r.Content)))
 	}
 
 	if r.Header.Get("WARC-Block-Digest") == "" {
-		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content.Bytes()))
+		r.Content.Seek(0, 0)
+		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content))
 	}
 
 	for key, value := range r.Header {
@@ -85,6 +85,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		return recordID, err
 	}
 
+	r.Content.Seek(0, 0)
 	if _, err := io.Copy(w.FileWriter, r.Content); err != nil {
 		return recordID, err
 	}
@@ -95,6 +96,8 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 	// Flush data
 	w.FileWriter.Flush()
+
+	r.Content.Close()
 
 	return recordID, nil
 }
@@ -111,14 +114,12 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	infoRecord.Header.Set("Content-Type", "application/warc-fields")
 
 	// Write the payload
-	warcInfoContent := new(bytes.Buffer)
 	for k, v := range payload {
-		warcInfoContent.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+		infoRecord.Content.Write([]byte(fmt.Sprintf("%s: %s\r\n", k, v)))
 	}
-	infoRecord.Content = warcInfoContent
 
 	// Generate WARC-Block-Digest
-	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(warcInfoContent.Bytes()))
+	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(infoRecord.Content))
 
 	// Finally, write the record and flush the data
 	recordID, err = w.WriteRecord(infoRecord)
@@ -127,5 +128,6 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	}
 
 	w.FileWriter.Flush()
+
 	return recordID, err
 }

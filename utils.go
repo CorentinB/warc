@@ -17,44 +17,26 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-func GetSHA1FromReader(r io.Reader) string {
+func GetSHA1(r io.Reader) string {
 	sha := sha1.New()
 
-	io.Copy(sha, r)
+	block := make([]byte, 256)
+	for {
+		n, err := r.Read(block)
+		if n > 0 {
+			sha.Write(block[:n])
+		}
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return "ERROR"
+		}
+	}
 
 	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
-}
-
-// GetSHA1 return the SHA1 of a []byte,
-// can be used to fill the WARC-Block-Digest header
-func GetSHA1(content []byte) string {
-	sha := sha1.New()
-
-	sha.Write(content)
-
-	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
-}
-
-// GetSHA1FromFile return the SHA1 of a file,
-// can be used to fill the WARC-Block-Digest header
-func GetSHA1FromFile(path string, headers []byte) (string, error) {
-	hash := sha1.New()
-
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	if headers != nil {
-		hash.Write(headers)
-		hash.Write([]byte("\r\n\r\n"))
-	}
-
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-
-	return base32.StdEncoding.EncodeToString(hash.Sum(nil)), nil
 }
 
 // splitKeyValue parses WARC record header fields.
@@ -102,8 +84,9 @@ func NewWriter(writer io.Writer, fileName string, compression string) (*Writer, 
 // NewRecord creates a new WARC record.
 func NewRecord() *Record {
 	return &Record{
-		Header:  NewHeader(),
-		Content: bytes.NewBuffer(nil),
+		Header: NewHeader(),
+		// Buffer 1MB to Memory, after that buffer to 100MB chunked files
+		Content: NewSpooledTempFile("warc"),
 	}
 }
 
@@ -198,11 +181,7 @@ func isFileSizeExceeded(filePath string, maxSize float64) bool {
 	fileSize := (float64)((stat.Size() / 1024) / 1024)
 
 	// If fileSize exceed maxSize, return true
-	if fileSize >= maxSize {
-		return true
-	}
-
-	return false
+	return fileSize >= maxSize
 }
 
 // formatSerial add the correct padding to the serial
@@ -236,4 +215,24 @@ func generateWarcFileName(prefix string, compression string, serial int) (fileNa
 		}
 	}
 	return prefix + "-" + date + "-" + formattedSerial + "-" + hostName + ".warc.open"
+}
+
+func getContentLength(rwsc ReadWriteSeekCloser) int {
+	// If the FileName leads to no existing file, it means that the SpooledTempFile
+	// never had the chance to buffer to disk instead of memory, in which case we can
+	// just read the buffer (which should be <= 2MB) and return the length
+	if rwsc.FileName() == "" {
+		rwsc.Seek(0, 0)
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(rwsc)
+		return buf.Len()
+	} else {
+		// Else, we return the size of the file on disk
+		fileInfo, err := os.Stat(rwsc.FileName())
+		if err != nil {
+			panic(err)
+		}
+
+		return int(fileInfo.Size())
+	}
 }

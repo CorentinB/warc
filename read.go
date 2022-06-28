@@ -94,16 +94,22 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	}
 
 	// Parse the record content
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(tempReader); err != nil {
+	var tempBuf bytes.Buffer
+	if _, err := tempBuf.ReadFrom(tempReader); err != nil {
 		return nil, err
 	}
 
-	buf.Truncate(bytes.LastIndex(buf.Bytes(), []byte("\r\n\r\n")))
+	tempBuf.Truncate(bytes.LastIndex(tempBuf.Bytes(), []byte("\r\n\r\n")))
+
+	buf := NewSpooledTempFile("warc")
+	_, err = buf.Write(tempBuf.Bytes())
+	if err != nil {
+		return nil, err
+	}
 
 	r.record = &Record{
 		Header:  header,
-		Content: &buf,
+		Content: buf,
 	}
 
 	// Reset the reader for the next block
