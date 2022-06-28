@@ -14,7 +14,6 @@ import (
 	"time"
 
 	uuid "github.com/satori/go.uuid"
-	"github.com/tgulacsi/go/temp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -280,7 +279,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		}
 
 		// Write the data up until the end of the headers to a temporary buffer
-		tempBuffer := temp.NewMemorySlurper("blobref?")
+		tempBuffer := NewMemorySlurper("blobref")
 		block = make([]byte, 8)
 		for {
 			n, err := responseRecord.Content.Read(block)

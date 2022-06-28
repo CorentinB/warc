@@ -2,6 +2,7 @@ package warc
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"encoding/base32"
@@ -253,12 +254,10 @@ func generateWarcFileName(prefix string, compression string, serial int) (fileNa
 	return prefix + "-" + date + "-" + formattedSerial + "-" + hostName + ".warc.open"
 }
 
-func getSize(memorySlurper ReadWriteSeekCloser) int64 {
-	fileInfo, err := memorySlurper.Stat()
-	if err != nil {
-		panic(err)
-	}
-
-	// important note: this currently panics. I have no idea why.
-	return fileInfo.Size()
+// https://stackoverflow.com/questions/39064343/how-to-get-the-size-of-an-io-reader-object
+// not great! looking for something better
+func getSize(stream io.Reader) int {
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(stream)
+	return buf.Len()
 }

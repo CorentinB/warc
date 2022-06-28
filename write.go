@@ -67,10 +67,12 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 	// Write headers
 	if r.Header.Get("Content-Length") == "" {
+		r.Content.Seek(0, 0)
 		r.Header.Set("Content-Length", strconv.Itoa(int(getSize(r.Content))))
 	}
 
 	if r.Header.Get("WARC-Block-Digest") == "" {
+		r.Content.Seek(0, 0)
 		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1FromReader(r.Content))
 	}
 
@@ -84,6 +86,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 		return recordID, err
 	}
 
+	r.Content.Seek(0, 0)
 	if _, err := io.Copy(w.FileWriter, r.Content); err != nil {
 		return recordID, err
 	}
@@ -94,6 +97,8 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 	// Flush data
 	w.FileWriter.Flush()
+
+	r.Content.Close()
 
 	return recordID, nil
 }

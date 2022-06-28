@@ -342,7 +342,7 @@ func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
 	go func() {
 		defer errWg.Done()
 		for err := range errorChannel {
-			if err.Error() != "warc: response code was blocked by config" {
+			if err.Error() != "response code was blocked by config" {
 				t.Errorf("Error writing to WARC: %s", err)
 			}
 		}
