@@ -244,11 +244,15 @@ func generateWarcFileName(prefix string, compression string, serial int) (fileNa
 }
 
 func getContentLength(rwsc ReadWriteSeekCloser) int {
-	if rwsc.FileName() == "" {
+	// If the FileName leads to no existing file, it means that the SpooledTempFile
+	// never had the chance to buffer to disk instead of memory, in which case we can
+	// just read the buffer (which should be <= 2MB) and return the length
+	if _, err := os.Stat(rwsc.FileName()); errors.Is(err, os.ErrNotExist) {
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(rwsc)
 		return buf.Len()
 	} else {
+		// Else, we return the size of the file on disk
 		fileInfo, err := os.Stat(rwsc.FileName())
 		if err != nil {
 			panic(err)

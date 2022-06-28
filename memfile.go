@@ -66,6 +66,7 @@ func (ms *spooledTempFile) prepareRead() error {
 	if ms.reading && (ms.file != nil || ms.buf == nil || ms.mem != nil) {
 		return nil
 	}
+
 	ms.reading = true
 	if ms.file != nil {
 		if _, err := ms.file.Seek(0, 0); err != nil {
@@ -73,8 +74,10 @@ func (ms *spooledTempFile) prepareRead() error {
 		}
 		return nil
 	}
+
 	ms.mem = bytes.NewReader(ms.buf.Bytes())
 	ms.buf = nil
+
 	return nil
 }
 
@@ -82,9 +85,11 @@ func (ms *spooledTempFile) Read(p []byte) (n int, err error) {
 	if err := ms.prepareRead(); err != nil {
 		return 0, err
 	}
+
 	if ms.file != nil {
 		return ms.file.Read(p)
 	}
+
 	return ms.mem.Read(p)
 }
 
@@ -92,9 +97,11 @@ func (ms *spooledTempFile) ReadAt(p []byte, off int64) (n int, err error) {
 	if err := ms.prepareRead(); err != nil {
 		return 0, err
 	}
+
 	if ms.file != nil {
 		return ms.file.ReadAt(p, off)
 	}
+
 	return ms.mem.ReadAt(p, off)
 }
 
@@ -102,9 +109,11 @@ func (ms *spooledTempFile) Seek(offset int64, whence int) (int64, error) {
 	if err := ms.prepareRead(); err != nil {
 		return 0, err
 	}
+
 	if ms.file != nil {
 		return ms.file.Seek(offset, whence)
 	}
+
 	return ms.mem.Seek(offset, whence)
 }
 
@@ -112,29 +121,35 @@ func (ms *spooledTempFile) ReadFrom(r io.Reader) (n int64, err error) {
 	if ms.reading {
 		panic("write after read")
 	}
+
 	if ms.maxInMemorySize <= 0 {
 		ms.maxInMemorySize = MaxInMemorySize
 	}
+
 	var size int64
 	if fh, ok := r.(*os.File); ok {
 		if ms.stat, err = fh.Stat(); err == nil {
 			size = ms.stat.Size()
 		}
 	}
+
 	if ms.file == nil && size > 0 && size < int64(ms.maxInMemorySize) {
 		return io.Copy(ms.buf, r)
 	}
+
 	if ms.file == nil {
-		ms.file, err = ioutil.TempFile("", "spooledTempFile-"+ms.filePrefix)
+		ms.file, err = ioutil.TempFile("", ms.filePrefix)
 		if err != nil {
 			return 0, err
 		}
 		os.Remove(ms.file.Name())
 	}
+
 	if n, err = io.Copy(ms.file, r); err != nil {
 		ms.file.Close()
 		ms.file = nil
 	}
+
 	return n, err
 }
 
