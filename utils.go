@@ -14,26 +14,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/djherbis/buffer"
 	"github.com/klauspost/compress/zstd"
 )
 
-func GetSHA1FromReader(r io.Reader) string {
-	sha := sha1.New()
-
-	io.Copy(sha, r)
-
-	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
-}
-
-// GetSHA1 return the SHA1 of a []byte,
-// can be used to fill the WARC-Block-Digest header
-func GetSHA1(b buffer.Buffer) string {
+func GetSHA1(r io.Reader) string {
 	sha := sha1.New()
 
 	block := make([]byte, 256)
 	for {
-		n, err := b.Read(block)
+		n, err := r.Read(block)
 		if n > 0 {
 			sha.Write(block[:n])
 		}

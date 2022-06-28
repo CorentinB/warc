@@ -31,7 +31,7 @@ func testFileHash(t *testing.T, path string) {
 			break
 		}
 
-		hash := fmt.Sprintf("sha1:%s", GetSHA1FromReader(record.Content))
+		hash := fmt.Sprintf("sha1:%s", GetSHA1(record.Content))
 		if hash != record.Header["WARC-Block-Digest"] {
 			t.Fatalf("expected %s, got %s", record.Header.Get("WARC-Block-Digest"), hash)
 		}

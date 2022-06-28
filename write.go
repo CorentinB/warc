@@ -73,7 +73,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 	if r.Header.Get("WARC-Block-Digest") == "" {
 		r.Content.Seek(0, 0)
-		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1FromReader(r.Content))
+		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content))
 	}
 
 	for key, value := range r.Header {
@@ -120,7 +120,7 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	}
 
 	// Generate WARC-Block-Digest
-	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1FromReader(infoRecord.Content))
+	infoRecord.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(infoRecord.Content))
 
 	// Finally, write the record and flush the data
 	recordID, err = w.WriteRecord(infoRecord)

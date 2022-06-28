@@ -223,7 +223,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	}
 
 	// Calculate the WARC-Payload-Digest
-	payloadDigest := GetSHA1FromReader(resp.Body)
+	payloadDigest := GetSHA1(resp.Body)
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
