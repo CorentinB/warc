@@ -203,11 +203,7 @@ func isFileSizeExceeded(filePath string, maxSize float64) bool {
 	fileSize := (float64)((stat.Size() / 1024) / 1024)
 
 	// If fileSize exceed maxSize, return true
-	if fileSize >= maxSize {
-		return true
-	}
-
-	return false
+	return fileSize >= maxSize
 }
 
 // formatSerial add the correct padding to the serial
