@@ -138,12 +138,10 @@ func (ms *spooledTempFile) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 
 	if ms.file == nil {
-		ms.file, err = ioutil.TempFile("", "-"+ms.filePrefix)
+		ms.file, err = ioutil.TempFile("", ms.filePrefix+"-")
 		if err != nil {
 			return 0, err
 		}
-
-		os.Remove(ms.file.Name())
 	}
 
 	if n, err = io.Copy(ms.file, r); err != nil {
@@ -169,12 +167,11 @@ func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 	}
 
 	if ms.buf.Len()+len(p) > ms.maxInMemorySize {
-		ms.file, err = ioutil.TempFile("", "-"+ms.filePrefix)
+		ms.file, err = ioutil.TempFile("", ms.filePrefix+"-")
 		if err != nil {
 			return
 		}
 
-		os.Remove(ms.file.Name())
 		_, err = io.Copy(ms.file, ms.buf)
 		if err != nil {
 			ms.file.Close()

@@ -129,5 +129,6 @@ func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, er
 	}
 
 	w.FileWriter.Flush()
+
 	return recordID, err
 }
