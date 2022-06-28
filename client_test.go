@@ -225,7 +225,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "138"}, 2)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
 	}
 }
 
@@ -305,7 +305,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "138"}, 2)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
 	}
 }
 
