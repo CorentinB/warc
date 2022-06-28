@@ -5,11 +5,9 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -255,8 +253,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		// Find the position of the end of the headers
 		responseRecord.Content.Seek(0, 0)
 		found := false
-		bigBlockPos := 0
-		bigBlock := make([]byte, 4)
+		bigBlock := make([]byte, 0, 4)
 		block := make([]byte, 1)
 		endOfHeadersOffset := 0
 		for {
@@ -264,34 +261,27 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 			if n > 0 {
 				switch len(bigBlock) {
 				case 0:
-					if reflect.DeepEqual(block, "\r") {
-						bigBlock[bigBlockPos] = block[0]
-						bigBlockPos++
+					if string(block) == "\r" {
+						bigBlock = append(bigBlock, block...)
 					}
 				case 1:
-					if reflect.DeepEqual(block, "\n") {
-						bigBlock[bigBlockPos] = block[0]
-						bigBlockPos++
+					if string(block) == "\n" {
+						bigBlock = append(bigBlock, block...)
 					} else {
 						bigBlock = nil
-						bigBlockPos = 0
 					}
 				case 2:
-					if reflect.DeepEqual(block, "\r") {
-						bigBlock[bigBlockPos] = block[0]
-						bigBlockPos++
+					if string(block) == "\r" {
+						bigBlock = append(bigBlock, block...)
 					} else {
 						bigBlock = nil
-						bigBlockPos = 0
 					}
 				case 3:
-					if reflect.DeepEqual(block, "\n") {
-						bigBlock[bigBlockPos] = block[0]
+					if string(block) == "\n" {
+						bigBlock = append(bigBlock, block...)
 						found = true
-						fmt.Println("FOUNDNDNNDNDN")
 					} else {
 						bigBlock = nil
-						bigBlockPos = 0
 					}
 				}
 
@@ -318,7 +308,8 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 
 		// Write the data up until the end of the headers to a temporary buffer
 		tempBuffer := NewSpooledTempFile("warc")
-		block = make([]byte, 8)
+		block = make([]byte, 1)
+		wrote := 0
 		for {
 			n, err := responseRecord.Content.Read(block)
 			if n > 0 {
@@ -334,6 +325,12 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 
 			if err != nil {
 				return err
+			}
+
+			wrote++
+
+			if wrote == endOfHeadersOffset {
+				break
 			}
 		}
 
