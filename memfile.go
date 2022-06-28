@@ -1,22 +1,6 @@
-/*
-Copyright 2013, 2020 the Camlistore authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-//https://github.com/tgulacsi/go/blob/master/temp/memfile.go
-
 package warc
+
+// The following code is heavily inspired by: https://github.com/tgulacsi/go/blob/master/temp/memfile.go
 
 import (
 	"bytes"
@@ -29,21 +13,17 @@ import (
 	"time"
 )
 
-// MaxInMemorySlurp is the threshold for in-memory or on-disk storage
-// for slurped data.
-var MaxInMemorySlurp = 4 << 20 // 4MB.  *shrug*.
+// MaxInMemorySize is the max number of bytes
+// (currently 2MB) to hold in memory before starting
+// to write to disk
+var MaxInMemorySize = 2097152
 
 // ReaderAt is the interface for ReadAt - read at position, without moving pointer.
 type ReaderAt interface {
 	ReadAt(p []byte, off int64) (n int, err error)
 }
 
-// Stater is the interface for os.Stat.
-type Stater interface {
-	Stat() (os.FileInfo, error)
-}
-
-// ReadSeekCloser is an io.Reader + ReaderAt + io.Seeker + io.Closer + Stater
+// ReadSeekCloser is an io.Reader + ReaderAt + io.Seeker + io.Closer + Stat
 type ReadSeekCloser interface {
 	io.Reader
 	io.Seeker
@@ -52,44 +32,16 @@ type ReadSeekCloser interface {
 	Stat() (os.FileInfo, error)
 }
 
-// MakeReadSeekCloser makes an io.ReadSeeker + io.Closer by reading the whole reader
-// If the given Reader is a Closer, too, than that Close will be called
-func MakeReadSeekCloser(blobRef string, r io.Reader) (ReadSeekCloser, error) {
-	if rsc, ok := r.(ReadSeekCloser); ok {
-		return rsc, nil
-	}
-
-	ms := NewMemorySlurper(blobRef).(*memorySlurper)
-	n, err := io.Copy(ms, r)
-	if err != nil {
-		return nil, fmt.Errorf("copy from %v to %v: %w", r, ms, err)
-	}
-
-	if ms.stat == nil {
-		if ms.file == nil {
-			ms.stat = dummyFileInfo{name: "memory", size: n, mtime: time.Now()}
-		} else {
-			ms.stat, err = ms.file.Stat()
-		}
-	}
-	return ms, err
-}
-
-// NewReadSeeker is a convenience function of MakeReadSeekCloser.
-func NewReadSeeker(r io.Reader) (ReadSeekCloser, error) {
-	return MakeReadSeekCloser("", r)
-}
-
-// memorySlurper slurps up a blob to memory (or spilling to disk if
-// over MaxInMemorySlurp) and deletes the file on Close
-type memorySlurper struct {
-	stat             os.FileInfo
-	buf              *bytes.Buffer
-	mem              *bytes.Reader
-	file             *os.File // nil until allocated
-	blobRef          string   // only used for tempfile's prefix
-	maxInMemorySlurp int
-	reading          bool // transitions at most once from false -> true
+// spooledTempFile writes to memory (or to disk if
+// over MaxInMemorySize) and deletes the file on Close
+type spooledTempFile struct {
+	stat            os.FileInfo
+	buf             *bytes.Buffer
+	mem             *bytes.Reader
+	file            *os.File
+	filePrefix      string
+	maxInMemorySize int
+	reading         bool // transitions at most once from false -> true
 }
 
 // ReadWriteSeekCloser is an io.Writer + io.Reader + io.Seeker + io.Closer.
@@ -98,18 +50,18 @@ type ReadWriteSeekCloser interface {
 	io.Writer
 }
 
-// NewMemorySlurper returns an ReadWriteSeekCloser,
+// NewSpooledTempFile returns an ReadWriteSeekCloser,
 // with some important constraints:
 // you can Write into it, but whenever you call Read or Seek on it,
 // Write is forbidden, will return an error.
-func NewMemorySlurper(blobRef string) ReadWriteSeekCloser {
-	return &memorySlurper{
-		blobRef: filepath.Base(blobRef),
-		buf:     new(bytes.Buffer),
+func NewSpooledTempFile(filePrefix string) ReadWriteSeekCloser {
+	return &spooledTempFile{
+		filePrefix: filepath.Base(filePrefix),
+		buf:        new(bytes.Buffer),
 	}
 }
 
-func (ms *memorySlurper) prepareRead() error {
+func (ms *spooledTempFile) prepareRead() error {
 	if ms.reading && (ms.file != nil || ms.buf == nil || ms.mem != nil) {
 		return nil
 	}
@@ -125,7 +77,7 @@ func (ms *memorySlurper) prepareRead() error {
 	return nil
 }
 
-func (ms *memorySlurper) Read(p []byte) (n int, err error) {
+func (ms *spooledTempFile) Read(p []byte) (n int, err error) {
 	if err := ms.prepareRead(); err != nil {
 		return 0, err
 	}
@@ -135,7 +87,7 @@ func (ms *memorySlurper) Read(p []byte) (n int, err error) {
 	return ms.mem.Read(p)
 }
 
-func (ms *memorySlurper) ReadAt(p []byte, off int64) (n int, err error) {
+func (ms *spooledTempFile) ReadAt(p []byte, off int64) (n int, err error) {
 	if err := ms.prepareRead(); err != nil {
 		return 0, err
 	}
@@ -145,7 +97,7 @@ func (ms *memorySlurper) ReadAt(p []byte, off int64) (n int, err error) {
 	return ms.mem.ReadAt(p, off)
 }
 
-func (ms *memorySlurper) Seek(offset int64, whence int) (int64, error) {
+func (ms *spooledTempFile) Seek(offset int64, whence int) (int64, error) {
 	if err := ms.prepareRead(); err != nil {
 		return 0, err
 	}
@@ -155,12 +107,12 @@ func (ms *memorySlurper) Seek(offset int64, whence int) (int64, error) {
 	return ms.mem.Seek(offset, whence)
 }
 
-func (ms *memorySlurper) ReadFrom(r io.Reader) (n int64, err error) {
+func (ms *spooledTempFile) ReadFrom(r io.Reader) (n int64, err error) {
 	if ms.reading {
 		panic("write after read")
 	}
-	if ms.maxInMemorySlurp <= 0 {
-		ms.maxInMemorySlurp = MaxInMemorySlurp
+	if ms.maxInMemorySize <= 0 {
+		ms.maxInMemorySize = MaxInMemorySize
 	}
 	var size int64
 	if fh, ok := r.(*os.File); ok {
@@ -168,11 +120,11 @@ func (ms *memorySlurper) ReadFrom(r io.Reader) (n int64, err error) {
 			size = ms.stat.Size()
 		}
 	}
-	if ms.file == nil && size > 0 && size < int64(ms.maxInMemorySlurp) {
+	if ms.file == nil && size > 0 && size < int64(ms.maxInMemorySize) {
 		return io.Copy(ms.buf, r)
 	}
 	if ms.file == nil {
-		ms.file, err = ioutil.TempFile("", "memorySlurper-"+ms.blobRef)
+		ms.file, err = ioutil.TempFile("", "spooledTempFile-"+ms.filePrefix)
 		if err != nil {
 			return 0, err
 		}
@@ -185,23 +137,26 @@ func (ms *memorySlurper) ReadFrom(r io.Reader) (n int64, err error) {
 	return n, err
 }
 
-func (ms *memorySlurper) Write(p []byte) (n int, err error) {
+func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 	if ms.reading {
 		panic("write after read")
 	}
+
 	if ms.file != nil {
 		n, err = ms.file.Write(p)
 		return
 	}
 
-	if ms.maxInMemorySlurp <= 0 {
-		ms.maxInMemorySlurp = MaxInMemorySlurp
+	if ms.maxInMemorySize <= 0 {
+		ms.maxInMemorySize = MaxInMemorySize
 	}
-	if ms.buf.Len()+len(p) > ms.maxInMemorySlurp {
-		ms.file, err = ioutil.TempFile("", "memorySlurper-"+ms.blobRef)
+
+	if ms.buf.Len()+len(p) > ms.maxInMemorySize {
+		ms.file, err = ioutil.TempFile("", ms.filePrefix)
 		if err != nil {
 			return
 		}
+
 		os.Remove(ms.file.Name())
 		_, err = io.Copy(ms.file, ms.buf)
 		if err != nil {
@@ -220,24 +175,24 @@ func (ms *memorySlurper) Write(p []byte) (n int, err error) {
 	return ms.buf.Write(p)
 }
 
-func (ms *memorySlurper) Cleanup() error {
+func (ms *spooledTempFile) Close() error {
 	f := ms.file
+
 	ms.file, ms.mem, ms.buf = nil, nil, nil
 	if f == nil {
 		return nil
 	}
+
 	f.Close()
+
 	if err := os.Remove(f.Name()); err != nil && !strings.Contains(err.Error(), "exist") {
 		return err
 	}
+
 	return nil
 }
 
-func (ms *memorySlurper) Close() error {
-	return ms.Cleanup()
-}
-
-func (ms *memorySlurper) Stat() (os.FileInfo, error) {
+func (ms *spooledTempFile) Stat() (os.FileInfo, error) {
 	return ms.stat, nil
 }
 

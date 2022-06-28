@@ -101,7 +101,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 
 	tempBuf.Truncate(bytes.LastIndex(tempBuf.Bytes(), []byte("\r\n\r\n")))
 
-	buf := NewMemorySlurper("blobref?")
+	buf := NewSpooledTempFile("warc")
 	_, err = buf.Write(tempBuf.Bytes())
 	if err != nil {
 		return nil, err

@@ -279,7 +279,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		}
 
 		// Write the data up until the end of the headers to a temporary buffer
-		tempBuffer := NewMemorySlurper("blobref")
+		tempBuffer := NewSpooledTempFile("warc")
 		block = make([]byte, 8)
 		for {
 			n, err := responseRecord.Content.Read(block)
