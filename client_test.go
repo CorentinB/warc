@@ -38,7 +38,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{})
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true)
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -591,7 +591,7 @@ func TestWARCWritingWithSelfSignedCertificateWithHTTPClient(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
 	}
 }
 
@@ -656,6 +656,6 @@ func TestWARCWritingWithDisallowedCertificateWithHTTPClient(t *testing.T) {
 
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if certificates aren't being verified correctly.
-		testFileSingleHashCheck(t, path, "n/a", 0)
+		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0)
 	}
 }
