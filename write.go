@@ -67,7 +67,6 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 	// Write headers
 	if r.Header.Get("Content-Length") == "" {
-		r.Content.Seek(0, 0)
 		r.Header.Set("Content-Length", strconv.Itoa(getContentLength(r.Content)))
 	}
 

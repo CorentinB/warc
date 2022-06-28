@@ -222,6 +222,7 @@ func getContentLength(rwsc ReadWriteSeekCloser) int {
 	// never had the chance to buffer to disk instead of memory, in which case we can
 	// just read the buffer (which should be <= 2MB) and return the length
 	if rwsc.FileName() == "" {
+		rwsc.Seek(0, 0)
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(rwsc)
 		return buf.Len()
