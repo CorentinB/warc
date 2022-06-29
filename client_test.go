@@ -38,7 +38,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true)
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -74,6 +74,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		os.Remove(path)
 	}
 }
 
@@ -98,7 +99,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "CONC"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true)
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -161,6 +162,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 256)
+		os.Remove(path)
 	}
 }
 
@@ -187,7 +189,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 	rotatorSettings.Prefix = "DEDUP1"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: false}, []int{}, true)
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: false}, []int{}, true, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -227,6 +229,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
+		os.Remove(path)
 	}
 }
 
@@ -267,7 +270,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	rotatorSettings.Prefix = "DEDUP2"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: true, CDXURL: server.URL}, []int{}, true)
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{LocalDedupe: true, CDXDedupe: true, CDXURL: server.URL}, []int{}, true, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -307,6 +310,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
+		os.Remove(path)
 	}
 }
 
@@ -333,7 +337,7 @@ func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
 	rotatorSettings.Prefix = "TEST429"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{429}, true)
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{429}, true, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -372,6 +376,7 @@ func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if 429s aren't being filtered correctly!
 		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0)
+		os.Remove(path)
 	}
 }
 
@@ -398,7 +403,7 @@ func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	rotatorSettings.Prefix = "TEST2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true)
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -461,7 +466,7 @@ func TestConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	rotatorSettings.Prefix = "CONCTEST2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true)
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -556,7 +561,7 @@ func TestWARCWritingWithSelfSignedCertificateWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TESTCERT1"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, false)
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, false, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -592,6 +597,7 @@ func TestWARCWritingWithSelfSignedCertificateWithHTTPClient(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		os.Remove(path)
 	}
 }
 
@@ -618,7 +624,7 @@ func TestWARCWritingWithDisallowedCertificateWithHTTPClient(t *testing.T) {
 	rotatorSettings.Prefix = "TESTCERT2"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true)
+	httpClient, err, errorChannel := NewWARCWritingHTTPClient(rotatorSettings, "", false, DedupeOptions{}, []int{}, true, "")
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -657,5 +663,6 @@ func TestWARCWritingWithDisallowedCertificateWithHTTPClient(t *testing.T) {
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if certificates aren't being verified correctly.
 		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0)
+		os.Remove(path)
 	}
 }

@@ -15,6 +15,7 @@ type CustomHTTPClient struct {
 	skipHTTPStatusCodes []int
 	errChan             chan error
 	verifyCerts         bool
+	WARCTempDir         string
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -26,7 +27,7 @@ func (c *CustomHTTPClient) Close() error {
 	return nil
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCodes []int, verifyCerts bool) (httpClient *CustomHTTPClient, err error, errChan chan error) {
+func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCodes []int, verifyCerts bool, WARCTempDir string) (httpClient *CustomHTTPClient, err error, errChan chan error) {
 	httpClient = new(CustomHTTPClient)
 
 	// Toggle deduplication options and create map for deduplication records.
@@ -43,6 +44,9 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 	// Toggle verification of certificates
 	// InsecureSkipVerify expects the opposite of the verifyCerts flag, as such we flip it.
 	httpClient.verifyCerts = !verifyCerts
+
+	// Configure WARC temporary file directory
+	httpClient.WARCTempDir = WARCTempDir
 
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
