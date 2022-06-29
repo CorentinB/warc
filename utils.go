@@ -82,11 +82,11 @@ func NewWriter(writer io.Writer, fileName string, compression string) (*Writer, 
 }
 
 // NewRecord creates a new WARC record.
-func NewRecord() *Record {
+func NewRecord(tempDir string) *Record {
 	return &Record{
 		Header: NewHeader(),
 		// Buffer 1MB to Memory, after that buffer to 100MB chunked files
-		Content: NewSpooledTempFile("warc"),
+		Content: NewSpooledTempFile("warc", tempDir),
 	}
 }
 

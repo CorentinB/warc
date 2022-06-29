@@ -88,6 +88,8 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	serverName := address[:strings.LastIndex(address, ":")]
 	cfg.ServerName = serverName
 	cfg.InsecureSkipVerify = d.client.verifyCerts
+	cfg.PreferServerCipherSuites = false
+	cfg.CurvePreferences = []tls.CurveID{tls.CurveP256, tls.CurveP384, tls.CurveP521, tls.X25519}
 
 	tlsConn := tls.Client(plainConn, cfg)
 
@@ -193,7 +195,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	// Initialize the response record
-	var responseRecord = NewRecord()
+	var responseRecord = NewRecord(d.client.WARCTempDir)
 	responseRecord.Header.Set("WARC-Type", "response")
 	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
@@ -301,7 +303,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		}
 
 		// Write the data up until the end of the headers to a temporary buffer
-		tempBuffer := NewSpooledTempFile("warc")
+		tempBuffer := NewSpooledTempFile("warc", d.client.WARCTempDir)
 		block = make([]byte, 1)
 		wrote := 0
 		responseRecord.Content.Seek(0, 0)
@@ -342,7 +344,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	var (
 		warcTargetURI = scheme + "://"
-		requestRecord = NewRecord()
+		requestRecord = NewRecord(d.client.WARCTempDir)
 	)
 
 	// Initialize the request record

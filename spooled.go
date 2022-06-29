@@ -38,6 +38,7 @@ type spooledTempFile struct {
 	mem             *bytes.Reader
 	file            *os.File
 	filePrefix      string
+	tempDir         string
 	maxInMemorySize int
 	reading         bool // transitions at most once from false -> true
 }
@@ -52,9 +53,10 @@ type ReadWriteSeekCloser interface {
 // with some important constraints:
 // you can Write into it, but whenever you call Read or Seek on it,
 // Write is forbidden, will return an error.
-func NewSpooledTempFile(filePrefix string) ReadWriteSeekCloser {
+func NewSpooledTempFile(filePrefix string, tempDir string) ReadWriteSeekCloser {
 	return &spooledTempFile{
 		filePrefix: filepath.Base(filePrefix),
+		tempDir:    tempDir,
 		buf:        new(bytes.Buffer),
 	}
 }
@@ -129,7 +131,7 @@ func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 	}
 
 	if ms.buf.Len()+len(p) > ms.maxInMemorySize {
-		ms.file, err = ioutil.TempFile("", ms.filePrefix+"-")
+		ms.file, err = ioutil.TempFile(ms.tempDir, ms.filePrefix+"-")
 		if err != nil {
 			return
 		}

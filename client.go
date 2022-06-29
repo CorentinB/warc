@@ -2,6 +2,8 @@ package warc
 
 import (
 	"net/http"
+	"os"
+	"path"
 	"sync"
 )
 
@@ -15,6 +17,7 @@ type CustomHTTPClient struct {
 	skipHTTPStatusCodes []int
 	errChan             chan error
 	verifyCerts         bool
+	WARCTempDir         string
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -43,6 +46,19 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 	// Toggle verification of certificates
 	// InsecureSkipVerify expects the opposite of the verifyCerts flag, as such we flip it.
 	httpClient.verifyCerts = !verifyCerts
+
+	// Configure WARC temporary file directory from RotatorSettings.
+	if path.Dir(rotatorSettings.OutputDirectory) == "." {
+		// if, for example, like in the tests we are using a single path like "warcs", we should use an upper directory, like temp/
+		httpClient.WARCTempDir = "temp/"
+	} else {
+		httpClient.WARCTempDir = path.Join(rotatorSettings.OutputDirectory, "temp")
+	}
+
+	// Ensure the folder we are trying to write to, exists.
+	if _, err := os.Stat(httpClient.WARCTempDir); os.IsNotExist(err) {
+		os.MkdirAll(httpClient.WARCTempDir, os.ModePerm)
+	}
 
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
