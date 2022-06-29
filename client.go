@@ -2,8 +2,6 @@ package warc
 
 import (
 	"net/http"
-	"os"
-	"path"
 	"sync"
 )
 
@@ -29,7 +27,7 @@ func (c *CustomHTTPClient) Close() error {
 	return nil
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCodes []int, verifyCerts bool) (httpClient *CustomHTTPClient, err error, errChan chan error) {
+func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCodes []int, verifyCerts bool, WARCTempDir string) (httpClient *CustomHTTPClient, err error, errChan chan error) {
 	httpClient = new(CustomHTTPClient)
 
 	// Toggle deduplication options and create map for deduplication records.
@@ -47,18 +45,8 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 	// InsecureSkipVerify expects the opposite of the verifyCerts flag, as such we flip it.
 	httpClient.verifyCerts = !verifyCerts
 
-	// Configure WARC temporary file directory from RotatorSettings.
-	if path.Dir(rotatorSettings.OutputDirectory) == "." {
-		// if, for example, like in the tests we are using a single path like "warcs", we should use an upper directory, like temp/
-		httpClient.WARCTempDir = "temp/"
-	} else {
-		httpClient.WARCTempDir = path.Join(rotatorSettings.OutputDirectory, "temp")
-	}
-
-	// Ensure the folder we are trying to write to, exists.
-	if _, err := os.Stat(httpClient.WARCTempDir); os.IsNotExist(err) {
-		os.MkdirAll(httpClient.WARCTempDir, os.ModePerm)
-	}
+	// Configure WARC temporary file directory
+	httpClient.WARCTempDir = WARCTempDir
 
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
