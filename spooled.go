@@ -14,9 +14,9 @@ import (
 )
 
 // MaxInMemorySize is the max number of bytes
-// (currently 2MB) to hold in memory before starting
+// (currently 500KB) to hold in memory before starting
 // to write to disk
-const MaxInMemorySize = 2097152
+const MaxInMemorySize = 512000
 
 var spooledPool = sync.Pool{
 	New: func() interface{} {
