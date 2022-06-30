@@ -10,12 +10,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // MaxInMemorySize is the max number of bytes
 // (currently 2MB) to hold in memory before starting
 // to write to disk
-var MaxInMemorySize = 2097152
+const MaxInMemorySize = 2097152
+
+var spooledPool = sync.Pool{
+	New: func() interface{} {
+		return bytes.NewBuffer(nil)
+	},
+}
 
 // ReaderAt is the interface for ReadAt - read at position, without moving pointer.
 type ReaderAt interface {
@@ -41,6 +48,7 @@ type spooledTempFile struct {
 	tempDir         string
 	maxInMemorySize int
 	reading         bool // transitions at most once from false -> true
+	closed          bool
 }
 
 // ReadWriteSeekCloser is an io.Writer + io.Reader + io.Seeker + io.Closer.
@@ -57,11 +65,15 @@ func NewSpooledTempFile(filePrefix string, tempDir string) ReadWriteSeekCloser {
 	return &spooledTempFile{
 		filePrefix: filepath.Base(filePrefix),
 		tempDir:    tempDir,
-		buf:        new(bytes.Buffer),
+		buf:        spooledPool.Get().(*bytes.Buffer),
 	}
 }
 
 func (ms *spooledTempFile) prepareRead() error {
+	if ms.closed {
+		return io.EOF
+	}
+
 	if ms.reading && (ms.file != nil || ms.buf == nil || ms.mem != nil) {
 		return nil
 	}
@@ -117,6 +129,10 @@ func (ms *spooledTempFile) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
+	if ms.closed {
+		return 0, io.EOF
+	}
+
 	if ms.reading {
 		panic("write after read")
 	}
@@ -156,16 +172,18 @@ func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 }
 
 func (ms *spooledTempFile) Close() error {
-	f := ms.file
+	ms.closed = true
 
-	ms.file, ms.mem, ms.buf = nil, nil, nil
-	if f == nil {
+	ms.buf.Reset()
+	spooledPool.Put(ms.buf)
+
+	if ms.file == nil {
 		return nil
 	}
 
-	f.Close()
+	ms.file.Close()
 
-	if err := os.Remove(f.Name()); err != nil && !strings.Contains(err.Error(), "exist") {
+	if err := os.Remove(ms.file.Name()); err != nil && !strings.Contains(err.Error(), "exist") {
 		return err
 	}
 
