@@ -87,7 +87,6 @@ func (ms *spooledTempFile) prepareRead() error {
 	}
 
 	ms.mem = bytes.NewReader(ms.buf.Bytes())
-	ms.buf = nil
 
 	return nil
 }
@@ -159,7 +158,10 @@ func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 			return
 		}
 
+		ms.buf.Reset()
+		spooledPool.Put(ms.buf)
 		ms.buf = nil
+
 		if n, err = ms.file.Write(p); err != nil {
 			ms.file.Close()
 			ms.file = nil
@@ -173,9 +175,13 @@ func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
 
 func (ms *spooledTempFile) Close() error {
 	ms.closed = true
+	ms.mem = nil
 
-	ms.buf.Reset()
-	spooledPool.Put(ms.buf)
+	if ms.buf != nil {
+		ms.buf.Reset()
+		spooledPool.Put(ms.buf)
+		ms.buf = nil
+	}
 
 	if ms.file == nil {
 		return nil
@@ -186,6 +192,8 @@ func (ms *spooledTempFile) Close() error {
 	if err := os.Remove(ms.file.Name()); err != nil && !strings.Contains(err.Error(), "exist") {
 		return err
 	}
+
+	ms.file = nil
 
 	return nil
 }
