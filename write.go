@@ -105,7 +105,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 // WriteInfoRecord method can be used to write informations record to the WARC file
 func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, err error) {
 	// Initialize the record
-	infoRecord := NewRecord("")
+	infoRecord := NewRecord("", false)
 
 	// Set the headers
 	infoRecord.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339Nano))

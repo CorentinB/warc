@@ -13,6 +13,7 @@ type HTTPClientSettings struct {
 	SkipHTTPStatusCodes []int
 	VerifyCerts         bool
 	WARCTempDir         string
+	WARCOnDiskOnly      bool
 }
 
 type CustomHTTPClient struct {
@@ -26,6 +27,7 @@ type CustomHTTPClient struct {
 	errChan             chan error
 	verifyCerts         bool
 	WARCTempDir         string
+	WARCOnDiskOnly      bool
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -57,6 +59,9 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 
 	// Configure WARC temporary file directory
 	httpClient.WARCTempDir = HTTPClientSettings.WARCTempDir
+
+	// Configure if we are only storing responses only on disk or in memory and on disk.
+	httpClient.WARCOnDiskOnly = HTTPClientSettings.WARCOnDiskOnly
 
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
