@@ -5,6 +5,16 @@ import (
 	"sync"
 )
 
+type HTTPClientSettings struct {
+	RotatorSettings     *RotatorSettings
+	DedupeOptions       DedupeOptions
+	Proxy               string
+	DecompressBody      bool
+	SkipHTTPStatusCodes []int
+	VerifyCerts         bool
+	WARCTempDir         string
+}
+
 type CustomHTTPClient struct {
 	http.Client
 	WARCWriter          chan *RecordBatch
@@ -27,15 +37,15 @@ func (c *CustomHTTPClient) Close() error {
 	return nil
 }
 
-func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, decompressBody bool, dedupeOptions DedupeOptions, skipHTTPStatusCodes []int, verifyCerts bool, WARCTempDir string) (httpClient *CustomHTTPClient, err error, errChan chan error) {
+func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient *CustomHTTPClient, errChan chan error, err error) {
 	httpClient = new(CustomHTTPClient)
 
 	// Toggle deduplication options and create map for deduplication records.
-	httpClient.dedupeOptions = dedupeOptions
+	httpClient.dedupeOptions = HTTPClientSettings.DedupeOptions
 	httpClient.dedupeHashTable = new(sync.Map)
 
 	// Configure HTTP status code skipping (usually 429)
-	httpClient.skipHTTPStatusCodes = skipHTTPStatusCodes
+	httpClient.skipHTTPStatusCodes = HTTPClientSettings.SkipHTTPStatusCodes
 
 	// Create an error channel for sending WARC errors through
 	errChan = make(chan error)
@@ -43,18 +53,18 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 
 	// Toggle verification of certificates
 	// InsecureSkipVerify expects the opposite of the verifyCerts flag, as such we flip it.
-	httpClient.verifyCerts = !verifyCerts
+	httpClient.verifyCerts = !HTTPClientSettings.VerifyCerts
 
 	// Configure WARC temporary file directory
-	httpClient.WARCTempDir = WARCTempDir
+	httpClient.WARCTempDir = HTTPClientSettings.WARCTempDir
 
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(sync.WaitGroup)
 
 	// Configure WARC writer
-	httpClient.WARCWriter, httpClient.WARCWriterFinish, err = rotatorSettings.NewWARCRotator()
+	httpClient.WARCWriter, httpClient.WARCWriterFinish, err = HTTPClientSettings.RotatorSettings.NewWARCRotator()
 	if err != nil {
-		return nil, err, errChan
+		return nil, errChan, err
 	}
 
 	// Configure HTTP client
@@ -64,12 +74,12 @@ func NewWARCWritingHTTPClient(rotatorSettings *RotatorSettings, proxy string, de
 
 	// Configure custom dialer / transport
 	customDialer := newCustomDialer(httpClient)
-	customTransport, err := newCustomTransport(customDialer, proxy, decompressBody)
+	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.Proxy, HTTPClientSettings.DecompressBody)
 	if err != nil {
-		return nil, err, errChan
+		return nil, errChan, err
 	}
 
 	httpClient.Transport = customTransport
 
-	return httpClient, nil, errChan
+	return httpClient, errChan, nil
 }
