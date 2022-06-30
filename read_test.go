@@ -33,8 +33,10 @@ func testFileHash(t *testing.T, path string) {
 
 		hash := fmt.Sprintf("sha1:%s", GetSHA1(record.Content))
 		if hash != record.Header["WARC-Block-Digest"] {
+			record.Content.Close()
 			t.Fatalf("expected %s, got %s", record.Header.Get("WARC-Block-Digest"), hash)
 		}
+		record.Content.Close()
 	}
 }
 
@@ -100,16 +102,19 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 		}
 
 		if err != nil {
+			record.Content.Close()
 			t.Fatalf("warc.ReadRecord failed: %v", err)
 			break
 		}
 
 		if record.Header.Get("WARC-Type") != "response" && record.Header.Get("WARC-Type") != "revisit" {
 			// We're not currently interesting in anything but response and revisit records at the moment.
+			record.Content.Close()
 			continue
 		}
 
 		if record.Header.Get("WARC-Payload-Digest") != hash {
+			record.Content.Close()
 			t.Fatalf("WARC-Payload-Digest doesn't match intended result %s != %s", record.Header.Get("WARC-Payload-Digest"), hash)
 		}
 
@@ -124,9 +129,11 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 		}
 
 		if badContentLength {
+			record.Content.Close()
 			t.Fatalf("Content-Length doesn't match intended result %s != %s", record.Header.Get("Content-Length"), expectedContentLength)
 		}
 
+		record.Content.Close()
 		totalRead++
 	}
 	return -1
