@@ -134,9 +134,14 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 	err := errs.Wait()
 	close(recordChan)
-
 	if err != nil {
 		d.client.errChan <- err
+
+		// Make sure we close the WARC content buffers
+		for _, record := range batch.Records {
+			record.Content.Close()
+		}
+
 		return
 	}
 
@@ -147,6 +152,12 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 	if len(batch.Records) != 2 {
 		d.client.errChan <- errors.New("warc: there was an unspecified problem creating one of the WARC records")
+
+		// Make sure we close the WARC content buffers
+		for _, record := range batch.Records {
+			record.Content.Close()
+		}
+
 		return
 	}
 
@@ -189,8 +200,6 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	d.client.WARCWriter <- batch
-
-	return
 }
 
 func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
