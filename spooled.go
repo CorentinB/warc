@@ -8,15 +8,14 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 )
 
 // MaxInMemorySize is the max number of bytes
-// (currently 500KB) to hold in memory before starting
+// (currently 1MB) to hold in memory before starting
 // to write to disk
-const MaxInMemorySize = 512000
+const MaxInMemorySize = 1024000
 
 var spooledPool = sync.Pool{
 	New: func() interface{} {
@@ -63,144 +62,144 @@ type ReadWriteSeekCloser interface {
 // Write is forbidden, will return an error.
 func NewSpooledTempFile(filePrefix string, tempDir string) ReadWriteSeekCloser {
 	return &spooledTempFile{
-		filePrefix: filepath.Base(filePrefix),
+		filePrefix: filePrefix,
 		tempDir:    tempDir,
 		buf:        spooledPool.Get().(*bytes.Buffer),
 	}
 }
 
-func (ms *spooledTempFile) prepareRead() error {
-	if ms.closed {
+func (s *spooledTempFile) prepareRead() error {
+	if s.closed {
 		return io.EOF
 	}
 
-	if ms.reading && (ms.file != nil || ms.buf == nil || ms.mem != nil) {
+	if s.reading && (s.file != nil || s.buf == nil || s.mem != nil) {
 		return nil
 	}
 
-	ms.reading = true
-	if ms.file != nil {
-		if _, err := ms.file.Seek(0, 0); err != nil {
-			return fmt.Errorf("file=%v: %w", ms.file, err)
+	s.reading = true
+	if s.file != nil {
+		if _, err := s.file.Seek(0, 0); err != nil {
+			return fmt.Errorf("file=%v: %w", s.file, err)
 		}
 		return nil
 	}
 
-	ms.mem = bytes.NewReader(ms.buf.Bytes())
+	s.mem = bytes.NewReader(s.buf.Bytes())
 
 	return nil
 }
 
-func (ms *spooledTempFile) Read(p []byte) (n int, err error) {
-	if err := ms.prepareRead(); err != nil {
+func (s *spooledTempFile) Read(p []byte) (n int, err error) {
+	if err := s.prepareRead(); err != nil {
 		return 0, err
 	}
 
-	if ms.file != nil {
-		return ms.file.Read(p)
+	if s.file != nil {
+		return s.file.Read(p)
 	}
 
-	return ms.mem.Read(p)
+	return s.mem.Read(p)
 }
 
-func (ms *spooledTempFile) ReadAt(p []byte, off int64) (n int, err error) {
-	if err := ms.prepareRead(); err != nil {
+func (s *spooledTempFile) ReadAt(p []byte, off int64) (n int, err error) {
+	if err := s.prepareRead(); err != nil {
 		return 0, err
 	}
 
-	if ms.file != nil {
-		return ms.file.ReadAt(p, off)
+	if s.file != nil {
+		return s.file.ReadAt(p, off)
 	}
 
-	return ms.mem.ReadAt(p, off)
+	return s.mem.ReadAt(p, off)
 }
 
-func (ms *spooledTempFile) Seek(offset int64, whence int) (int64, error) {
-	if err := ms.prepareRead(); err != nil {
+func (s *spooledTempFile) Seek(offset int64, whence int) (int64, error) {
+	if err := s.prepareRead(); err != nil {
 		return 0, err
 	}
 
-	if ms.file != nil {
-		return ms.file.Seek(offset, whence)
+	if s.file != nil {
+		return s.file.Seek(offset, whence)
 	}
 
-	return ms.mem.Seek(offset, whence)
+	return s.mem.Seek(offset, whence)
 }
 
-func (ms *spooledTempFile) Write(p []byte) (n int, err error) {
-	if ms.closed {
+func (s *spooledTempFile) Write(p []byte) (n int, err error) {
+	if s.closed {
 		return 0, io.EOF
 	}
 
-	if ms.reading {
+	if s.reading {
 		panic("write after read")
 	}
 
-	if ms.file != nil {
-		n, err = ms.file.Write(p)
+	if s.file != nil {
+		n, err = s.file.Write(p)
 		return
 	}
 
-	if ms.maxInMemorySize <= 0 {
-		ms.maxInMemorySize = MaxInMemorySize
+	if s.maxInMemorySize <= 0 {
+		s.maxInMemorySize = MaxInMemorySize
 	}
 
-	if ms.buf.Len()+len(p) > ms.maxInMemorySize {
-		ms.file, err = ioutil.TempFile(ms.tempDir, ms.filePrefix+"-")
+	if s.buf.Len()+len(p) > s.maxInMemorySize {
+		s.file, err = ioutil.TempFile(s.tempDir, s.filePrefix+"-")
 		if err != nil {
 			return
 		}
 
-		_, err = io.Copy(ms.file, ms.buf)
+		_, err = io.Copy(s.file, s.buf)
 		if err != nil {
-			ms.file.Close()
-			ms.file = nil
+			s.file.Close()
+			s.file = nil
 			return
 		}
 
-		ms.buf.Reset()
-		spooledPool.Put(ms.buf)
-		ms.buf = nil
+		s.buf.Reset()
+		spooledPool.Put(s.buf)
+		s.buf = nil
 
-		if n, err = ms.file.Write(p); err != nil {
-			ms.file.Close()
-			ms.file = nil
+		if n, err = s.file.Write(p); err != nil {
+			s.file.Close()
+			s.file = nil
 		}
 
 		return
 	}
 
-	return ms.buf.Write(p)
+	return s.buf.Write(p)
 }
 
-func (ms *spooledTempFile) Close() error {
-	ms.closed = true
-	ms.mem = nil
+func (s *spooledTempFile) Close() error {
+	s.closed = true
+	s.mem = nil
 
-	if ms.buf != nil {
-		ms.buf.Reset()
-		spooledPool.Put(ms.buf)
-		ms.buf = nil
+	if s.buf != nil {
+		s.buf.Reset()
+		spooledPool.Put(s.buf)
+		s.buf = nil
 	}
 
-	if ms.file == nil {
+	if s.file == nil {
 		return nil
 	}
 
-	ms.file.Close()
+	s.file.Close()
 
-	if err := os.Remove(ms.file.Name()); err != nil && !strings.Contains(err.Error(), "exist") {
+	if err := os.Remove(s.file.Name()); err != nil && !strings.Contains(err.Error(), "exist") {
 		return err
 	}
 
-	ms.file = nil
+	s.file = nil
 
 	return nil
 }
 
-func (ms *spooledTempFile) FileName() string {
-	if ms.file != nil {
-		return ms.file.Name()
+func (s *spooledTempFile) FileName() string {
+	if s.file != nil {
+		return s.file.Name()
 	} else {
 		return ""
 	}
