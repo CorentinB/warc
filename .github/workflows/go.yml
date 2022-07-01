@@ -21,9 +21,9 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Test
-      continue-on-error: true
-      run: go test -race -v ./...
-
     - name: Goroutine leak detector
+      continue-on-error: true
       run: go test -c -o tests && for test in $(go test -list . | grep -E "^(Test|Example)"); do ./tests -test.run "^$test\$" &>/dev/null && echo -e "$test passed\n" || echo -e "$test failed\n"; done
+
+    - name: Test
+      run: go test -race -v ./...

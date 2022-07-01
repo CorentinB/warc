@@ -59,10 +59,12 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	httpClient.verifyCerts = !HTTPClientSettings.VerifyCerts
 
 	// Configure WARC temporary file directory
-	httpClient.TempDir = HTTPClientSettings.TempDir
-	err = os.MkdirAll(httpClient.TempDir, os.ModePerm)
-	if err != nil {
-		return nil, errChan, err
+	if HTTPClientSettings.TempDir != "" {
+		httpClient.TempDir = HTTPClientSettings.TempDir
+		err = os.MkdirAll(httpClient.TempDir, os.ModePerm)
+		if err != nil {
+			return nil, errChan, err
+		}
 	}
 
 	// Configure if we are only storing responses only on disk or in memory and on disk.
