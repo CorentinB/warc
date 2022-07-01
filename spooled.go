@@ -60,11 +60,19 @@ type ReadWriteSeekCloser interface {
 // with some important constraints:
 // you can Write into it, but whenever you call Read or Seek on it,
 // Write is forbidden, will return an error.
-func NewSpooledTempFile(filePrefix string, tempDir string) ReadWriteSeekCloser {
+func NewSpooledTempFile(filePrefix string, tempDir string, onDiskOnly bool) ReadWriteSeekCloser {
+	specifiedMaxInMemorySize := MaxInMemorySize
+
+	// If we are trying to write only to disk, we are going to set MaxInMemory to 1 (because we have to be bigger than 0)
+	if onDiskOnly {
+		specifiedMaxInMemorySize = 1
+	}
+
 	return &spooledTempFile{
-		filePrefix: filePrefix,
-		tempDir:    tempDir,
-		buf:        spooledPool.Get().(*bytes.Buffer),
+		filePrefix:      filePrefix,
+		tempDir:         tempDir,
+		buf:             spooledPool.Get().(*bytes.Buffer),
+		maxInMemorySize: specifiedMaxInMemorySize,
 	}
 }
 

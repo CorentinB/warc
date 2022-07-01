@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-func TestWARCWritingWithHTTPClient(t *testing.T) {
+func TestHTTPClient(t *testing.T) {
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -80,7 +80,7 @@ func TestWARCWritingWithHTTPClient(t *testing.T) {
 	}
 }
 
-func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
+func TestHTTPClientConcurrent(t *testing.T) {
 	// init test HTTP endpoint
 	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
 	if err != nil {
@@ -168,7 +168,7 @@ func TestConcurrentWARCWritingWithHTTPClient(t *testing.T) {
 	}
 }
 
-func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
+func TestHTTPClientLocalDedupe(t *testing.T) {
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -240,7 +240,7 @@ func TestWARCWritingWithHTTPClientLocalDedupe(t *testing.T) {
 	}
 }
 
-func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
+func TestHTTPClientRemoteDedupe(t *testing.T) {
 	var (
 		dedupePath = "/web/timemap/cdx"
 		dedupeResp = "org,wikimedia,upload)/wikipedia/commons/5/55/blason_ville_fr_sarlat-la-can%c3%a9da_(dordogne).svg 20220320002518 https://upload.wikimedia.org/wikipedia/commons/5/55/Blason_ville_fr_Sarlat-la-Can%C3%A9da_%28Dordogne%29.svg image/svg+xml 200 UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3 13974"
@@ -328,7 +328,7 @@ func TestWARCWritingWithHTTPClientRemoteDedupe(t *testing.T) {
 	}
 }
 
-func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
+func TestHTTPClientDisallow429(t *testing.T) {
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -397,7 +397,7 @@ func TestWARCWritingWithHTTPClientDisallow429(t *testing.T) {
 	}
 }
 
-func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
+func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
@@ -460,7 +460,7 @@ func TestWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	}
 }
 
-func TestConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
+func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
@@ -555,7 +555,7 @@ func TestConcurrentWARCWritingWithHTTPClientLargerThan2MB(t *testing.T) {
 	}
 }
 
-func TestWARCWritingWithSelfSignedCertificateWithHTTPClient(t *testing.T) {
+func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 	// init test (self-signed) HTTPS endpoint
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -618,7 +618,7 @@ func TestWARCWritingWithSelfSignedCertificateWithHTTPClient(t *testing.T) {
 	}
 }
 
-func TestWARCWritingWithDisallowedCertificateWithHTTPClient(t *testing.T) {
+func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 	// init test (self-signed) HTTPS endpoint
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -662,7 +662,7 @@ func TestWARCWritingWithDisallowedCertificateWithHTTPClient(t *testing.T) {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		if !strings.Contains(err.Error(), "certificate signed by unknown authority") {
+		if !strings.Contains(err.Error(), "certificate is not trusted") {
 			t.Fatal(err)
 		}
 	} else {
@@ -680,6 +680,71 @@ func TestWARCWritingWithDisallowedCertificateWithHTTPClient(t *testing.T) {
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if certificates aren't being verified correctly.
 		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0)
+		os.Remove(path)
+	}
+}
+
+func TestHTTPClientFullOnDisk(t *testing.T) {
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Write(fileBytes)
+	}))
+	defer server.Close()
+
+	// init WARC client
+	var (
+		rotatorSettings = NewRotatorSettings()
+		err             error
+	)
+
+	rotatorSettings.OutputDirectory = "warcs"
+	rotatorSettings.Compression = "GZIP"
+	rotatorSettings.Prefix = "TEST"
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, errChan, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings, FullOnDisk: true})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	var errWg sync.WaitGroup
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for err := range errChan {
+			t.Errorf("Error writing to WARC: %s", err)
+		}
+	}()
+
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	io.Copy(io.Discard, resp.Body)
+
+	httpClient.Close()
+
+	files, err := filepath.Glob("warcs/TEST-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
 		os.Remove(path)
 	}
 }
