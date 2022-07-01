@@ -195,7 +195,6 @@ func (s *spooledTempFile) Close() error {
 	}
 
 	s.file.Close()
-	println(s.file.Name())
 
 	if err := os.Remove(s.file.Name()); err != nil && !strings.Contains(err.Error(), "exist") {
 		return err
