@@ -662,7 +662,7 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		if !strings.Contains(err.Error(), "certificate is not trusted") {
+		if !strings.Contains(err.Error(), "certificate signed by unknown authority") {
 			t.Fatal(err)
 		}
 	} else {
