@@ -2,6 +2,7 @@ package warc
 
 import (
 	"net/http"
+	"os"
 	"sync"
 )
 
@@ -59,6 +60,10 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 
 	// Configure WARC temporary file directory
 	httpClient.TempDir = HTTPClientSettings.TempDir
+	err = os.MkdirAll(httpClient.TempDir, os.ModePerm)
+	if err != nil {
+		return nil, errChan, err
+	}
 
 	// Configure if we are only storing responses only on disk or in memory and on disk.
 	httpClient.FullOnDisk = HTTPClientSettings.FullOnDisk

@@ -47,6 +47,8 @@ type Record struct {
 // 	CLRF
 // 	CLRF
 func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
+	defer r.Content.Close()
+
 	// Add the mandatories headers
 	if r.Header.Get("WARC-Date") == "" {
 		r.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339Nano))
@@ -96,8 +98,6 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 
 	// Flush data
 	w.FileWriter.Flush()
-
-	r.Content.Close()
 
 	return recordID, nil
 }
