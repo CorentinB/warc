@@ -195,7 +195,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	// Initialize the response record
-	var responseRecord = NewRecord(d.client.WARCTempDir, d.client.WARCOnDiskOnly)
+	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
 	responseRecord.Header.Set("WARC-Type", "response")
 	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
@@ -303,7 +303,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		}
 
 		// Write the data up until the end of the headers to a temporary buffer
-		tempBuffer := NewSpooledTempFile("warc", d.client.WARCTempDir, d.client.WARCOnDiskOnly)
+		tempBuffer := NewSpooledTempFile("warc", d.client.TempDir, d.client.FullOnDisk)
 		block = make([]byte, 1)
 		wrote := 0
 		responseRecord.Content.Seek(0, 0)
@@ -344,7 +344,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	var (
 		warcTargetURI = scheme + "://"
-		requestRecord = NewRecord(d.client.WARCTempDir, d.client.WARCOnDiskOnly)
+		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
 	)
 
 	// Initialize the request record
