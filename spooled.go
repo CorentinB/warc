@@ -4,11 +4,11 @@ package warc
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
-	"strings"
 	"sync"
 )
 
@@ -45,6 +45,7 @@ type spooledTempFile struct {
 	file            *os.File
 	filePrefix      string
 	tempDir         string
+	fullOnDisk      bool
 	maxInMemorySize int
 	reading         bool // transitions at most once from false -> true
 	closed          bool
@@ -60,19 +61,13 @@ type ReadWriteSeekCloser interface {
 // with some important constraints:
 // you can Write into it, but whenever you call Read or Seek on it,
 // Write is forbidden, will return an error.
-func NewSpooledTempFile(filePrefix string, tempDir string, onDiskOnly bool) ReadWriteSeekCloser {
-	specifiedMaxInMemorySize := MaxInMemorySize
-
-	// If we are trying to write only to disk, we are going to set MaxInMemory to 1 (because we have to be bigger than 0)
-	if onDiskOnly {
-		specifiedMaxInMemorySize = 1
-	}
-
+func NewSpooledTempFile(filePrefix string, tempDir string, fullOnDisk bool) ReadWriteSeekCloser {
 	return &spooledTempFile{
 		filePrefix:      filePrefix,
 		tempDir:         tempDir,
 		buf:             spooledPool.Get().(*bytes.Buffer),
-		maxInMemorySize: specifiedMaxInMemorySize,
+		maxInMemorySize: MaxInMemorySize,
+		fullOnDisk:      fullOnDisk,
 	}
 }
 
@@ -148,11 +143,7 @@ func (s *spooledTempFile) Write(p []byte) (n int, err error) {
 		return
 	}
 
-	if s.maxInMemorySize <= 0 {
-		s.maxInMemorySize = MaxInMemorySize
-	}
-
-	if s.buf.Len()+len(p) > s.maxInMemorySize {
+	if (s.buf.Len()+len(p) > s.maxInMemorySize) || s.fullOnDisk {
 		s.file, err = ioutil.TempFile(s.tempDir, s.filePrefix+"-")
 		if err != nil {
 			return
@@ -196,7 +187,7 @@ func (s *spooledTempFile) Close() error {
 
 	s.file.Close()
 
-	if err := os.Remove(s.file.Name()); err != nil && !strings.Contains(err.Error(), "exist") {
+	if err := os.Remove(s.file.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 

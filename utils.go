@@ -82,10 +82,10 @@ func NewWriter(writer io.Writer, fileName string, compression string) (*Writer, 
 }
 
 // NewRecord creates a new WARC record.
-func NewRecord(tempDir string, onDiskOnly bool) *Record {
+func NewRecord(tempDir string, fullOnDisk bool) *Record {
 	return &Record{
 		Header:  NewHeader(),
-		Content: NewSpooledTempFile("warc", tempDir, onDiskOnly),
+		Content: NewSpooledTempFile("warc", tempDir, fullOnDisk),
 	}
 }
 

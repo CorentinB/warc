@@ -55,10 +55,7 @@ func readUntilDelim(r reader, delim []byte) (line []byte, err error) {
 	}
 }
 
-// ReadRecord reads the next record from the opened WARC file.
-// If onDisk is set to true, then the record's payload will be
-// written to a temp file on disk, and specified in the *Record.PayloadPath,
-// else, everything happen in memory.
+// ReadRecord reads the next record from the opened WARC file
 func (r *Reader) ReadRecord() (*Record, error) {
 	var (
 		err        error
