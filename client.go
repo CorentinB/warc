@@ -21,7 +21,7 @@ type CustomHTTPClient struct {
 	http.Client
 	WARCWriter          chan *RecordBatch
 	WARCWriterFinish    chan bool
-	WaitGroup           *sync.WaitGroup
+	WaitGroup           *WaitGroupWithCount
 	dedupeHashTable     *sync.Map
 	dedupeOptions       DedupeOptions
 	skipHTTPStatusCodes []int
@@ -71,7 +71,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	httpClient.FullOnDisk = HTTPClientSettings.FullOnDisk
 
 	// Configure the waitgroup
-	httpClient.WaitGroup = new(sync.WaitGroup)
+	httpClient.WaitGroup = new(WaitGroupWithCount)
 
 	// Configure WARC writer
 	httpClient.WARCWriter, httpClient.WARCWriterFinish, err = HTTPClientSettings.RotatorSettings.NewWARCRotator()
