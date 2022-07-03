@@ -662,7 +662,8 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		if !strings.Contains(err.Error(), "certificate signed by unknown authority") {
+		// There are multiple different strings for x509 running into an invalid certificate and changes per OS.
+		if !strings.Contains(err.Error(), "x509: certificate") {
 			t.Fatal(err)
 		}
 	} else {
@@ -706,7 +707,7 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 
 	rotatorSettings.OutputDirectory = "warcs"
 	rotatorSettings.Compression = "GZIP"
-	rotatorSettings.Prefix = "TEST"
+	rotatorSettings.Prefix = "TESTONDISK"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, errChan, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings, FullOnDisk: true})
@@ -738,7 +739,7 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/TEST-*")
+	files, err := filepath.Glob("warcs/TESTONDISK-*")
 	if err != nil {
 		t.Fatal(err)
 	}
