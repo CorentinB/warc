@@ -136,9 +136,8 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	close(recordChan)
 	if err != nil {
 		d.client.errChan <- err
-
 		// Make sure we close the WARC content buffers
-		for _, record := range batch.Records {
+		for record := range recordChan {
 			record.Content.Close()
 		}
 
