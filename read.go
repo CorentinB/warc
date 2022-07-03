@@ -3,8 +3,9 @@ package warc
 import (
 	"bufio"
 	"bytes"
-	"compress/gzip"
 	"io"
+
+	gzip "github.com/klauspost/compress/gzip"
 )
 
 // Reader store the bufio.Reader and gzip.Reader for a WARC file
