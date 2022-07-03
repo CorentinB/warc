@@ -3,7 +3,6 @@ package warc
 import (
 	"bufio"
 	"bytes"
-	"compress/gzip"
 	"crypto/sha1"
 	"encoding/base32"
 	"errors"
@@ -13,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	gzip "github.com/klauspost/compress/gzip"
 
 	"github.com/klauspost/compress/zstd"
 )

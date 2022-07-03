@@ -2,12 +2,13 @@ package warc
 
 import (
 	"bufio"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 	"time"
+
+	gzip "github.com/klauspost/compress/gzip"
 
 	"github.com/klauspost/compress/zstd"
 	uuid "github.com/satori/go.uuid"

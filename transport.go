@@ -1,11 +1,12 @@
 package warc
 
 import (
-	"compress/gzip"
 	"crypto/tls"
 	"net/http"
 	"net/url"
 	"time"
+
+	gzip "github.com/klauspost/compress/gzip"
 )
 
 type customTransport struct {
