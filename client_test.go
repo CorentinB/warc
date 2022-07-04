@@ -260,8 +260,13 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	totalRead := 0
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, -1)
+		totalRead += testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, -1)
+	}
+
+	if totalRead != concurrency {
+		t.Fatalf("unexpected number of records read, read: %d but expected: %d", totalRead, concurrency)
 	}
 }
 
