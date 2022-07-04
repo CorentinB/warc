@@ -154,6 +154,10 @@ func checkRotatorSettings(settings *RotatorSettings) (err error) {
 		}
 	}
 
+	if settings.WARCWriterPoolSize == 0 {
+		settings.WARCWriterPoolSize = 1
+	}
+
 	// Add a trailing slash to the output directory
 	if settings.OutputDirectory[len(settings.OutputDirectory)-1:] != "/" {
 		settings.OutputDirectory = settings.OutputDirectory + "/"

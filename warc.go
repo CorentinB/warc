@@ -24,6 +24,8 @@ type RotatorSettings struct {
 	// Directory where the created WARC files will be stored,
 	// default will be the current directory
 	OutputDirectory string
+	// WARCWriterPoolSize defines the number of parallel WARC writers
+	WARCWriterPoolSize int
 }
 
 // Create mutex to ensure we are generating WARC files one at a time and not naming them the same thing.
@@ -32,21 +34,23 @@ var fileMutex sync.Mutex
 // NewWARCRotator creates and return a channel that can be used
 // to communicate records to be written to WARC files to the
 // recordWriter function running in a goroutine
-func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *RecordBatch, done chan bool, err error) {
-	recordWriterChannel = make(chan *RecordBatch, 1)
-	done = make(chan bool)
+func (s *RotatorSettings) NewWARCRotator() (recordWriterChan chan *RecordBatch, doneChannels []chan bool, err error) {
+	recordWriterChan = make(chan *RecordBatch, 1)
 
-	// Check the rotator settings, also set default values
+	// Check the rotator settings and set default values
 	err = checkRotatorSettings(s)
 	if err != nil {
-		return recordWriterChannel, done, err
+		return recordWriterChan, doneChannels, err
 	}
 
-	// Start the record writer in a goroutine
-	// TODO: support for pool of recordWriter?
-	go recordWriter(s, recordWriterChannel, done)
+	for i := 0; i < s.WARCWriterPoolSize; i++ {
+		doneChan := make(chan bool)
+		doneChannels = append(doneChannels, doneChan)
 
-	return recordWriterChannel, done, nil
+		go recordWriter(s, recordWriterChan, doneChan)
+	}
+
+	return recordWriterChan, doneChannels, nil
 }
 
 func (w *Writer) CloseCompressedWriter() {

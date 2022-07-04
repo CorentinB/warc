@@ -173,6 +173,98 @@ func TestHTTPClientConcurrent(t *testing.T) {
 	}
 }
 
+func TestHTTPClientMultiWARCWriters(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		concurrency     = 256
+		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
+		errChan         = make(chan error, concurrency)
+	)
+
+	// init test HTTP endpoint
+	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "image/svg+xml")
+		_, _ = w.Write(fileBytes)
+	}))
+	defer server.Close()
+
+	// init WARC rotator settings
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "MWW"
+	rotatorSettings.WARCWriterPoolSize = 8
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, errorChannel, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for err := range errorChannel {
+			t.Errorf("Error writing to WARC: %s", err)
+		}
+	}()
+
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			defer wg.Done()
+
+			req, err := http.NewRequest("GET", server.URL, nil)
+			req.Close = true
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			defer resp.Body.Close()
+
+			io.Copy(io.Discard, resp.Body)
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	for err := range errChan {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	httpClient.Close()
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, -1)
+	}
+}
+
 func TestHTTPClientLocalDedupe(t *testing.T) {
 	var (
 		rotatorSettings = NewRotatorSettings()

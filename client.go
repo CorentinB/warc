@@ -19,24 +19,36 @@ type HTTPClientSettings struct {
 
 type CustomHTTPClient struct {
 	http.Client
-	WARCWriter          chan *RecordBatch
-	WARCWriterFinish    chan bool
-	WaitGroup           *WaitGroupWithCount
-	dedupeHashTable     *sync.Map
-	dedupeOptions       DedupeOptions
-	skipHTTPStatusCodes []int
-	errChan             chan error
-	verifyCerts         bool
-	TempDir             string
-	FullOnDisk          bool
+	WARCWriter             chan *RecordBatch
+	WARCWriterDoneChannels []chan bool
+	WaitGroup              *WaitGroupWithCount
+	dedupeHashTable        *sync.Map
+	dedupeOptions          DedupeOptions
+	skipHTTPStatusCodes    []int
+	errChan                chan error
+	verifyCerts            bool
+	TempDir                string
+	FullOnDisk             bool
 }
 
 func (c *CustomHTTPClient) Close() error {
+	var wg sync.WaitGroup
 	c.WaitGroup.Wait()
 	c.CloseIdleConnections()
+
 	close(c.WARCWriter)
-	<-c.WARCWriterFinish
+
+	wg.Add(len(c.WARCWriterDoneChannels))
+	for _, doneChan := range c.WARCWriterDoneChannels {
+		go func(done chan bool) {
+			defer wg.Done()
+			<-done
+		}(doneChan)
+	}
+
+	wg.Wait()
 	close(c.errChan)
+
 	return nil
 }
 
@@ -74,7 +86,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	httpClient.WaitGroup = new(WaitGroupWithCount)
 
 	// Configure WARC writer
-	httpClient.WARCWriter, httpClient.WARCWriterFinish, err = HTTPClientSettings.RotatorSettings.NewWARCRotator()
+	httpClient.WARCWriter, httpClient.WARCWriterDoneChannels, err = HTTPClientSettings.RotatorSettings.NewWARCRotator()
 	if err != nil {
 		return nil, errChan, err
 	}
