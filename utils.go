@@ -14,6 +14,7 @@ import (
 	"time"
 
 	gzip "github.com/klauspost/compress/gzip"
+	"github.com/klauspost/pgzip"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -50,10 +51,29 @@ func splitKeyValue(line string) (string, string) {
 }
 
 // NewWriter creates a new WARC writer.
-func NewWriter(writer io.Writer, fileName string, compression string) (*Writer, error) {
+func NewWriter(writer io.Writer, fileName string, compression string, contentLengthHeader string) (*Writer, error) {
 	if compression != "" {
 		if compression == "GZIP" {
-			gzipWriter := gzip.NewWriter(writer)
+			var gzipWriter *gzip.Writer
+			// If the record's Content-Length is bigger than a megabyte, we use the parallel gzip library
+			if contentLengthHeader != "" {
+				contentLength, err := strconv.Atoi(contentLengthHeader)
+				if err != nil {
+					return nil, err
+				}
+
+				if contentLength > 1000000 {
+					pgzipWriter := pgzip.NewWriter(writer)
+					return &Writer{
+						FileName:    fileName,
+						Compression: compression,
+						PGZIPWriter: pgzipWriter,
+						FileWriter:  bufio.NewWriter(pgzipWriter),
+					}, nil
+				}
+			}
+
+			gzipWriter = gzip.NewWriter(writer)
 			return &Writer{
 				FileName:    fileName,
 				Compression: compression,

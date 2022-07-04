@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	gzip "github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/pgzip"
 
 	"github.com/klauspost/compress/zstd"
 	uuid "github.com/satori/go.uuid"
@@ -16,11 +17,13 @@ import (
 
 // Writer writes WARC records to WARC files.
 type Writer struct {
-	FileName    string
-	Compression string
-	GZIPWriter  *gzip.Writer
-	ZSTDWriter  *zstd.Encoder
-	FileWriter  *bufio.Writer
+	FileName     string
+	Compression  string
+	GZIPWriter   *gzip.Writer
+	PGZIPWriter  *pgzip.Writer
+	ZSTDWriter   *zstd.Encoder
+	FileWriter   *bufio.Writer
+	ParallelGZIP bool
 }
 
 // RecordBatch is a structure that contains a bunch of

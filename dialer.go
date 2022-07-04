@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -187,9 +188,14 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		// Add WARC-Target-URI
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
 
-		// Add WARC-Block-Digest at this stage to avoid potential bottlenecks when adding WARC to file.
+		// Calculate WARC-Block-Digest and Content-Length
+		// Those 2 steps are done at this stage of the process ON PURPOSE, to take
+		// advantage of the parallelization context in which this function is called.
+		// That way, we reduce I/O bottleneck later when the record is at the "writing" step,
+		// because the actual WARC writing sequential, not parallel.
 		r.Content.Seek(0, 0)
 		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content))
+		r.Header.Set("Content-Length", strconv.Itoa(getContentLength(r.Content)))
 
 		if d.client.dedupeOptions.LocalDedupe {
 			if r.Header.Get("WARC-Type") == "response" {
