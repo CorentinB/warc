@@ -16,6 +16,12 @@ import (
 )
 
 func TestHTTPClient(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -29,14 +35,12 @@ func TestHTTPClient(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// init WARC client
-	var (
-		rotatorSettings = NewRotatorSettings()
-		err             error
-	)
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -45,7 +49,6 @@ func TestHTTPClient(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -69,18 +72,25 @@ func TestHTTPClient(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/TEST-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
-		os.Remove(path)
 	}
 }
 
 func TestHTTPClientConcurrent(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		concurrency     = 256
+		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
+		errChan         = make(chan error, concurrency)
+	)
+
 	// init test HTTP endpoint
 	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
 	if err != nil {
@@ -95,9 +105,12 @@ func TestHTTPClientConcurrent(t *testing.T) {
 	defer server.Close()
 
 	// init WARC rotator settings
-	rotatorSettings := NewRotatorSettings()
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
 	rotatorSettings.Prefix = "CONC"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -106,7 +119,6 @@ func TestHTTPClientConcurrent(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -114,12 +126,6 @@ func TestHTTPClientConcurrent(t *testing.T) {
 			t.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
-
-	var (
-		concurrency = 256
-		wg          sync.WaitGroup
-		errChan     = make(chan error, concurrency)
-	)
 
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
@@ -157,18 +163,120 @@ func TestHTTPClientConcurrent(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/CONC-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 256)
-		os.Remove(path)
+	}
+}
+
+func TestHTTPClientMultiWARCWriters(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		concurrency     = 256
+		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
+		errChan         = make(chan error, concurrency)
+	)
+
+	// init test HTTP endpoint
+	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "image/svg+xml")
+		_, _ = w.Write(fileBytes)
+	}))
+	defer server.Close()
+
+	// init WARC rotator settings
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "MWW"
+	rotatorSettings.WARCWriterPoolSize = 8
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, errorChannel, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for err := range errorChannel {
+			t.Errorf("Error writing to WARC: %s", err)
+		}
+	}()
+
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			defer wg.Done()
+
+			req, err := http.NewRequest("GET", server.URL, nil)
+			req.Close = true
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			defer resp.Body.Close()
+
+			io.Copy(io.Discard, resp.Body)
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	for err := range errChan {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	httpClient.Close()
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	totalRead := 0
+	for _, path := range files {
+		totalRead += testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, -1)
+	}
+
+	if totalRead != concurrency {
+		t.Fatalf("unexpected number of records read, read: %d but expected: %d", totalRead, concurrency)
 	}
 }
 
 func TestHTTPClientLocalDedupe(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -182,12 +290,12 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "DEDUP1"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -201,7 +309,6 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -229,21 +336,23 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/DEDUP1-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
-		os.Remove(path)
 	}
 }
 
 func TestHTTPClientRemoteDedupe(t *testing.T) {
 	var (
-		dedupePath = "/web/timemap/cdx"
-		dedupeResp = "org,wikimedia,upload)/wikipedia/commons/5/55/blason_ville_fr_sarlat-la-can%c3%a9da_(dordogne).svg 20220320002518 https://upload.wikimedia.org/wikipedia/commons/5/55/Blason_ville_fr_Sarlat-la-Can%C3%A9da_%28Dordogne%29.svg image/svg+xml 200 UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3 13974"
+		dedupePath      = "/web/timemap/cdx"
+		dedupeResp      = "org,wikimedia,upload)/wikipedia/commons/5/55/blason_ville_fr_sarlat-la-can%c3%a9da_(dordogne).svg 20220320002518 https://upload.wikimedia.org/wikipedia/commons/5/55/Blason_ville_fr_Sarlat-la-Can%C3%A9da_%28Dordogne%29.svg image/svg+xml 200 UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3 13974"
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
 	)
 	// init test HTTP endpoint
 	mux := http.NewServeMux()
@@ -268,12 +377,12 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "DEDUP2"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -289,7 +398,6 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -317,18 +425,23 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/DEDUP2-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
-		os.Remove(path)
 	}
 }
 
 func TestHTTPClientDisallow429(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -342,12 +455,12 @@ func TestHTTPClientDisallow429(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "TEST429"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -359,7 +472,6 @@ func TestHTTPClientDisallow429(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -385,7 +497,7 @@ func TestHTTPClientDisallow429(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/TEST429-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,14 +505,19 @@ func TestHTTPClientDisallow429(t *testing.T) {
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if 429s aren't being filtered correctly!
 		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0)
-		os.Remove(path)
 	}
 }
 
 func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -411,12 +528,12 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "TEST2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -425,7 +542,6 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -449,7 +565,7 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/TEST2MB-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,9 +577,18 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 }
 
 func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		err             error
+		concurrency     = 64
+		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
+		errChan         = make(chan error, concurrency)
+	)
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -474,12 +599,12 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "CONCTEST2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -488,7 +613,6 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -496,12 +620,6 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 			t.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
-
-	var (
-		concurrency = 64
-		wg          sync.WaitGroup
-		errChan     = make(chan error, concurrency)
-	)
 
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
@@ -539,7 +657,7 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/CONCTEST2MB-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -547,7 +665,6 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	totalRead := 0
 	for _, path := range files {
 		totalRead = testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", []string{"3096070"}, -1) + totalRead
-		os.Remove(path)
 	}
 
 	if totalRead != concurrency {
@@ -556,6 +673,12 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 }
 
 func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
 	// init test (self-signed) HTTPS endpoint
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -569,12 +692,12 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "TESTCERT1"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -583,7 +706,6 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -607,7 +729,7 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/TESTCERT1-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -619,6 +741,12 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 }
 
 func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
 	// init test (self-signed) HTTPS endpoint
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -632,12 +760,12 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "TESTCERT2"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -646,7 +774,6 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -673,7 +800,7 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/TESTCERT2-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -681,11 +808,15 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if certificates aren't being verified correctly.
 		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0)
-		os.Remove(path)
 	}
 }
 
 func TestHTTPClientFullOnDisk(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		err             error
+	)
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -699,14 +830,12 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// init WARC client
-	var (
-		rotatorSettings = NewRotatorSettings()
-		err             error
-	)
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
 	rotatorSettings.Prefix = "TESTONDISK"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -739,18 +868,23 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 
 	httpClient.Close()
 
-	files, err := filepath.Glob("warcs/TESTONDISK-*")
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
-		os.Remove(path)
 	}
 }
 
 func BenchmarkConcurrentUnder2MB(b *testing.B) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		wg              sync.WaitGroup
+		err             error
+	)
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
@@ -764,14 +898,18 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	}))
 	defer server.Close()
 
-	// init WARC client
-	var (
-		rotatorSettings = NewRotatorSettings()
-		err             error
-	)
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		b.Fatal(err)
+	}
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
+	defer func() {
+		err = os.RemoveAll(rotatorSettings.OutputDirectory)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}()
+
 	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -780,47 +918,48 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
-	errWg.Add(1)
+	wg.Add(1)
 	go func() {
-		defer errWg.Done()
+		defer wg.Done()
 		for err := range errChan {
 			b.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
+	wg.Add(b.N)
 	for n := 0; n < b.N; n++ {
+		go func() {
+			defer wg.Done()
 
-		req, err := http.NewRequest("GET", server.URL, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+			req, err := http.NewRequest("GET", server.URL, nil)
+			if err != nil {
+				errChan <- err
+			}
 
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			b.Fatal(err)
-		}
-		defer resp.Body.Close()
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				errChan <- err
+			}
+			defer resp.Body.Close()
 
-		io.Copy(io.Discard, resp.Body)
+			io.Copy(io.Discard, resp.Body)
+		}()
 	}
 
+	wg.Wait()
 	httpClient.Close()
-
-	files, err := filepath.Glob("warcs/TEST-*")
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	for _, path := range files {
-		os.Remove(path)
-	}
 }
 
 func BenchmarkConcurrentOver2MB(b *testing.B) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		wg              sync.WaitGroup
+		err             error
+	)
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -831,12 +970,18 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 	}))
 	defer server.Close()
 
-	// init WARC rotator settings
-	var rotatorSettings = NewRotatorSettings()
-	var err error
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		b.Fatal(err)
+	}
 
-	rotatorSettings.OutputDirectory = "warcs"
-	rotatorSettings.Compression = "GZIP"
+	defer func() {
+		err = os.RemoveAll(rotatorSettings.OutputDirectory)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}()
+
 	rotatorSettings.Prefix = "CONCTEST2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
@@ -845,40 +990,34 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
-	errWg.Add(1)
+	wg.Add(1)
 	go func() {
-		defer errWg.Done()
+		defer wg.Done()
 		for err := range errChan {
 			b.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
+	wg.Add(b.N)
 	for n := 0; n < b.N; n++ {
+		go func() {
+			defer wg.Done()
 
-		req, err := http.NewRequest("GET", server.URL, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+			req, err := http.NewRequest("GET", server.URL, nil)
+			if err != nil {
+				errChan <- err
+			}
 
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			b.Fatal(err)
-		}
-		defer resp.Body.Close()
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				errChan <- err
+			}
+			defer resp.Body.Close()
 
-		io.Copy(io.Discard, resp.Body)
-
+			io.Copy(io.Discard, resp.Body)
+		}()
 	}
 
+	wg.Wait()
 	httpClient.Close()
-
-	files, err := filepath.Glob("warcs/CONCTEST2MB-*")
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	for _, path := range files {
-		os.Remove(path)
-	}
 }

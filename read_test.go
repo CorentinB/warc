@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"testing"
 )
 
@@ -96,7 +95,7 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 				// We've read the expected amount and reached the end of the WARC file. Time to break out.
 				break
 			} else {
-				t.Fatalf("warc: unexpected number of records read. read: " + strconv.Itoa(totalRead) + " expected: " + strconv.Itoa(expectedTotal))
+				t.Fatalf("unexpected number of records read, read: %d but expected: %d", totalRead, expectedTotal)
 				return -1
 			}
 		}

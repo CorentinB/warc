@@ -24,6 +24,8 @@ type RotatorSettings struct {
 	// Directory where the created WARC files will be stored,
 	// default will be the current directory
 	OutputDirectory string
+	// WARCWriterPoolSize defines the number of parallel WARC writers
+	WARCWriterPoolSize int
 }
 
 // Create mutex to ensure we are generating WARC files one at a time and not naming them the same thing.
@@ -32,27 +34,41 @@ var fileMutex sync.Mutex
 // NewWARCRotator creates and return a channel that can be used
 // to communicate records to be written to WARC files to the
 // recordWriter function running in a goroutine
-func (s *RotatorSettings) NewWARCRotator() (recordWriterChannel chan *RecordBatch, done chan bool, err error) {
-	recordWriterChannel = make(chan *RecordBatch, 1)
-	done = make(chan bool)
+func (s *RotatorSettings) NewWARCRotator() (recordWriterChan chan *RecordBatch, doneChannels []chan bool, err error) {
+	recordWriterChan = make(chan *RecordBatch, 1)
 
-	// Check the rotator settings, also set default values
+	// Check the rotator settings and set default values
 	err = checkRotatorSettings(s)
 	if err != nil {
-		return recordWriterChannel, done, err
+		return recordWriterChan, doneChannels, err
 	}
 
-	// Start the record writer in a goroutine
-	// TODO: support for pool of recordWriter?
-	go recordWriter(s, recordWriterChannel, done)
+	for i := 0; i < s.WARCWriterPoolSize; i++ {
+		doneChan := make(chan bool)
+		doneChannels = append(doneChannels, doneChan)
 
-	return recordWriterChannel, done, nil
+		go recordWriter(s, recordWriterChan, doneChan)
+	}
+
+	return recordWriterChan, doneChannels, nil
+}
+
+func (w *Writer) CloseCompressedWriter() {
+	if w.GZIPWriter != nil {
+		w.GZIPWriter.Close()
+	} else if w.PGZIPWriter != nil {
+		w.PGZIPWriter.Close()
+	} else if w.ZSTDWriter != nil {
+		w.ZSTDWriter.Close()
+	}
 }
 
 func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool) {
-	var serial = 1
-	var currentFileName string = generateWarcFileName(settings.Prefix, settings.Compression, serial)
-	var currentWarcinfoRecordID string
+	var (
+		serial                  = 1
+		currentFileName         = generateWarcFileName(settings.Prefix, settings.Compression, serial)
+		currentWarcinfoRecordID string
+	)
 
 	// Ensure file doesn't already exist (and if it does, make a new one)
 	fileMutex.Lock()
@@ -70,7 +86,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	fileMutex.Unlock()
 
 	// Initialize WARC writer
-	warcWriter, err := NewWriter(warcFile, currentFileName, settings.Compression)
+	warcWriter, err := NewWriter(warcFile, currentFileName, settings.Compression, "")
 	if err != nil {
 		panic(err)
 	}
@@ -84,14 +100,14 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	// If compression is enabled, we close the record's GZIP chunk
 	if settings.Compression != "" {
 		if settings.Compression == "GZIP" {
-			warcWriter.GZIPWriter.Close()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
+			warcWriter.CloseCompressedWriter()
+			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "")
 			if err != nil {
 				panic(err)
 			}
 		} else if settings.Compression == "ZSTD" {
-			warcWriter.ZSTDWriter.Close()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
+			warcWriter.CloseCompressedWriter()
+			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "")
 			if err != nil {
 				panic(err)
 			}
@@ -112,11 +128,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				// We flush the data and close the file
 				warcWriter.FileWriter.Flush()
 				if settings.Compression != "" {
-					if settings.Compression == "GZIP" {
-						warcWriter.GZIPWriter.Close()
-					} else if settings.Compression == "ZSTD" {
-						warcWriter.ZSTDWriter.Close()
-					}
+					warcWriter.CloseCompressedWriter()
 				}
 				warcFile.Close()
 
@@ -129,7 +141,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				}
 
 				// Initialize new WARC writer
-				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
+				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "")
 				if err != nil {
 					panic(err)
 				}
@@ -143,17 +155,13 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 				// If compression is enabled, we close the record's GZIP chunk
 				if settings.Compression != "" {
-					if settings.Compression == "GZIP" {
-						warcWriter.GZIPWriter.Close()
-					} else if settings.Compression == "ZSTD" {
-						warcWriter.ZSTDWriter.Close()
-					}
+					warcWriter.CloseCompressedWriter()
 				}
 			}
 
 			// Write all the records of the record batch
 			for _, record := range recordBatch.Records {
-				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression)
+				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, record.Header.Get("Content-Length"))
 				if err != nil {
 					panic(err)
 				}
@@ -168,11 +176,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 				// If compression is enabled, we close the record's GZIP chunk
 				if settings.Compression != "" {
-					if settings.Compression == "GZIP" {
-						warcWriter.GZIPWriter.Close()
-					} else if settings.Compression == "ZSTD" {
-						warcWriter.ZSTDWriter.Close()
-					}
+					warcWriter.CloseCompressedWriter()
 				}
 			}
 			warcWriter.FileWriter.Flush()
@@ -185,11 +189,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 			// We flush the data, close the file, and rename it
 			warcWriter.FileWriter.Flush()
 			if settings.Compression != "" {
-				if settings.Compression == "GZIP" {
-					warcWriter.GZIPWriter.Close()
-				} else if settings.Compression == "ZSTD" {
-					warcWriter.ZSTDWriter.Close()
-				}
+				warcWriter.CloseCompressedWriter()
 			}
 			warcFile.Close()
 
