@@ -187,6 +187,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		// Add WARC-Target-URI
 		r.Header.Set("WARC-Target-URI", warcTargetURI)
 
+		// Add WARC-Block-Digest at this stage to avoid potential bottlenecks when adding WARC to file.
+		r.Content.Seek(0, 0)
+		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content))
+
 		if d.client.dedupeOptions.LocalDedupe {
 			if r.Header.Get("WARC-Type") == "response" {
 				d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
