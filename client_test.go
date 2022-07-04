@@ -420,7 +420,7 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -485,12 +485,13 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		err             error
 		concurrency     = 64
 		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
 		errChan         = make(chan error, concurrency)
 	)
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -515,7 +516,6 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	var errWg sync.WaitGroup
 	errWg.Add(1)
 	go func() {
 		defer errWg.Done()
@@ -784,7 +784,7 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	var (
 		rotatorSettings = NewRotatorSettings()
-		errWg           sync.WaitGroup
+		wg              sync.WaitGroup
 		err             error
 	)
 
@@ -821,43 +821,48 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	errWg.Add(1)
+	wg.Add(1)
 	go func() {
-		defer errWg.Done()
+		defer wg.Done()
 		for err := range errChan {
 			b.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
+	wg.Add(b.N)
 	for n := 0; n < b.N; n++ {
+		go func() {
+			defer wg.Done()
 
-		req, err := http.NewRequest("GET", server.URL, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+			req, err := http.NewRequest("GET", server.URL, nil)
+			if err != nil {
+				errChan <- err
+			}
 
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			b.Fatal(err)
-		}
-		defer resp.Body.Close()
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				errChan <- err
+			}
+			defer resp.Body.Close()
 
-		io.Copy(io.Discard, resp.Body)
+			io.Copy(io.Discard, resp.Body)
+		}()
 	}
 
+	wg.Wait()
 	httpClient.Close()
 }
 
 func BenchmarkConcurrentOver2MB(b *testing.B) {
 	var (
 		rotatorSettings = NewRotatorSettings()
-		errWg           sync.WaitGroup
+		wg              sync.WaitGroup
 		err             error
 	)
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "file_over_2mb.jpg"))
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -888,30 +893,34 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	errWg.Add(1)
+	wg.Add(1)
 	go func() {
-		defer errWg.Done()
+		defer wg.Done()
 		for err := range errChan {
 			b.Errorf("Error writing to WARC: %s", err)
 		}
 	}()
 
+	wg.Add(b.N)
 	for n := 0; n < b.N; n++ {
+		go func() {
+			defer wg.Done()
 
-		req, err := http.NewRequest("GET", server.URL, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+			req, err := http.NewRequest("GET", server.URL, nil)
+			if err != nil {
+				errChan <- err
+			}
 
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			b.Fatal(err)
-		}
-		defer resp.Body.Close()
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				errChan <- err
+			}
+			defer resp.Body.Close()
 
-		io.Copy(io.Discard, resp.Body)
-
+			io.Copy(io.Discard, resp.Body)
+		}()
 	}
 
+	wg.Wait()
 	httpClient.Close()
 }
