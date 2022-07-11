@@ -72,7 +72,7 @@ func getCustomTLSSpec() *tls.ClientHelloSpec {
 				tls.VersionTLS11,
 				tls.VersionTLS10,
 			}},
-			&tls.FakeCertCompressionAlgsExtension{Methods: []tls.CertCompressionAlgo{
+			&tls.UtlsCompressCertExtension{Algorithms: []tls.CertCompressionAlgo{
 				tls.CertCompressionBrotli,
 			}},
 			&tls.UtlsGREASEExtension{},
