@@ -3,7 +3,6 @@ package warc
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	tls "github.com/refraction-networking/utls"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/sync/errgroup"
 )
@@ -89,10 +89,12 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	serverName := address[:strings.LastIndex(address, ":")]
 	cfg.ServerName = serverName
 	cfg.InsecureSkipVerify = d.client.verifyCerts
-	cfg.PreferServerCipherSuites = false
-	cfg.CurvePreferences = []tls.CurveID{tls.CurveP256, tls.CurveP384, tls.CurveP521, tls.X25519}
 
-	tlsConn := tls.Client(plainConn, cfg)
+	tlsConn := tls.UClient(plainConn, cfg, tls.HelloCustom)
+
+	if err := tlsConn.ApplyPreset(getCustomTLSSpec()); err != nil {
+		return nil, err
+	}
 
 	errc := make(chan error, 2)
 	timer := time.AfterFunc(time.Second, func() {
