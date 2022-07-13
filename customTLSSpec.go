@@ -2,7 +2,7 @@ package warc
 
 import tls "github.com/refraction-networking/utls"
 
-//Taken from https://github.com/refraction-networking/utls/blob/master/u_parrots.go#L215 as the default Chrome config and modified to fit our needs.
+// Taken from https://github.com/refraction-networking/utls/blob/master/u_parrots.go#L215 as the default Chrome config and modified to fit our needs.
 func getCustomTLSSpec() *tls.ClientHelloSpec {
 	return &tls.ClientHelloSpec{
 		CipherSuites: []uint16{
@@ -41,7 +41,7 @@ func getCustomTLSSpec() *tls.ClientHelloSpec {
 				0x00, // pointFormatUncompressed
 			}},
 			&tls.SessionTicketExtension{},
-			//changed IMPORTANT!!! default ALPN is "h2", "http/1.1". This could get servers to automatically send us HTTP2, which we can't parse or handle. We could be profiled based on this.
+			// changed IMPORTANT!!! default ALPN is "h2", "http/1.1". This could get servers to automatically send us HTTP2, which we can't parse or handle. We could be profiled based on this.
 			&tls.ALPNExtension{AlpnProtocols: []string{"http/1.1"}},
 			&tls.StatusRequestExtension{},
 			&tls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []tls.SignatureScheme{
