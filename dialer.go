@@ -13,7 +13,6 @@ import (
 	"time"
 
 	tls "github.com/refraction-networking/utls"
-
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/sync/errgroup"
 )
