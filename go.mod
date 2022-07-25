@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/klauspost/compress v1.15.1
 	github.com/klauspost/pgzip v1.2.5
-	github.com/refraction-networking/utls v1.1.0
+	github.com/refraction-networking/utls v1.1.1
 	github.com/satori/go.uuid v1.2.0
 	go.uber.org/goleak v1.1.12
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
@@ -21,6 +21,3 @@ require (
 	golang.org/x/tools v0.1.7 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
-
-// this is required as the upstream repo hasn't merged this PR in yet and is required for compressed certificates.
-replace github.com/refraction-networking/utls v1.1.0 => github.com/getlantern/utls v0.0.0-20220209202455-048f18ca06ae
