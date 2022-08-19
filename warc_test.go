@@ -7,6 +7,8 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// goleak.IgnoreTopFunction("github.com/CorentinB/warc.TestHTTPClientWithProxy")
-	goleak.VerifyTestMain(m)
+	options := []goleak.Option{
+		goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
+	}
+	goleak.VerifyTestMain(m, options...)
 }

@@ -201,14 +201,16 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 	// Add headers
 	for i, r := range batch.Records {
-		// Generate WARC-IP-Address
-		switch addr := conn.RemoteAddr().(type) {
-		case *net.UDPAddr:
-			IP := addr.IP.String()
-			r.Header.Set("WARC-IP-Address", IP)
-		case *net.TCPAddr:
-			IP := addr.IP.String()
-			r.Header.Set("WARC-IP-Address", IP)
+		// Generate WARC-IP-Address if we aren't using a proxy. If we are using a proxy, the real host IP cannot be determined.
+		if d.proxyDialer == nil {
+			switch addr := conn.RemoteAddr().(type) {
+			case *net.UDPAddr:
+				IP := addr.IP.String()
+				r.Header.Set("WARC-IP-Address", IP)
+			case *net.TCPAddr:
+				IP := addr.IP.String()
+				r.Header.Set("WARC-IP-Address", IP)
+			}
 		}
 
 		// Set WARC-Record-ID and WARC-Concurrent-To
