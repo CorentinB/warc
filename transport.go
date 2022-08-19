@@ -3,7 +3,6 @@ package warc
 import (
 	"crypto/tls"
 	"net/http"
-	"net/url"
 	"time"
 
 	gzip "github.com/klauspost/compress/gzip"
@@ -35,7 +34,7 @@ func (t *customTransport) RoundTrip(req *http.Request) (resp *http.Response, err
 	return
 }
 
-func newCustomTransport(dialer *customDialer, proxy string, decompressBody bool) (t *customTransport, err error) {
+func newCustomTransport(dialer *customDialer, decompressBody bool) (t *customTransport, err error) {
 	t = new(customTransport)
 
 	t.t = http.Transport{
@@ -54,16 +53,6 @@ func newCustomTransport(dialer *customDialer, proxy string, decompressBody bool)
 		MaxIdleConns:          -1,
 		MaxIdleConnsPerHost:   -1,
 		DisableKeepAlives:     true,
-	}
-
-	// add proxy if specified
-	if proxy != "" {
-		proxyURL, err := url.Parse(proxy)
-		if err != nil {
-			return nil, err
-		}
-
-		t.t.Proxy = http.ProxyURL(proxyURL)
 	}
 
 	t.decompressBody = decompressBody
