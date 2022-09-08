@@ -7,5 +7,8 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	options := []goleak.Option{
+		goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
+	}
+	goleak.VerifyTestMain(m, options...)
 }

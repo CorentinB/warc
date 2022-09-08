@@ -97,8 +97,12 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	}
 
 	// Configure custom dialer / transport
-	customDialer := newCustomDialer(httpClient)
-	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.Proxy, HTTPClientSettings.DecompressBody)
+	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy)
+	if err != nil {
+		return nil, errChan, err
+	}
+
+	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.DecompressBody)
 	if err != nil {
 		return nil, errChan, err
 	}

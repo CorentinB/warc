@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,21 +15,34 @@ import (
 
 	tls "github.com/refraction-networking/utls"
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/net/proxy"
 	"golang.org/x/sync/errgroup"
 )
 
 type customDialer struct {
 	net.Dialer
-	client *CustomHTTPClient
+	proxyDialer proxy.Dialer
+	client      *CustomHTTPClient
 }
 
-func newCustomDialer(httpClient *CustomHTTPClient) *customDialer {
-	var d = new(customDialer)
+func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string) (d *customDialer, err error) {
+	d = new(customDialer)
 
 	d.Timeout = 5 * time.Second
 	d.client = httpClient
 
-	return d
+	if proxyURL != "" {
+		u, err := url.Parse(proxyURL)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		if d.proxyDialer, err = proxy.FromURL(u, d); err != nil {
+			panic(err.Error())
+		}
+	}
+
+	return d, nil
 }
 
 type customConnection struct {
@@ -70,19 +84,38 @@ func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 	}
 }
 
-func (d *customDialer) CustomDial(network, address string) (net.Conn, error) {
-	conn, err := d.Dial(network, address)
-	if err != nil {
-		return nil, err
+func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err error) {
+	if d.proxyDialer != nil {
+		conn, err = d.proxyDialer.Dial(network, address)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		conn, err = d.Dial(network, address)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return d.wrapConnection(conn, "http"), nil
 }
 
 func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
-	plainConn, err := d.Dial(network, address)
-	if err != nil {
-		return nil, err
+	var (
+		plainConn net.Conn
+		err       error
+	)
+
+	if d.proxyDialer != nil {
+		plainConn, err = d.proxyDialer.Dial(network, address)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		plainConn, err = d.Dial(network, address)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	cfg := new(tls.Config)
@@ -168,14 +201,16 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 	// Add headers
 	for i, r := range batch.Records {
-		// Generate WARC-IP-Address
-		switch addr := conn.RemoteAddr().(type) {
-		case *net.UDPAddr:
-			IP := addr.IP.String()
-			r.Header.Set("WARC-IP-Address", IP)
-		case *net.TCPAddr:
-			IP := addr.IP.String()
-			r.Header.Set("WARC-IP-Address", IP)
+		// Generate WARC-IP-Address if we aren't using a proxy. If we are using a proxy, the real host IP cannot be determined.
+		if d.proxyDialer == nil {
+			switch addr := conn.RemoteAddr().(type) {
+			case *net.UDPAddr:
+				IP := addr.IP.String()
+				r.Header.Set("WARC-IP-Address", IP)
+			case *net.TCPAddr:
+				IP := addr.IP.String()
+				r.Header.Set("WARC-IP-Address", IP)
+			}
 		}
 
 		// Set WARC-Record-ID and WARC-Concurrent-To
