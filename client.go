@@ -7,14 +7,15 @@ import (
 )
 
 type HTTPClientSettings struct {
-	RotatorSettings     *RotatorSettings
-	DedupeOptions       DedupeOptions
-	Proxy               string
-	DecompressBody      bool
-	SkipHTTPStatusCodes []int
-	VerifyCerts         bool
-	TempDir             string
-	FullOnDisk          bool
+	RotatorSettings       *RotatorSettings
+	DedupeOptions         DedupeOptions
+	Proxy                 string
+	DecompressBody        bool
+	SkipHTTPStatusCodes   []int
+	VerifyCerts           bool
+	TempDir               string
+	FullOnDisk            bool
+	MaxReadBeforeTruncate int
 }
 
 type CustomHTTPClient struct {
@@ -29,6 +30,7 @@ type CustomHTTPClient struct {
 	verifyCerts            bool
 	TempDir                string
 	FullOnDisk             bool
+	MaxReadBeforeTruncate  int
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -81,6 +83,13 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 
 	// Configure if we are only storing responses only on disk or in memory and on disk.
 	httpClient.FullOnDisk = HTTPClientSettings.FullOnDisk
+
+	// Configure our max read before we start truncating records
+	if HTTPClientSettings.MaxReadBeforeTruncate == 0 {
+		httpClient.MaxReadBeforeTruncate = 1000000000
+	} else {
+		httpClient.MaxReadBeforeTruncate = HTTPClientSettings.MaxReadBeforeTruncate
+	}
 
 	// Configure the waitgroup
 	httpClient.WaitGroup = new(WaitGroupWithCount)

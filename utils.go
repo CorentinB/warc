@@ -29,7 +29,8 @@ func GetSHA1(r io.Reader) string {
 			sha.Write(block[:n])
 		}
 
-		if err == io.EOF {
+		// UnexpectedEOF should be fine, as we are sometimes arbitrarily cutting at a byte size.
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			break
 		}
 
@@ -103,10 +104,10 @@ func NewWriter(writer io.Writer, fileName string, compression string, contentLen
 }
 
 // NewRecord creates a new WARC record.
-func NewRecord(tempDir string, fullOnDisk bool) *Record {
+func NewRecord(tempDir string, fullOnDisk bool, MaxReadBeforeTruncate int) *Record {
 	return &Record{
 		Header:  NewHeader(),
-		Content: NewSpooledTempFile("warc", tempDir, fullOnDisk),
+		Content: NewSpooledTempFile("warc", tempDir, fullOnDisk, MaxReadBeforeTruncate),
 	}
 }
 

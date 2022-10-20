@@ -100,7 +100,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	tempBuf.Truncate(bytes.LastIndex(tempBuf.Bytes(), []byte("\r\n\r\n")))
 
 	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
-	buf := NewSpooledTempFile("warc", "", false)
+	buf := NewSpooledTempFile("warc", "", false, 1000000000) //1GB max read
 	_, err = buf.Write(tempBuf.Bytes())
 	if err != nil {
 		return nil, err

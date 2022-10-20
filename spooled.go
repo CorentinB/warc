@@ -39,15 +39,17 @@ type ReadSeekCloser interface {
 // spooledTempFile writes to memory (or to disk if
 // over MaxInMemorySize) and deletes the file on Close
 type spooledTempFile struct {
-	buf             *bytes.Buffer
-	mem             *bytes.Reader
-	file            *os.File
-	filePrefix      string
-	tempDir         string
-	fullOnDisk      bool
-	maxInMemorySize int
-	reading         bool // transitions at most once from false -> true
-	closed          bool
+	buf                   *bytes.Buffer
+	mem                   *bytes.Reader
+	file                  *os.File
+	filePrefix            string
+	tempDir               string
+	fullOnDisk            bool
+	maxInMemorySize       int
+	maxReadBeforeTruncate int
+	totalBytesWritten     int
+	reading               bool // transitions at most once from false -> true
+	closed                bool
 }
 
 // ReadWriteSeekCloser is an io.Writer + io.Reader + io.Seeker + io.Closer.
@@ -60,13 +62,14 @@ type ReadWriteSeekCloser interface {
 // with some important constraints:
 // you can Write into it, but whenever you call Read or Seek on it,
 // Write is forbidden, will return an error.
-func NewSpooledTempFile(filePrefix string, tempDir string, fullOnDisk bool) ReadWriteSeekCloser {
+func NewSpooledTempFile(filePrefix string, tempDir string, fullOnDisk bool, maxReadBeforeTruncate int) ReadWriteSeekCloser {
 	return &spooledTempFile{
-		filePrefix:      filePrefix,
-		tempDir:         tempDir,
-		buf:             spooledPool.Get().(*bytes.Buffer),
-		maxInMemorySize: MaxInMemorySize,
-		fullOnDisk:      fullOnDisk,
+		filePrefix:            filePrefix,
+		tempDir:               tempDir,
+		buf:                   spooledPool.Get().(*bytes.Buffer),
+		maxInMemorySize:       MaxInMemorySize,
+		fullOnDisk:            fullOnDisk,
+		maxReadBeforeTruncate: maxReadBeforeTruncate,
 	}
 }
 
@@ -137,8 +140,13 @@ func (s *spooledTempFile) Write(p []byte) (n int, err error) {
 		panic("write after read")
 	}
 
+	if s.totalBytesWritten > s.maxReadBeforeTruncate {
+		return 0, errors.New("truncated")
+	}
+
 	if s.file != nil {
 		n, err = s.file.Write(p)
+		s.totalBytesWritten += n
 		return
 	}
 
@@ -163,6 +171,7 @@ func (s *spooledTempFile) Write(p []byte) (n int, err error) {
 			s.file.Close()
 			s.file = nil
 		}
+		s.totalBytesWritten += n
 
 		return
 	}

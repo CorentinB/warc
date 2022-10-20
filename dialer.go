@@ -250,13 +250,17 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	// Initialize the response record
-	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
+	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk, d.client.MaxReadBeforeTruncate)
 	responseRecord.Header.Set("WARC-Type", "response")
 	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
 	// Read the response from the pipe
 	_, err := io.Copy(responseRecord.Content, respPipe)
-	if err != nil {
+	if err.Error() == "truncated" {
+		responseRecord.Truncated = true
+		responseRecord.Header.Set("WARC-Truncated", "length")
+		// todo: ensure we stop reading here
+	} else if err != nil {
 		return err
 	}
 
@@ -274,13 +278,17 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 
 	// Calculate the WARC-Payload-Digest
 	payloadDigest := GetSHA1(resp.Body)
+	if payloadDigest == "ERROR" {
+		// This should _never_ happen.
+		panic("SHA1 ran into an unrecoverable error")
+	}
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
 	// Grab the WARC-Target-URI and send it back for records post-processing
 	var warcTargetURI = <-warcTargetURIChannel
 	warcTargetURIChannel <- warcTargetURI
-
+	// todo: pausing here
 	// Write revisit record if local or CDX dedupe is activated
 	var revisit = revisitRecord{}
 	if d.client.dedupeOptions.LocalDedupe {
@@ -358,7 +366,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		}
 
 		// Write the data up until the end of the headers to a temporary buffer
-		tempBuffer := NewSpooledTempFile("warc", d.client.TempDir, d.client.FullOnDisk)
+		tempBuffer := NewSpooledTempFile("warc", d.client.TempDir, d.client.FullOnDisk, d.client.MaxReadBeforeTruncate)
 		block = make([]byte, 1)
 		wrote := 0
 		responseRecord.Content.Seek(0, 0)
@@ -390,7 +398,6 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		responseRecord.Content.Close()
 		responseRecord.Content = tempBuffer
 	}
-
 	recordChan <- responseRecord
 
 	return nil
@@ -399,7 +406,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	var (
 		warcTargetURI = scheme + "://"
-		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
+		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk, d.client.MaxReadBeforeTruncate)
 	)
 
 	// Initialize the request record

@@ -37,8 +37,9 @@ type RecordBatch struct {
 
 // Record represents a WARC record.
 type Record struct {
-	Header  Header
-	Content ReadWriteSeekCloser
+	Header    Header
+	Content   ReadWriteSeekCloser
+	Truncated bool
 }
 
 // WriteRecord writes a record to the underlying WARC file.
@@ -109,7 +110,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 // WriteInfoRecord method can be used to write informations record to the WARC file
 func (w *Writer) WriteInfoRecord(payload map[string]string) (recordID string, err error) {
 	// Initialize the record
-	infoRecord := NewRecord("", false)
+	infoRecord := NewRecord("", false, 1000000000)
 
 	// Set the headers
 	infoRecord.Header.Set("WARC-Date", time.Now().UTC().Format(time.RFC3339Nano))
