@@ -962,6 +962,74 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 	}
 }
 
+func TestHTTPClientTruncation(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		err             error
+	)
+
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "image/jpeg")
+
+		w.Write(fileBytes)
+	}))
+	defer server.Close()
+
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "TRUNCATION"
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, errChan, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings, FullOnDisk: true, MaxReadBeforeTruncate: 1000})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	var errWg sync.WaitGroup
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for err := range errChan {
+			t.Errorf("Error writing to WARC: %s", err)
+		}
+	}()
+
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	io.Copy(io.Discard, resp.Body)
+
+	httpClient.Close()
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+	}
+}
+
 func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	var (
 		rotatorSettings = NewRotatorSettings()
