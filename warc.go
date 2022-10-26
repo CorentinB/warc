@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/paulbellamy/ratecounter"
 )
 
 // RotatorSettings is used to store the settings
@@ -28,8 +30,18 @@ type RotatorSettings struct {
 	WARCWriterPoolSize int
 }
 
-// Create mutex to ensure we are generating WARC files one at a time and not naming them the same thing.
-var fileMutex sync.Mutex
+var (
+	// Create mutex to ensure we are generating WARC files one at a time and not naming them the same thing.
+	fileMutex sync.Mutex
+
+	// Create a counter to keep track of the number of bytes written to WARC files
+	DataTotal *ratecounter.Counter
+)
+
+func init() {
+	// Initialize the counters
+	DataTotal = new(ratecounter.Counter)
+}
 
 // NewWARCRotator creates and return a channel that can be used
 // to communicate records to be written to WARC files to the
@@ -179,6 +191,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 					warcWriter.CloseCompressedWriter()
 				}
 			}
+
 			warcWriter.FileWriter.Flush()
 
 			if recordBatch.Done != nil {
