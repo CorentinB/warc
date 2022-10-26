@@ -44,14 +44,17 @@ type Record struct {
 // WriteRecord writes a record to the underlying WARC file.
 // A record consists of a version string, the record header followed by a
 // record content block and two newlines:
-// 	Version CLRF
-// 	Header-Key: Header-Value CLRF
-// 	CLRF
-// 	Content
-// 	CLRF
-// 	CLRF
+//
+//	Version CLRF
+//	Header-Key: Header-Value CLRF
+//	CLRF
+//	Content
+//	CLRF
+//	CLRF
 func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	defer r.Content.Close()
+
+	var written int64
 
 	// Add the mandatories headers
 	if r.Header.Get("WARC-Date") == "" {
@@ -92,8 +95,12 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	}
 
 	r.Content.Seek(0, 0)
-	if _, err := io.Copy(w.FileWriter, r.Content); err != nil {
+	if written, err = io.Copy(w.FileWriter, r.Content); err != nil {
 		return recordID, err
+	}
+
+	if written > 0 {
+		DataTotal.Incr(written)
 	}
 
 	if _, err := io.WriteString(w.FileWriter, "\r\n\r\n"); err != nil {
