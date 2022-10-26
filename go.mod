@@ -1,11 +1,12 @@
 module github.com/CorentinB/warc
 
-go 1.18
+go 1.19
 
 require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/klauspost/compress v1.15.1
 	github.com/klauspost/pgzip v1.2.5
+	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/refraction-networking/utls v1.1.1
 	github.com/satori/go.uuid v1.2.0
 	go.uber.org/goleak v1.1.12
