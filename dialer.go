@@ -274,6 +274,10 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 
 	// Calculate the WARC-Payload-Digest
 	payloadDigest := GetSHA1(resp.Body)
+	if payloadDigest == "ERROR" {
+		// This should _never_ happen.
+		return errors.New("SHA1 ran into an unrecoverable error")
+	}
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
