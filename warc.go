@@ -78,7 +78,7 @@ func (w *Writer) CloseCompressedWriter() {
 func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool) {
 	var (
 		serial                  = 1
-		currentFileName         = generateWarcFileName(settings.Prefix, settings.Compression, serial)
+		currentFileName         = GenerateWarcFileName(settings.Prefix, settings.Compression, serial)
 		currentWarcinfoRecordID string
 	)
 
@@ -86,7 +86,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	fileMutex.Lock()
 	_, err := os.Stat(settings.OutputDirectory + currentFileName)
 	for !errors.Is(err, os.ErrNotExist) {
-		currentFileName = generateWarcFileName(settings.Prefix, settings.Compression, serial)
+		currentFileName = GenerateWarcFileName(settings.Prefix, settings.Compression, serial)
 		_, err = os.Stat(settings.OutputDirectory + currentFileName)
 	}
 
@@ -146,7 +146,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 				// Increment the file's serial number, then create the new file
 				serial++
-				currentFileName = generateWarcFileName(settings.Prefix, settings.Compression, serial)
+				currentFileName = GenerateWarcFileName(settings.Prefix, settings.Compression, serial)
 				warcFile, err = os.Create(settings.OutputDirectory + currentFileName)
 				if err != nil {
 					panic(err)
