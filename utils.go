@@ -215,10 +215,10 @@ func formatSerial(serial int, format string) string {
 	return fmt.Sprintf("%0"+format+"d", serial)
 }
 
-// generateWarcFileName generate a WARC file name following recommendations
+// GenerateWarcFileName generate a WARC file name following recommendations
 // of the specs:
 // Prefix-Timestamp-Serial-Crawlhost.warc.gz
-func generateWarcFileName(prefix string, compression string, serial int) (fileName string) {
+func GenerateWarcFileName(prefix string, compression string, serial int) (fileName string) {
 	// Get host name as reported by the kernel
 	hostName, err := os.Hostname()
 	if err != nil {
