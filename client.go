@@ -6,6 +6,11 @@ import (
 	"sync"
 )
 
+type Error struct {
+	Err  error
+	Func string
+}
+
 type HTTPClientSettings struct {
 	RotatorSettings     *RotatorSettings
 	DedupeOptions       DedupeOptions
@@ -25,7 +30,7 @@ type CustomHTTPClient struct {
 	dedupeHashTable        *sync.Map
 	dedupeOptions          DedupeOptions
 	skipHTTPStatusCodes    []int
-	errChan                chan error
+	ErrChan                chan *Error
 	verifyCerts            bool
 	TempDir                string
 	FullOnDisk             bool
@@ -47,12 +52,12 @@ func (c *CustomHTTPClient) Close() error {
 	}
 
 	wg.Wait()
-	close(c.errChan)
+	close(c.ErrChan)
 
 	return nil
 }
 
-func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient *CustomHTTPClient, errChan chan error, err error) {
+func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient *CustomHTTPClient, err error) {
 	httpClient = new(CustomHTTPClient)
 
 	// Toggle deduplication options and create map for deduplication records.
@@ -63,8 +68,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	httpClient.skipHTTPStatusCodes = HTTPClientSettings.SkipHTTPStatusCodes
 
 	// Create an error channel for sending WARC errors through
-	errChan = make(chan error)
-	httpClient.errChan = errChan
+	httpClient.ErrChan = make(chan *Error)
 
 	// Toggle verification of certificates
 	// InsecureSkipVerify expects the opposite of the verifyCerts flag, as such we flip it.
@@ -75,7 +79,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		httpClient.TempDir = HTTPClientSettings.TempDir
 		err = os.MkdirAll(httpClient.TempDir, os.ModePerm)
 		if err != nil {
-			return nil, errChan, err
+			return nil, err
 		}
 	}
 
@@ -88,7 +92,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	// Configure WARC writer
 	httpClient.WARCWriter, httpClient.WARCWriterDoneChannels, err = HTTPClientSettings.RotatorSettings.NewWARCRotator()
 	if err != nil {
-		return nil, errChan, err
+		return nil, err
 	}
 
 	// Configure HTTP client
@@ -99,15 +103,15 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	// Configure custom dialer / transport
 	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy)
 	if err != nil {
-		return nil, errChan, err
+		return nil, err
 	}
 
 	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.DecompressBody)
 	if err != nil {
-		return nil, errChan, err
+		return nil, err
 	}
 
 	httpClient.Transport = customTransport
 
-	return httpClient, errChan, nil
+	return httpClient, nil
 }

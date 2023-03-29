@@ -158,20 +158,25 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		target               string
 		host                 string
 		errs, _              = errgroup.WithContext(context.Background())
+		err                  = new(Error)
 	)
 
 	errs.Go(func() error {
-		return d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
+		return d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan, err)
 	})
 
 	errs.Go(func() error {
-		return d.readResponse(respPipe, warcTargetURIChannel, recordChan)
+		return d.readResponse(respPipe, warcTargetURIChannel, recordChan, err)
 	})
 
-	err := errs.Wait()
+	readErr := errs.Wait()
 	close(recordChan)
-	if err != nil {
-		d.client.errChan <- err
+	if readErr != nil {
+		// Add the error to the err structure
+		err.Err = readErr
+
+		d.client.ErrChan <- err
+
 		// Make sure we close the WARC content buffers
 		for record := range recordChan {
 			record.Content.Close()
@@ -186,7 +191,9 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	if len(batch.Records) != 2 {
-		d.client.errChan <- errors.New("warc: there was an unspecified problem creating one of the WARC records")
+		err.Err = errors.New("warc: there was an unspecified problem creating one of the WARC records")
+
+		d.client.ErrChan <- err
 
 		// Make sure we close the WARC content buffers
 		for _, record := range batch.Records {
@@ -248,7 +255,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	d.client.WARCWriter <- batch
 }
 
-func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record, upstreamErr *Error) error {
 	// Initialize the response record
 	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
 	responseRecord.Header.Set("WARC-Type", "response")
@@ -396,7 +403,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	return nil
 }
 
-func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record, upstreamErr *Error) error {
 	var (
 		warcTargetURI = scheme + "://"
 		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
