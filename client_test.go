@@ -233,7 +233,15 @@ func TestHTTPClientConcurrent(t *testing.T) {
 		}()
 	}
 
-	wg.Wait()
+	go func() {
+		wg.Wait()
+	}()
+
+	for err := range httpClient.ErrChan {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	httpClient.Close()
 
@@ -315,7 +323,16 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 		}()
 	}
 
-	wg.Wait()
+	go func() {
+		wg.Wait()
+
+	}()
+
+	for err := range httpClient.ErrChan {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	httpClient.Close()
 
@@ -710,7 +727,15 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		}()
 	}
 
-	wg.Wait()
+	go func() {
+		wg.Wait()
+	}()
+
+	for err := range httpClient.ErrChan {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	httpClient.Close()
 
