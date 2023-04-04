@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 type DedupeOptions struct {
@@ -17,7 +16,7 @@ type DedupeOptions struct {
 type revisitRecord struct {
 	responseUUID string
 	targetURI    string
-	date         time.Time
+	date         string
 }
 
 func (d *customDialer) checkLocalRevisit(digest string) revisitRecord {
@@ -44,12 +43,10 @@ func checkCDXRevisit(CDXURL string, digest string, targetURI string) (revisitRec
 	cdxReply := strings.Fields(string(body))
 
 	if len(cdxReply) >= 7 {
-		CDXDate, _ := time.Parse("20060102150405", cdxReply[1])
-
 		return revisitRecord{
 			responseUUID: "",
 			targetURI:    cdxReply[2],
-			date:         CDXDate,
+			date:         cdxReply[1],
 		}, nil
 	}
 

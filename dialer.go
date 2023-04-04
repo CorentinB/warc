@@ -239,7 +239,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 				d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
 					responseUUID: recordIDs[i],
 					targetURI:    warcTargetURI,
-					date:         time.Now().UTC(),
+					date:         r.Header.Get("WARC-Date"),
 				})
 			}
 		}
@@ -292,7 +292,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	if revisit.targetURI != "" {
 		responseRecord.Header.Set("WARC-Type", "revisit")
 		responseRecord.Header.Set("WARC-Refers-To-Target-URI", revisit.targetURI)
-		responseRecord.Header.Set("WARC-Refers-To-Date", revisit.date.UTC().Format(time.RFC3339))
+		responseRecord.Header.Set("WARC-Refers-To-Date", revisit.date)
 
 		if revisit.responseUUID != "" {
 			responseRecord.Header.Set("WARC-Refers-To", "<urn:uuid:"+revisit.responseUUID+">")
