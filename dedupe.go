@@ -8,9 +8,10 @@ import (
 )
 
 type DedupeOptions struct {
-	LocalDedupe bool
-	CDXDedupe   bool
-	CDXURL      string
+	LocalDedupe   bool
+	CDXDedupe     bool
+	CDXURL        string
+	SizeThreshold int
 }
 
 type revisitRecord struct {
