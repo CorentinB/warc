@@ -239,7 +239,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 				d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
 					responseUUID: recordIDs[i],
 					targetURI:    warcTargetURI,
-					date:         time.Now().UTC(),
+					date:         batch.CaptureTime,
 				})
 			}
 		}
@@ -255,7 +255,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
 	// Read the response from the pipe
-	_, err := io.Copy(responseRecord.Content, respPipe)
+	bytesCopied, err := io.Copy(responseRecord.Content, respPipe)
 	if err != nil {
 		return err
 	}
@@ -287,16 +287,18 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 
 	// Write revisit record if local or CDX dedupe is activated
 	var revisit = revisitRecord{}
-	if d.client.dedupeOptions.LocalDedupe {
-		revisit = d.checkLocalRevisit(payloadDigest)
-	} else if d.client.dedupeOptions.CDXDedupe {
-		revisit, _ = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
+	if bytesCopied >= int64(d.client.dedupeOptions.SizeThreshold) {
+		if d.client.dedupeOptions.LocalDedupe {
+			revisit = d.checkLocalRevisit(payloadDigest)
+		} else if d.client.dedupeOptions.CDXDedupe {
+			revisit, _ = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
+		}
 	}
 
 	if revisit.targetURI != "" {
 		responseRecord.Header.Set("WARC-Type", "revisit")
 		responseRecord.Header.Set("WARC-Refers-To-Target-URI", revisit.targetURI)
-		responseRecord.Header.Set("WARC-Refers-To-Date", revisit.date.UTC().Format(time.RFC3339))
+		responseRecord.Header.Set("WARC-Refers-To-Date", revisit.date)
 
 		if revisit.responseUUID != "" {
 			responseRecord.Header.Set("WARC-Refers-To", "<urn:uuid:"+revisit.responseUUID+">")

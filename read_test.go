@@ -138,6 +138,62 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 	return -1
 }
 
+func testFileRevisitVailidity(t *testing.T, path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("failed to open %q: %v", path, err)
+	}
+	defer file.Close()
+
+	t.Logf("checking 'WARC-Refers-To-Date' and 'WARC-Payload-Digest' for revisits on %q", path)
+
+	reader, err := NewReader(file)
+	if err != nil {
+		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
+	}
+
+	var originalTime string
+	var originalDigest string
+
+	for {
+		record, err := reader.ReadRecord()
+
+		if err == io.EOF {
+			return
+		}
+
+		if err != nil {
+			record.Content.Close()
+			t.Fatalf("warc.ReadRecord failed: %v", err)
+			break
+		}
+
+		if record.Header.Get("WARC-Type") != "response" && record.Header.Get("WARC-Type") != "revisit" {
+			// We're not currently interesting in anything but response and revisit records at the moment.
+			record.Content.Close()
+			continue
+		}
+
+		if record.Header.Get("WARC-Type") == "response" {
+			originalDigest = record.Header.Get("WARC-Payload-Digest")
+			originalTime = record.Header.Get("WARC-Date")
+			record.Content.Close()
+			continue
+		}
+
+		if record.Header.Get("WARC-Type") == "revisit" {
+			if record.Header.Get("WARC-Payload-Digest") == originalDigest && record.Header.Get("WARC-Refers-To-Date") == originalTime {
+				record.Content.Close()
+				continue
+			} else {
+				record.Content.Close()
+				t.Fatalf("Revisit digest or date does not match doesn't match intended result %s != %s (or %s != %s)", record.Header.Get("WARC-Payload-Digest"), originalDigest, record.Header.Get("WARC-Refers-To-Date"), originalTime)
+			}
+		}
+
+	}
+}
+
 func TestReader(t *testing.T) {
 	var paths = []string{
 		"testdata/test.warc.gz",

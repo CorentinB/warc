@@ -427,6 +427,7 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
+		testFileRevisitVailidity(t, path)
 	}
 }
 
@@ -490,7 +491,7 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 		}
 	}()
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 4; i++ {
 		req, err := http.NewRequest("GET", server.URL, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -515,7 +516,8 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 4)
+		testFileRevisitVailidity(t, path)
 	}
 }
 
