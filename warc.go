@@ -48,6 +48,8 @@ func init() {
 // recordWriter function running in a goroutine
 func (s *RotatorSettings) NewWARCRotator() (recordWriterChan chan *RecordBatch, doneChannels []chan bool, err error) {
 	recordWriterChan = make(chan *RecordBatch, 1)
+	// Create global atomicSerial number for numbering WARC files.
+	var atomicSerial int64
 
 	// Check the rotator settings and set default values
 	err = checkRotatorSettings(s)
@@ -59,7 +61,7 @@ func (s *RotatorSettings) NewWARCRotator() (recordWriterChan chan *RecordBatch, 
 		doneChan := make(chan bool)
 		doneChannels = append(doneChannels, doneChan)
 
-		go recordWriter(s, recordWriterChan, doneChan)
+		go recordWriter(s, recordWriterChan, doneChan, &atomicSerial)
 	}
 
 	return recordWriterChan, doneChannels, nil
@@ -75,10 +77,9 @@ func (w *Writer) CloseCompressedWriter() {
 	}
 }
 
-func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool) {
+func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool, atomicSerial *int64) {
 	var (
-		serial                  = 1
-		currentFileName         = GenerateWarcFileName(settings.Prefix, settings.Compression, serial)
+		currentFileName         = GenerateWarcFileName(settings.Prefix, settings.Compression, atomicSerial)
 		currentWarcinfoRecordID string
 	)
 
@@ -86,7 +87,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	fileMutex.Lock()
 	_, err := os.Stat(settings.OutputDirectory + currentFileName)
 	for !errors.Is(err, os.ErrNotExist) {
-		currentFileName = GenerateWarcFileName(settings.Prefix, settings.Compression, serial)
+		currentFileName = GenerateWarcFileName(settings.Prefix, settings.Compression, atomicSerial)
 		_, err = os.Stat(settings.OutputDirectory + currentFileName)
 	}
 
@@ -144,9 +145,8 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				}
 				warcFile.Close()
 
-				// Increment the file's serial number, then create the new file
-				serial++
-				currentFileName = GenerateWarcFileName(settings.Prefix, settings.Compression, serial)
+				// Create the new file and automatically increment the serial inside of GenerateWarcFileName
+				currentFileName = GenerateWarcFileName(settings.Prefix, settings.Compression, atomicSerial)
 				warcFile, err = os.Create(settings.OutputDirectory + currentFileName)
 				if err != nil {
 					panic(err)
