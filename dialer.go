@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -272,10 +273,14 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		return err
 	}
 
+	// Grab the WARC-Target-URI and send it back for records post-processing
+	var warcTargetURI = <-warcTargetURIChannel
+	warcTargetURIChannel <- warcTargetURI
+
 	// If the HTTP status code is to be excluded as per client's settings, we stop here
 	for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
 		if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
-			return errors.New("response code was blocked by config")
+			return fmt.Errorf("response code was blocked by config url: '%s'", warcTargetURI)
 		}
 	}
 
@@ -283,14 +288,10 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	payloadDigest := GetSHA1(resp.Body)
 	if payloadDigest == "ERROR" {
 		// This should _never_ happen.
-		return errors.New("SHA1 ran into an unrecoverable error")
+		return fmt.Errorf("SHA1 ran into an unrecoverable error url: '%s'", warcTargetURI)
 	}
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
-
-	// Grab the WARC-Target-URI and send it back for records post-processing
-	var warcTargetURI = <-warcTargetURIChannel
-	warcTargetURIChannel <- warcTargetURI
 
 	// Write revisit record if local or CDX dedupe is activated
 	var revisit = revisitRecord{}
