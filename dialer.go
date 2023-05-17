@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -158,20 +159,25 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		target               string
 		host                 string
 		errs, _              = errgroup.WithContext(context.Background())
+		err                  = new(Error)
 	)
 
 	errs.Go(func() error {
-		return d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
+		return d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan, err)
 	})
 
 	errs.Go(func() error {
-		return d.readResponse(respPipe, warcTargetURIChannel, recordChan)
+		return d.readResponse(respPipe, warcTargetURIChannel, recordChan, err)
 	})
 
-	err := errs.Wait()
+	readErr := errs.Wait()
 	close(recordChan)
-	if err != nil {
-		d.client.errChan <- err
+	if readErr != nil {
+		// Add the error to the err structure
+		err.Err = readErr
+
+		d.client.ErrChan <- err
+
 		// Make sure we close the WARC content buffers
 		for record := range recordChan {
 			record.Content.Close()
@@ -186,7 +192,9 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	if len(batch.Records) != 2 {
-		d.client.errChan <- errors.New("warc: there was an unspecified problem creating one of the WARC records")
+		err.Err = errors.New("warc: there was an unspecified problem creating one of the WARC records")
+
+		d.client.ErrChan <- err
 
 		// Make sure we close the WARC content buffers
 		for _, record := range batch.Records {
@@ -248,7 +256,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	d.client.WARCWriter <- batch
 }
 
-func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record, upstreamErr *Error) error {
 	// Initialize the response record
 	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
 	responseRecord.Header.Set("WARC-Type", "response")
@@ -265,10 +273,14 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		return err
 	}
 
+	// Grab the WARC-Target-URI and send it back for records post-processing
+	var warcTargetURI = <-warcTargetURIChannel
+	warcTargetURIChannel <- warcTargetURI
+
 	// If the HTTP status code is to be excluded as per client's settings, we stop here
 	for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
 		if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
-			return errors.New("response code was blocked by config")
+			return fmt.Errorf("response code was blocked by config url: '%s'", warcTargetURI)
 		}
 	}
 
@@ -276,14 +288,10 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	payloadDigest := GetSHA1(resp.Body)
 	if payloadDigest == "ERROR" {
 		// This should _never_ happen.
-		return errors.New("SHA1 ran into an unrecoverable error")
+		return fmt.Errorf("SHA1 ran into an unrecoverable error url: '%s'", warcTargetURI)
 	}
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
-
-	// Grab the WARC-Target-URI and send it back for records post-processing
-	var warcTargetURI = <-warcTargetURIChannel
-	warcTargetURIChannel <- warcTargetURI
 
 	// Write revisit record if local or CDX dedupe is activated
 	var revisit = revisitRecord{}
@@ -402,7 +410,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	return nil
 }
 
-func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record, upstreamErr *Error) error {
 	var (
 		warcTargetURI = scheme + "://"
 		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)

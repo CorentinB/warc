@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	gzip "github.com/klauspost/compress/gzip"
@@ -211,21 +212,29 @@ func isFileSizeExceeded(filePath string, maxSize float64) bool {
 // formatSerial add the correct padding to the serial
 // E.g. with serial = 23 and format = 5:
 // formatSerial return 00023
-func formatSerial(serial int, format string) string {
-	return fmt.Sprintf("%0"+format+"d", serial)
+func formatSerial(atomicSerial *int64, format string) string {
+	return fmt.Sprintf("%0"+format+"d", atomic.LoadInt64(atomicSerial))
 }
 
 // GenerateWarcFileName generate a WARC file name following recommendations
 // of the specs:
 // Prefix-Timestamp-Serial-Crawlhost.warc.gz
-func GenerateWarcFileName(prefix string, compression string, serial int) (fileName string) {
+func GenerateWarcFileName(prefix string, compression string, atomicSerial *int64) (fileName string) {
 	// Get host name as reported by the kernel
 	hostName, err := os.Hostname()
 	if err != nil {
 		panic(err)
 	}
 
-	formattedSerial := formatSerial(serial, "5")
+	// Don't let atomicSerial overflow past 99999, the current maximum with 5 serial digits.
+	if atomic.LoadInt64(atomicSerial) >= 99999 {
+		atomic.StoreInt64(atomicSerial, 0)
+	}
+
+	// Atomically increase the global serial number
+	atomic.AddInt64(atomicSerial, 1)
+
+	formattedSerial := formatSerial(atomicSerial, "5")
 
 	now := time.Now().UTC()
 	date := now.Format("20060102150405") + strconv.Itoa(now.Nanosecond())[:3]
