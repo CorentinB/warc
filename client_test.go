@@ -233,15 +233,8 @@ func TestHTTPClientConcurrent(t *testing.T) {
 		}()
 	}
 
-	go func() {
-		wg.Wait()
-	}()
-
-	for err := range httpClient.ErrChan {
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Wait for request wait group first before closing out the errorChannel
+	wg.Wait()
 
 	httpClient.Close()
 
@@ -323,16 +316,8 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 		}()
 	}
 
-	go func() {
-		wg.Wait()
-
-	}()
-
-	for err := range httpClient.ErrChan {
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Wait for request wait group first before closing out the errorChannel
+	wg.Wait()
 
 	httpClient.Close()
 
@@ -727,15 +712,8 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		}()
 	}
 
-	go func() {
-		wg.Wait()
-	}()
-
-	for err := range httpClient.ErrChan {
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Wait for request wait group first before closing out the errorChannel
+	wg.Wait()
 
 	httpClient.Close()
 
