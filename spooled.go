@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"sync"
 )
@@ -143,7 +142,7 @@ func (s *spooledTempFile) Write(p []byte) (n int, err error) {
 	}
 
 	if (s.buf.Len()+len(p) > s.maxInMemorySize) || s.fullOnDisk {
-		s.file, err = ioutil.TempFile(s.tempDir, s.filePrefix+"-")
+		s.file, err = os.CreateTemp(s.tempDir, s.filePrefix+"-")
 		if err != nil {
 			return
 		}
