@@ -3,6 +3,7 @@ package warc
 import (
 	"errors"
 	"os"
+	"path"
 	"strings"
 	"sync"
 
@@ -133,7 +134,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 			if isFileSizeExceeded(settings.OutputDirectory+currentFileName, settings.WarcSize) {
 				// WARC file size exceeded settings.WarcSize
 				// The WARC file is renamed to remove the .open suffix
-				err := os.Rename(settings.OutputDirectory+currentFileName, strings.TrimSuffix(settings.OutputDirectory+currentFileName, ".open"))
+				err := os.Rename(path.Join(settings.OutputDirectory, currentFileName), strings.TrimSuffix(path.Join(settings.OutputDirectory, currentFileName), ".open"))
 				if err != nil {
 					panic(err)
 				}

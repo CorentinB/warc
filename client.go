@@ -23,6 +23,7 @@ type HTTPClientSettings struct {
 	TempDir               string
 	FullOnDisk            bool
 	MaxReadBeforeTruncate int
+	FollowRedirects       bool
 }
 
 type CustomHTTPClient struct {
@@ -116,8 +117,10 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	}
 
 	// Configure HTTP client
-	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		return http.ErrUseLastResponse
+	if !HTTPClientSettings.FollowRedirects {
+		httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
 	}
 
 	// Configure custom dialer / transport

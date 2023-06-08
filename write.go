@@ -10,6 +10,8 @@ import (
 
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/pgzip"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/klauspost/compress/zstd"
 	uuid "github.com/satori/go.uuid"
@@ -85,7 +87,9 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	}
 
 	for key, value := range r.Header {
-		if _, err = io.WriteString(w.FileWriter, strings.Title(key)+": "+value+"\r\n"); err != nil {
+		titleCaser := cases.Title(language.English)
+		value := strings.ReplaceAll(titleCaser.String(key)+": "+value+"\r\n", "Warc", "WARC")
+		if _, err := io.WriteString(w.FileWriter, value); err != nil {
 			return recordID, err
 		}
 	}
