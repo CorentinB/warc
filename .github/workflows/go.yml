@@ -19,7 +19,7 @@ jobs:
         go-version: 1.20
 
     - name: Build
-      run: go build -v ./...
+      run: go mod download && go build -v ./...
 
     - name: Goroutine leak detector
       continue-on-error: true
