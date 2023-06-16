@@ -34,7 +34,7 @@ func (t *customTransport) RoundTrip(req *http.Request) (resp *http.Response, err
 	return
 }
 
-func newCustomTransport(dialer *customDialer, decompressBody bool) (t *customTransport, err error) {
+func newCustomTransport(dialer *customDialer, decompressBody bool, TLSHandshakeTimeout time.Duration) (t *customTransport, err error) {
 	t = new(customTransport)
 
 	t.t = http.Transport{
@@ -45,7 +45,7 @@ func newCustomTransport(dialer *customDialer, decompressBody bool) (t *customTra
 		// disable keep alive
 		MaxConnsPerHost:       0,
 		IdleConnTimeout:       -1,
-		TLSHandshakeTimeout:   15 * time.Second,
+		TLSHandshakeTimeout:   TLSHandshakeTimeout,
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 		DisableCompression:    true,

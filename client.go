@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/paulbellamy/ratecounter"
 )
@@ -24,6 +25,8 @@ type HTTPClientSettings struct {
 	FullOnDisk            bool
 	MaxReadBeforeTruncate int
 	FollowRedirects       bool
+	TCPTimeout            time.Duration
+	TLSHandshakeTimeout   time.Duration
 }
 
 type CustomHTTPClient struct {
@@ -123,13 +126,22 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		}
 	}
 
+	// Verify timeouts and set default values
+	if HTTPClientSettings.TCPTimeout == 0 {
+		HTTPClientSettings.TCPTimeout = 10 * time.Second
+	}
+
+	if HTTPClientSettings.TLSHandshakeTimeout == 0 {
+		HTTPClientSettings.TLSHandshakeTimeout = 10 * time.Second
+	}
+
 	// Configure custom dialer / transport
-	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy)
+	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.TCPTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.DecompressBody)
+	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.DecompressBody, HTTPClientSettings.TLSHandshakeTimeout)
 	if err != nil {
 		return nil, err
 	}

@@ -26,10 +26,10 @@ type customDialer struct {
 	client      *CustomHTTPClient
 }
 
-func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string) (d *customDialer, err error) {
+func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, TCPTimeout time.Duration) (d *customDialer, err error) {
 	d = new(customDialer)
 
-	d.Timeout = 5 * time.Second
+	d.Timeout = TCPTimeout
 	d.client = httpClient
 
 	if proxyURL != "" {
