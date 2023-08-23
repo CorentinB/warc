@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -202,6 +203,12 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		}
 
 		return
+	}
+
+	// Most Internet Archive tools expect requests to be AFTER responses
+	// in the WARC file. So we make sure that's the case.
+	if batch.Records[0].Header.Get("WARC-Type") != "response" {
+		slices.Reverse(batch.Records)
 	}
 
 	// Get the WARC-Target-URI value
