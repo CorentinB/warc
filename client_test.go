@@ -583,16 +583,16 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		err             error
 	)
 
+	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
-		if err != nil {
-			t.Fatal(err)
-		}
-
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fileBytes)
+		_, _ = w.Write(fileBytes)
 	}))
 	defer server.Close()
 
@@ -653,16 +653,16 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		errWg           sync.WaitGroup
 	)
 
+	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
-		if err != nil {
-			t.Fatal(err)
-		}
-
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fileBytes)
+		_, _ = w.Write(fileBytes)
 	}))
 	defer server.Close()
 
@@ -1075,36 +1075,32 @@ func TestHTTPClientWithoutChunkEncoding(t *testing.T) {
 func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	var (
 		rotatorSettings = NewRotatorSettings()
+		concurrency     = b.N
 		wg              sync.WaitGroup
-		err             error
+		errWg           sync.WaitGroup
 	)
 
 	// init test HTTP endpoint
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		w.Header().Set("Content-Type", "image/svg+xml")
-		w.WriteHeader(http.StatusOK)
-		w.Write(fileBytes)
-	}))
-	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	defer func() {
-		err = os.RemoveAll(rotatorSettings.OutputDirectory)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(fileBytes)
+	}))
+	defer server.Close()
 
-	rotatorSettings.Prefix = "TEST"
+	// init WARC rotator settings
+	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "BENCHCONCTEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1112,27 +1108,30 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	wg.Add(1)
+	errWg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer errWg.Done()
 		for err := range httpClient.ErrChan {
 			b.Errorf("Error writing to WARC: %s", err.Err.Error())
 		}
 	}()
 
-	wg.Add(b.N)
-	for n := 0; n < b.N; n++ {
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
 		go func() {
 			defer wg.Done()
 
 			req, err := http.NewRequest("GET", server.URL, nil)
+			req.Close = true
 			if err != nil {
 				httpClient.ErrChan <- &Error{Err: err}
+				return
 			}
 
 			resp, err := httpClient.Do(req)
 			if err != nil {
 				httpClient.ErrChan <- &Error{Err: err}
+				return
 			}
 			defer resp.Body.Close()
 
@@ -1140,27 +1139,31 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 		}()
 	}
 
+	// Wait for request wait group first before closing out the errorChannel
 	wg.Wait()
+
 	httpClient.Close()
 }
 
 func BenchmarkConcurrentOver2MB(b *testing.B) {
 	var (
 		rotatorSettings = NewRotatorSettings()
-		wg              sync.WaitGroup
 		err             error
+		concurrency     = b.N
+		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
 	)
+
+	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
-		if err != nil {
-			b.Fatal(err)
-		}
-
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fileBytes)
+		_, _ = w.Write(fileBytes)
 	}))
 	defer server.Close()
 
@@ -1168,15 +1171,9 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	defer func() {
-		err = os.RemoveAll(rotatorSettings.OutputDirectory)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}()
-
-	rotatorSettings.Prefix = "CONCTEST2MB"
+	rotatorSettings.Prefix = "BENCHCONCTEST2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1184,34 +1181,39 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	wg.Add(1)
+	errWg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer errWg.Done()
 		for err := range httpClient.ErrChan {
 			b.Errorf("Error writing to WARC: %s", err.Err.Error())
 		}
 	}()
 
-	wg.Add(b.N)
-	for n := 0; n < b.N; n++ {
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
 		go func() {
 			defer wg.Done()
 
 			req, err := http.NewRequest("GET", server.URL, nil)
+			req.Close = true
 			if err != nil {
 				httpClient.ErrChan <- &Error{Err: err}
+				return
 			}
 
 			resp, err := httpClient.Do(req)
 			if err != nil {
 				httpClient.ErrChan <- &Error{Err: err}
+				return
 			}
-			defer resp.Body.Close()
 
 			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
 		}()
 	}
 
+	// Wait for request wait group first before closing out the errorChannel
 	wg.Wait()
+
 	httpClient.Close()
 }
