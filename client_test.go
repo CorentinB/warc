@@ -31,8 +31,8 @@ func TestHTTPClient(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -80,7 +80,7 @@ func TestHTTPClient(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
 	}
 }
 
@@ -111,8 +111,8 @@ func TestHTTPClientWithProxy(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -162,7 +162,7 @@ func TestHTTPClientWithProxy(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
 	}
 }
 
@@ -181,8 +181,8 @@ func TestHTTPClientConcurrent(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -244,7 +244,7 @@ func TestHTTPClientConcurrent(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 256)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 256)
 	}
 }
 
@@ -349,9 +349,8 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -408,7 +407,7 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 2)
 		testFileRevisitVailidity(t, path)
 	}
 }
@@ -430,8 +429,8 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	})
 
@@ -498,7 +497,7 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 4)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 4)
 		testFileRevisitVailidity(t, path)
 	}
 }
@@ -517,8 +516,8 @@ func TestHTTPClientDisallow429(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusTooManyRequests)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusTooManyRequests)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -591,8 +590,8 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -661,8 +660,8 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -746,8 +745,8 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -795,7 +794,7 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
 		os.Remove(path)
 	}
 }
@@ -884,8 +883,8 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -934,7 +933,7 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
 	}
 }
 
@@ -1026,8 +1025,8 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -1098,8 +1097,8 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
