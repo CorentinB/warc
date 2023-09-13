@@ -10,16 +10,18 @@ require (
 	github.com/refraction-networking/utls v1.3.2
 	github.com/satori/go.uuid v1.2.0
 	go.uber.org/goleak v1.2.1
-	golang.org/x/net v0.10.0
+	golang.org/x/net v0.15.0
 	golang.org/x/sync v0.2.0
-	golang.org/x/text v0.9.0
 )
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/gaukas/godicttls v0.0.3 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
-	golang.org/x/crypto v0.9.0 // indirect
-	golang.org/x/sys v0.8.0 // indirect
+	github.com/likexian/doh-go v0.6.4 // indirect
+	github.com/likexian/gokit v0.25.13 // indirect
+	golang.org/x/crypto v0.13.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
