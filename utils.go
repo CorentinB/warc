@@ -51,6 +51,22 @@ func splitKeyValue(line string) (string, string) {
 	return parts[0], strings.TrimSpace(parts[1])
 }
 
+func isLineStartingWithHTTPMethod(line string) bool {
+	if strings.HasPrefix(line, "GET ") ||
+		strings.HasPrefix(line, "HEAD ") ||
+		strings.HasPrefix(line, "POST ") ||
+		strings.HasPrefix(line, "PUT ") ||
+		strings.HasPrefix(line, "DELETE ") ||
+		strings.HasPrefix(line, "CONNECT ") ||
+		strings.HasPrefix(line, "OPTIONS ") ||
+		strings.HasPrefix(line, "TRACE ") ||
+		strings.HasPrefix(line, "PATCH ") {
+		return true
+	}
+
+	return false
+}
+
 // NewWriter creates a new WARC writer.
 func NewWriter(writer io.Writer, fileName string, compression string, contentLengthHeader string) (*Writer, error) {
 	if compression != "" {

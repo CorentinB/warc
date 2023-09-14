@@ -29,7 +29,7 @@ func getCustomTLSSpec() *tls.ClientHelloSpec {
 		Extensions: []tls.TLSExtension{
 			&tls.UtlsGREASEExtension{},
 			&tls.SNIExtension{},
-			&tls.UtlsExtendedMasterSecretExtension{},
+			&tls.ExtendedMasterSecretExtension{},
 			&tls.RenegotiationInfoExtension{Renegotiation: tls.RenegotiateOnceAsClient},
 			&tls.SupportedCurvesExtension{Curves: []tls.CurveID{
 				tls.CurveID(tls.GREASE_PLACEHOLDER),

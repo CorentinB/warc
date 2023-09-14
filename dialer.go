@@ -443,7 +443,7 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 		n, err := requestRecord.Content.Read(block)
 		if n > 0 {
 			if string(block) == "\n" {
-				if strings.HasPrefix(line, "GET ") && (strings.HasSuffix(line, "HTTP/1.0\r") || strings.HasSuffix(line, "HTTP/1.1\r")) {
+				if isLineStartingWithHTTPMethod(line) && (strings.HasSuffix(line, "HTTP/1.0\r") || strings.HasSuffix(line, "HTTP/1.1\r")) {
 					target = strings.Split(line, " ")[1]
 
 					if host != "" && target != "" {
