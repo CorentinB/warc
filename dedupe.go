@@ -11,6 +11,7 @@ type DedupeOptions struct {
 	LocalDedupe   bool
 	CDXDedupe     bool
 	CDXURL        string
+	CDXCookie     string
 	SizeThreshold int
 }
 
@@ -29,8 +30,16 @@ func (d *customDialer) checkLocalRevisit(digest string) revisitRecord {
 	return revisitRecord{}
 }
 
-func checkCDXRevisit(CDXURL string, digest string, targetURI string) (revisitRecord, error) {
-	resp, err := http.Get(CDXURL + "/web/timemap/cdx?url=" + url.QueryEscape(targetURI) + "&filter=digest:" + digest + "&limit=-1")
+func checkCDXRevisit(CDXURL string, digest string, targetURI string, cookie string) (revisitRecord, error) {
+	req, err := http.NewRequest("GET", CDXURL+"/web/timemap/cdx?url="+url.QueryEscape(targetURI)+"&filter=digest:"+digest+"&limit=-1", nil)
+	if err != nil {
+		return revisitRecord{}, err
+	}
+
+	if cookie != "" {
+		req.Header.Add("Cookie", cookie)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return revisitRecord{}, err
 	}
