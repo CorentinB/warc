@@ -299,14 +299,16 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	}
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
-
 	// Write revisit record if local or CDX dedupe is activated
 	var revisit = revisitRecord{}
 	if bytesCopied >= int64(d.client.dedupeOptions.SizeThreshold) {
 		if d.client.dedupeOptions.LocalDedupe {
 			revisit = d.checkLocalRevisit(payloadDigest)
-		} else if d.client.dedupeOptions.CDXDedupe {
-			revisit, _ = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
+		}
+
+		// Allow both to be checked. If local dedupe does not find anything, check CDX (if set).
+		if d.client.dedupeOptions.CDXDedupe && revisit.targetURI == "" {
+			revisit, _ = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI, d.client.dedupeOptions.CDXCookie)
 		}
 	}
 
