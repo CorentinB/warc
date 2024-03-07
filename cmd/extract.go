@@ -28,6 +28,8 @@ func extract(cmd *cobra.Command, files []string) {
 
 	for _, filepath := range files {
 		startTime := time.Now()
+		resultsChan := make(chan string)
+		results := make(map[string]int)
 
 		f, err := os.Open(filepath)
 		if err != nil {
@@ -41,6 +43,12 @@ func extract(cmd *cobra.Command, files []string) {
 			return
 		}
 
+		go func(c chan string) {
+			for result := range c {
+				results[result]++
+			}
+		}(resultsChan)
+
 		for {
 			record, err := reader.ReadRecord()
 			if err != nil {
@@ -52,15 +60,17 @@ func extract(cmd *cobra.Command, files []string) {
 			}
 
 			swg.Add()
-			go processRecord(cmd, record, &swg)
+			go processRecord(cmd, record, &resultsChan, &swg)
 		}
 
 		swg.Wait()
-		logrus.Infof("finished processing %s in %s", filepath, time.Since(startTime))
+		close(resultsChan)
+
+		printExtractReport(len(files), results, time.Since(startTime))
 	}
 }
 
-func processRecord(cmd *cobra.Command, record *warc.Record, swg *sizedwaitgroup.SizedWaitGroup) {
+func processRecord(cmd *cobra.Command, record *warc.Record, resultsChan *chan string, swg *sizedwaitgroup.SizedWaitGroup) {
 	defer record.Content.Close()
 	defer swg.Done()
 
@@ -80,12 +90,17 @@ func processRecord(cmd *cobra.Command, record *warc.Record, swg *sizedwaitgroup.
 	// If the response's Content-Type match one of the content types to extract, write the file
 	contentTypesToExtract := strings.Split(strings.Trim(cmd.Flags().Lookup("content-type").Value.String(), "[]"), ",")
 
-	if slices.Contains(contentTypesToExtract, response.Header.Get("Content-Type")) {
+	if slices.ContainsFunc(contentTypesToExtract, func(s string) bool {
+		return strings.Contains(response.Header.Get("Content-Type"), s)
+	}) {
 		err = writeFile(cmd, response, record)
 		if err != nil {
 			logrus.Errorf("failed to write file: %v", err)
 			return
 		}
+
+		// Send the result to the results channel
+		*resultsChan <- response.Header.Get("Content-Type")
 	}
 }
 
