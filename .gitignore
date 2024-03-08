@@ -1,3 +1,5 @@
 warcs/**
 temp/**
 output/**
+warc
+*.warc.gz
