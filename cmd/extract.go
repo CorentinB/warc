@@ -74,8 +74,8 @@ func processRecord(cmd *cobra.Command, record *warc.Record, resultsChan *chan st
 	defer record.Content.Close()
 	defer swg.Done()
 
-	// Only process Content-Type: application/http; msgtype=response (no reason to process requests)
-	if record.Header.Get("Content-Type") != "application/http; msgtype=response" {
+	// Only process Content-Type: application/http; msgtype=response (no reason to process requests or other records)
+	if !strings.Contains(record.Header.Get("Content-Type"), "msgtype=response") {
 		logrus.Debugf("skipping record with Content-Type: %s", record.Header.Get("Content-Type"))
 		return
 	}
