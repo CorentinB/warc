@@ -80,6 +80,11 @@ func processRecord(cmd *cobra.Command, record *warc.Record, resultsChan *chan st
 		return
 	}
 
+	if record.Header.Get("WARC-Type") == "revisit" {
+		logrus.Debugf("skipping revisit record.")
+		return
+	}
+
 	// Read the entire record.Content into a bufio.Reader
 	response, err := http.ReadResponse(bufio.NewReader(record.Content), nil)
 	if err != nil {
