@@ -8,10 +8,15 @@ import (
 
 func init() {
 	rootCmd.AddCommand(extractCmd)
+	rootCmd.AddCommand(verifyCmd)
+
 	extractCmd.Flags().IntP("threads", "t", 1, "Number of threads to use for extraction")
 	extractCmd.Flags().StringP("output", "o", "output", "Output directory for extracted files")
 	extractCmd.Flags().StringSliceP("content-type", "c", []string{}, "Content type that should be extracted")
 	extractCmd.Flags().Bool("allow-overwrite", false, "Allow overwriting of existing files")
+
+	verifyCmd.Flags().IntP("threads", "t", 1, "Number of threads to use for verification")
+	verifyCmd.Flags().Bool("json", false, "Output results in JSON format")
 }
 
 // rootCmd represents the base command when called without any subcommands
@@ -27,6 +32,14 @@ var extractCmd = &cobra.Command{
 	Long:  `Extracts the URLs from one or many WARC file(s)`,
 	Args:  cobra.MinimumNArgs(1),
 	Run:   extract,
+}
+
+var verifyCmd = &cobra.Command{
+	Use:   "verify",
+	Short: "Verify the validity of one or many WARC file(s)",
+	Long:  `Verify the validity of xtracts the URLs from one or many WARC file(s)`,
+	Args:  cobra.MinimumNArgs(1),
+	Run:   verify,
 }
 
 func main() {

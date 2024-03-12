@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base32"
 	"errors"
 	"fmt"
@@ -22,6 +23,28 @@ import (
 
 func GetSHA1(r io.Reader) string {
 	sha := sha1.New()
+
+	block := make([]byte, 256)
+	for {
+		n, err := r.Read(block)
+		if n > 0 {
+			sha.Write(block[:n])
+		}
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return "ERROR"
+		}
+	}
+
+	return base32.StdEncoding.EncodeToString(sha.Sum(nil))
+}
+
+func GetSHA256(r io.Reader) string {
+	sha := sha256.New()
 
 	block := make([]byte, 256)
 	for {
