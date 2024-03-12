@@ -192,7 +192,7 @@ func verifyBlockDigest(record *warc.Record, filepath string) (errorsCount int, v
 		logrus.WithFields(logrus.Fields{
 			"file":     filepath,
 			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("Malformed WARC-Block-Digest: %s", record.Header.Get("WARC-Block-Digest"))
+		}).Errorf("malformed WARC-Block-Digest: %s", record.Header.Get("WARC-Block-Digest"))
 		valid = false
 		errorsCount++
 		return errorsCount, valid
