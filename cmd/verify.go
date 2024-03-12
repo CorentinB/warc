@@ -78,8 +78,6 @@ func verify(cmd *cobra.Command, files []string) {
 			if !payloadDigestValid {
 				valid = false
 			}
-
-			os.Exit(1)
 		}
 
 		logger.WithFields(logrus.Fields{
