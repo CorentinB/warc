@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
 	"io"
 	"mime"
 	"net/http"
@@ -147,8 +148,24 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 	}
 	defer file.Close()
 
+	// Close body when finished.
+	defer resp.Body.Close()
+
+	var reader io.ReadCloser
+
+	switch resp.Header.Get("Content-Encoding") {
+	case "gzip":
+		reader, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			return err
+		}
+		defer reader.Close()
+	default:
+		reader = resp.Body
+	}
+
 	// Write the response body to the file
-	_, err = io.Copy(file, resp.Body)
+	_, err = io.Copy(file, reader)
 	if err != nil {
 		return err
 	}
