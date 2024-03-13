@@ -66,9 +66,10 @@ func verify(cmd *cobra.Command, files []string) {
 				}).Debugf("skipping record with Content-Type: %s", record.Header.Get("Content-Type"))
 				continue
 			}
+
 			// We cannot verify the validity of Payload-Digest on revisit records yet.
 			if record.Header.Get("WARC-Type") == "revisit" {
-				logrus.Debugf("skipping revisit record.")
+				logrus.Debugf("skipping revisit record")
 				return
 			}
 
