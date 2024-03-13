@@ -70,7 +70,7 @@ func verify(cmd *cobra.Command, files []string) {
 			// We cannot verify the validity of Payload-Digest on revisit records yet.
 			if record.Header.Get("WARC-Type") == "revisit" {
 				logrus.Debugf("skipping revisit record")
-				return
+				continue
 			}
 
 			blockDigestErrorsCount, blockDigestValid := verifyBlockDigest(record, filepath)
