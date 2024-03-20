@@ -18,9 +18,6 @@ require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
-	github.com/likexian/doh-go v0.6.4 // indirect
-	github.com/likexian/gokit v0.25.13 // indirect
-	golang.org/x/text v0.13.0 // indirect
 	github.com/quic-go/quic-go v0.41.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect
