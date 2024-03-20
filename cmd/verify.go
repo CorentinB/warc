@@ -156,7 +156,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 			return errorsCount, valid
 		}
 	} else if payloadDigestSplitted[0] == "sha256" {
-		payloadDigest := warc.GetSHA256(resp.Body)
+		payloadDigest := warc.GetSHA256Base16(resp.Body)
 		if payloadDigest == "ERROR" {
 			logrus.WithFields(logrus.Fields{
 				"file":     filepath,
@@ -217,7 +217,7 @@ func verifyBlockDigest(record *warc.Record, filepath string) (errorsCount int, v
 			errorsCount++
 		}
 	} else if blockDigestSplitted[0] == "sha256" {
-		expectedPayloadDigest := warc.GetSHA256(record.Content)
+		expectedPayloadDigest := warc.GetSHA256Base16(record.Content)
 		if expectedPayloadDigest != blockDigestSplitted[1] {
 			logrus.WithFields(logrus.Fields{
 				"file":     filepath,
