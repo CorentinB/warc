@@ -299,14 +299,16 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	}
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
-
 	// Write revisit record if local or CDX dedupe is activated
 	var revisit = revisitRecord{}
 	if bytesCopied >= int64(d.client.dedupeOptions.SizeThreshold) {
 		if d.client.dedupeOptions.LocalDedupe {
 			revisit = d.checkLocalRevisit(payloadDigest)
-		} else if d.client.dedupeOptions.CDXDedupe {
-			revisit, _ = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI)
+		}
+
+		// Allow both to be checked. If local dedupe does not find anything, check CDX (if set).
+		if d.client.dedupeOptions.CDXDedupe && revisit.targetURI == "" {
+			revisit, _ = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI, d.client.dedupeOptions.CDXCookie)
 		}
 	}
 
@@ -443,7 +445,7 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 		n, err := requestRecord.Content.Read(block)
 		if n > 0 {
 			if string(block) == "\n" {
-				if strings.HasPrefix(line, "GET ") && (strings.HasSuffix(line, "HTTP/1.0\r") || strings.HasSuffix(line, "HTTP/1.1\r")) {
+				if isLineStartingWithHTTPMethod(line) && (strings.HasSuffix(line, "HTTP/1.0\r") || strings.HasSuffix(line, "HTTP/1.1\r")) {
 					target = strings.Split(line, " ")[1]
 
 					if host != "" && target != "" {

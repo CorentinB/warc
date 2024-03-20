@@ -138,7 +138,7 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 	return -1
 }
 
-func testFileRevisitVailidity(t *testing.T, path string) {
+func testFileRevisitVailidity(t *testing.T, path string, originalTime string, originalDigest string) {
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("failed to open %q: %v", path, err)
@@ -151,9 +151,6 @@ func testFileRevisitVailidity(t *testing.T, path string) {
 	if err != nil {
 		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
 	}
-
-	var originalTime string
-	var originalDigest string
 
 	for {
 		record, err := reader.ReadRecord()
