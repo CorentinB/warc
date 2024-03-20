@@ -124,6 +124,13 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 		filename = params["filename"]
 	}
 
+	// Truncate the filename if it's too long (keep the extension)
+	if len(filename) > 255 {
+		extension := path.Ext(filename)
+
+		filename = filename[:255-len(extension)] + extension
+	}
+
 	// Check if the file already exists
 	outputDir := vmd.Flags().Lookup("output").Value.String()
 
