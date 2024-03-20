@@ -68,7 +68,7 @@ func extract(cmd *cobra.Command, files []string) {
 		swg.Wait()
 		close(resultsChan)
 
-		printExtractReport(len(files), results, time.Since(startTime))
+		printExtractReport(filepath, results, time.Since(startTime))
 	}
 }
 
@@ -115,11 +115,6 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 	// Find the filename either from the Content-Disposition header or the last part of the URL
 	filename := path.Base(record.Header.Get("WARC-Target-URI"))
 
-	url, err := url.Parse(record.Header.Get("WARC-Target-URI"))
-	if err != nil {
-		return err
-	}
-
 	if resp.Header.Get("Content-Disposition") != "" {
 		_, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
 		if err != nil {
@@ -131,25 +126,28 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 
 	// Check if the file already exists
 	outputDir := vmd.Flags().Lookup("output").Value.String()
-	domainPath := path.Join(outputDir, url.Host)
-	outputPath := path.Join(outputDir, url.Host, filename)
+
+	// Check if --host-sort is enabled, if yes extract the host from the WARC-Target-URI and put the file in a subdirectory
+	if vmd.Flags().Lookup("host-sort").Changed {
+		URI := record.Header.Get("WARC-Target-URI")
+		URL, err := url.Parse(URI)
+		if err != nil {
+			return err
+		}
+
+		err = os.MkdirAll(path.Join(outputDir, URL.Host), 0755)
+		if err != nil {
+			return err
+		}
+
+		outputDir = path.Join(outputDir, URL.Host)
+	}
+
+	outputPath := path.Join(outputDir, filename)
 	if _, err := os.Stat(outputPath); err == nil {
 		if !vmd.Flags().Lookup("allow-overwrite").Changed {
 			logrus.Infof("file %s already exists, skipping", filename)
 			return nil
-		}
-	}
-
-	// Create the output directory if it doesn't exist
-	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
-		err := os.MkdirAll(outputDir, 0755)
-		if err != nil {
-			return err
-		}
-
-		err = os.MkdirAll(domainPath, 0755)
-		if err != nil {
-			return err
 		}
 	}
 
