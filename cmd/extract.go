@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"slices"
@@ -114,6 +115,11 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 	// Find the filename either from the Content-Disposition header or the last part of the URL
 	filename := path.Base(record.Header.Get("WARC-Target-URI"))
 
+	url, err := url.Parse(record.Header.Get("WARC-Target-URI"))
+	if err != nil {
+		return err
+	}
+
 	if resp.Header.Get("Content-Disposition") != "" {
 		_, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
 		if err != nil {
@@ -125,7 +131,8 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 
 	// Check if the file already exists
 	outputDir := vmd.Flags().Lookup("output").Value.String()
-	outputPath := path.Join(outputDir, filename)
+	domainPath := path.Join(outputDir, url.Host)
+	outputPath := path.Join(outputDir, url.Host, filename)
 	if _, err := os.Stat(outputPath); err == nil {
 		if !vmd.Flags().Lookup("allow-overwrite").Changed {
 			logrus.Infof("file %s already exists, skipping", filename)
@@ -136,6 +143,11 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 	// Create the output directory if it doesn't exist
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
 		err := os.MkdirAll(outputDir, 0755)
+		if err != nil {
+			return err
+		}
+
+		err = os.MkdirAll(domainPath, 0755)
 		if err != nil {
 			return err
 		}
