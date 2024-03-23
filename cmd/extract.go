@@ -121,7 +121,9 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 			return err
 		}
 
-		filename = params["filename"]
+		if params["filename"] != "" {
+			filename = params["filename"]
+		}
 	}
 
 	// Truncate the filename if it's too long (keep the extension)
