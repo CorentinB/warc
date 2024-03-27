@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"io"
 	"mime"
@@ -143,6 +144,14 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 	// Check if the file already exists
 	outputDir := vmd.Flags().Lookup("output").Value.String()
 
+	// Create the output directory if it doesn't exist.
+	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
+		err := os.MkdirAll(outputDir, 0755)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Check if --host-sort is enabled, if yes extract the host from the WARC-Target-URI and put the file in a subdirectory
 	if vmd.Flags().Lookup("host-sort").Changed {
 		URI := record.Header.Get("WARC-Target-URI")
@@ -161,7 +170,65 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 
 	outputPath := path.Join(outputDir, filename)
 	if _, err := os.Stat(outputPath); err == nil {
-		if !vmd.Flags().Lookup("allow-overwrite").Changed {
+		if vmd.Flags().Lookup("hash-suffix").Changed {
+			// Read the file to check the hash.
+			originalFile, err := os.Open(outputPath)
+			if err != nil {
+				return err
+			}
+
+			defer originalFile.Close()
+
+			body, err := io.ReadAll(resp.Body)
+
+			if err != nil {
+				return err
+			}
+
+			var reader io.Reader
+
+			if resp.Header.Get("Content-Encoding") == "gzip" {
+				reader, err = gzip.NewReader(resp.Body)
+				if err != nil {
+					return err
+				}
+			} else {
+				reader = bytes.NewReader(body)
+			}
+
+			payloadDigest := warc.GetSHA1(reader)
+
+			// Reset response reader
+			resp.Body = io.NopCloser(bytes.NewBuffer(body))
+
+			originalPayloadDigest := warc.GetSHA1(originalFile)
+
+			if originalPayloadDigest != payloadDigest {
+				if len(filename) > 247 {
+					extension := path.Ext(filename)
+
+					filename = filename[:247-len(extension)] + "[" + payloadDigest[26:] + "]" + extension
+				} else {
+					extension := path.Ext(filename)
+
+					filename = filename[:len(filename)-len(extension)] + "[" + payloadDigest[26:] + "]" + extension
+				}
+
+				outputPath = path.Join(outputDir, filename)
+				// Double check that the new file doesn't exist
+				if _, err := os.Stat(outputPath); err == nil {
+					if !vmd.Flags().Lookup("allow-overwrite").Changed {
+						logrus.Infof("file %s already exists, skipping", filename)
+						return nil
+					}
+				}
+			} else {
+				// Matches!
+				logrus.Infof("file %s already exists and hash matches, skipping", filename)
+				return nil
+			}
+
+		} else if !vmd.Flags().Lookup("allow-overwrite").Changed {
 			logrus.Infof("file %s already exists, skipping", filename)
 			return nil
 		}
