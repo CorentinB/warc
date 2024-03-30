@@ -133,6 +133,9 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 		filename = filename[:255-len(extension)] + extension
 	}
 
+	// Remove any invalid characters from the filename
+	filename = strings.ReplaceAll(filename, "/", "_")
+
 	// Check if the file already exists
 	outputDir := vmd.Flags().Lookup("output").Value.String()
 
