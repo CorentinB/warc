@@ -117,12 +117,16 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 
 	if resp.Header.Get("Content-Disposition") != "" {
 		_, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
-		if err != nil {
-			return err
-		}
+		if err == nil {
+			if params["filename"] != "" {
+				filename = params["filename"]
+			}
+		} else {
+			logrus.Debugf("failed to parse Content-Disposition header: %v", err)
 
-		if params["filename"] != "" {
-			filename = params["filename"]
+			if !strings.HasSuffix(filename, ".pdf") {
+				filename += ".pdf"
+			}
 		}
 	}
 
