@@ -188,7 +188,7 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 			var reader io.Reader
 
 			if resp.Header.Get("Content-Encoding") == "gzip" {
-				reader, err = gzip.NewReader(resp.Body)
+				reader, err = gzip.NewReader(bytes.NewReader(body))
 				if err != nil {
 					return err
 				}
