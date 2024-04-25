@@ -93,6 +93,17 @@ func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err e
 			return nil, err
 		}
 	} else {
+		if d.client.randomLocalIP {
+			localAddr := getLocalAddr(network, address)
+			if localAddr != nil {
+				if network == "tcp" {
+					d.LocalAddr = localAddr.(*net.TCPAddr)
+				} else if network == "udp" {
+					d.LocalAddr = localAddr.(*net.UDPAddr)
+				}
+			}
+		}
+
 		conn, err = d.Dial(network, address)
 		if err != nil {
 			return nil, err
@@ -114,6 +125,17 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 			return nil, err
 		}
 	} else {
+		if d.client.randomLocalIP {
+			localAddr := getLocalAddr(network, address)
+			if localAddr != nil {
+				if network == "tcp" {
+					d.LocalAddr = localAddr.(*net.TCPAddr)
+				} else if network == "udp" {
+					d.LocalAddr = localAddr.(*net.UDPAddr)
+				}
+			}
+		}
+
 		plainConn, err = d.Dial(network, address)
 		if err != nil {
 			return nil, err

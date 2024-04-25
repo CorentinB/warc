@@ -19,7 +19,6 @@ type Reader struct {
 func (r *Reader) Close() {
 	r.gzipReader.Close()
 }
-
 type reader interface {
 	ReadString(delim byte) (line string, err error)
 }

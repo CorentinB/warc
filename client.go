@@ -27,6 +27,7 @@ type HTTPClientSettings struct {
 	FollowRedirects       bool
 	TCPTimeout            time.Duration
 	TLSHandshakeTimeout   time.Duration
+	RandomLocalIP         bool
 }
 
 type CustomHTTPClient struct {
@@ -43,6 +44,7 @@ type CustomHTTPClient struct {
 	FullOnDisk             bool
 	MaxReadBeforeTruncate  int
 	DataTotal              *ratecounter.Counter
+	randomLocalIP          bool
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -68,6 +70,12 @@ func (c *CustomHTTPClient) Close() error {
 
 func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient *CustomHTTPClient, err error) {
 	httpClient = new(CustomHTTPClient)
+
+	// Configure random local IP
+	httpClient.randomLocalIP = HTTPClientSettings.RandomLocalIP
+	if httpClient.randomLocalIP {
+		go getAvailableIPs()
+	}
 
 	// Init data counters
 	httpClient.DataTotal = new(ratecounter.Counter)

@@ -144,7 +144,7 @@ func NewWriter(writer io.Writer, fileName string, compression string, contentLen
 				FileWriter:  bufio.NewWriter(gzipWriter),
 			}, nil
 		} else if compression == "ZSTD" {
-			zstdWriter, err := zstd.NewWriter(writer)
+			zstdWriter, err := zstd.NewWriter(writer, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
 			if err != nil {
 				return nil, err
 			}
