@@ -2,10 +2,22 @@ package warc
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+var CDXHTTPClient = http.Client{
+	Timeout: 10,
+	Transport: &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: 5 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 5 * time.Second,
+	},
+}
 
 type DedupeOptions struct {
 	LocalDedupe   bool
@@ -31,7 +43,7 @@ func (d *customDialer) checkLocalRevisit(digest string) revisitRecord {
 }
 
 func checkCDXRevisit(CDXURL string, digest string, targetURI string, cookie string) (revisitRecord, error) {
-	req, err := http.NewRequest("GET", CDXURL+"/web/timemap/cdx?url="+url.QueryEscape(targetURI)+"&filter=digest:"+digest+"&limit=-1", nil)
+	req, err := http.NewRequest("GET", CDXURL+"/web/timemap/cdx?url="+url.QueryEscape(targetURI)+"&limit=-1", nil)
 	if err != nil {
 		return revisitRecord{}, err
 	}
@@ -39,7 +51,7 @@ func checkCDXRevisit(CDXURL string, digest string, targetURI string, cookie stri
 	if cookie != "" {
 		req.Header.Add("Cookie", cookie)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := CDXHTTPClient.Do(req)
 	if err != nil {
 		return revisitRecord{}, err
 	}
@@ -52,7 +64,7 @@ func checkCDXRevisit(CDXURL string, digest string, targetURI string, cookie stri
 
 	cdxReply := strings.Fields(string(body))
 
-	if len(cdxReply) >= 7 {
+	if len(cdxReply) >= 7 && cdxReply[3] != "warc/revisit" && cdxReply[6] == digest {
 		return revisitRecord{
 			responseUUID: "",
 			targetURI:    cdxReply[2],
