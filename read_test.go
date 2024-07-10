@@ -139,6 +139,7 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 }
 
 func testFileRevisitVailidity(t *testing.T, path string, originalTime string, originalDigest string) {
+	var revisitRecordsFound = false
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("failed to open %q: %v", path, err)
@@ -156,7 +157,12 @@ func testFileRevisitVailidity(t *testing.T, path string, originalTime string, or
 		record, err := reader.ReadRecord()
 
 		if err == io.EOF {
-			return
+			if revisitRecordsFound {
+				return
+			} else {
+				t.Fatalf("No revisit records found.")
+				break
+			}
 		}
 
 		if err != nil {
@@ -179,6 +185,7 @@ func testFileRevisitVailidity(t *testing.T, path string, originalTime string, or
 		}
 
 		if record.Header.Get("WARC-Type") == "revisit" {
+			revisitRecordsFound = true
 			if record.Header.Get("WARC-Payload-Digest") == originalDigest && record.Header.Get("WARC-Refers-To-Date") == originalTime {
 				record.Content.Close()
 				continue
