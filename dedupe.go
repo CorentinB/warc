@@ -5,12 +5,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var CDXHTTPClient = http.Client{
-	Timeout: 10,
+	Timeout: 10 * time.Second,
 	Transport: &http.Transport{
 		Dial: (&net.Dialer{
 			Timeout: 5 * time.Second,
@@ -30,6 +31,7 @@ type DedupeOptions struct {
 type revisitRecord struct {
 	responseUUID string
 	targetURI    string
+	size         int
 	date         string
 }
 
@@ -56,7 +58,6 @@ func checkCDXRevisit(CDXURL string, digest string, targetURI string, cookie stri
 		return revisitRecord{}, err
 	}
 	defer resp.Body.Close()
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return revisitRecord{}, err
@@ -65,8 +66,11 @@ func checkCDXRevisit(CDXURL string, digest string, targetURI string, cookie stri
 	cdxReply := strings.Fields(string(body))
 
 	if len(cdxReply) >= 7 && cdxReply[3] != "warc/revisit" && cdxReply[6] == digest {
+		recordSize, _ := strconv.Atoi(cdxReply[6])
+
 		return revisitRecord{
 			responseUUID: "",
+			size:         recordSize,
 			targetURI:    cdxReply[2],
 			date:         cdxReply[1],
 		}, nil

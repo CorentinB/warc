@@ -5,8 +5,6 @@ import (
 	"os"
 	"sync"
 	"time"
-
-	"github.com/paulbellamy/ratecounter"
 )
 
 type Error struct {
@@ -43,7 +41,6 @@ type CustomHTTPClient struct {
 	TempDir                string
 	FullOnDisk             bool
 	MaxReadBeforeTruncate  int
-	DataTotal              *ratecounter.Counter
 	randomLocalIP          bool
 }
 
@@ -76,9 +73,6 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	if httpClient.randomLocalIP {
 		go getAvailableIPs()
 	}
-
-	// Init data counters
-	httpClient.DataTotal = new(ratecounter.Counter)
 
 	// Toggle deduplication options and create map for deduplication records.
 	httpClient.dedupeOptions = HTTPClientSettings.DedupeOptions
