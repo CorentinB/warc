@@ -450,12 +450,11 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
 	rotatorSettings.Prefix = "DEDUP2"
-
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
 		RotatorSettings: rotatorSettings,
 		DedupeOptions: DedupeOptions{
-			LocalDedupe: true,
+			LocalDedupe: false,
 			CDXDedupe:   true,
 			CDXURL:      server.URL,
 		},
