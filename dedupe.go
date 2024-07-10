@@ -65,7 +65,7 @@ func checkCDXRevisit(CDXURL string, digest string, targetURI string, cookie stri
 
 	cdxReply := strings.Fields(string(body))
 
-	if len(cdxReply) >= 7 && cdxReply[3] != "warc/revisit" && cdxReply[6] == digest {
+	if len(cdxReply) >= 7 && cdxReply[3] != "warc/revisit" && cdxReply[5] == digest {
 		recordSize, _ := strconv.Atoi(cdxReply[6])
 
 		return revisitRecord{
