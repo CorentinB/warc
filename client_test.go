@@ -410,6 +410,11 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
 		testFileRevisitVailidity(t, path, "", "")
 	}
+
+	// verify that the local dedupe count is correct
+	if LocalDedupeTotal.Value() != 26882 {
+		t.Fatalf("remote dedupe total mismatch, expected: 26882 got: %d", LocalDedupeTotal.Value())
+	}
 }
 
 func TestHTTPClientRemoteDedupe(t *testing.T) {
