@@ -504,6 +504,11 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 4)
 		testFileRevisitVailidity(t, path, "20220320002518", "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3")
 	}
+
+	// verify that the remote dedupe count is correct
+	if RemoteDedupeTotal.Value() != 55896 {
+		t.Fatalf("remote dedupe total mismatch, expected: 55896 got: %d", RemoteDedupeTotal.Value())
+	}
 }
 
 func TestHTTPClientDisallow429(t *testing.T) {
