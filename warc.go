@@ -36,12 +36,17 @@ var (
 	fileMutex sync.Mutex
 
 	// Create a counter to keep track of the number of bytes written to WARC files
-	DataTotal *ratecounter.Counter
+	// and the number of bytes deduped
+	DataTotal         *ratecounter.Counter
+	RemoteDedupeTotal *ratecounter.Counter
+	LocalDedupeTotal  *ratecounter.Counter
 )
 
 func init() {
 	// Initialize the counters
 	DataTotal = new(ratecounter.Counter)
+	RemoteDedupeTotal = new(ratecounter.Counter)
+	LocalDedupeTotal = new(ratecounter.Counter)
 }
 
 // NewWARCRotator creates and return a channel that can be used

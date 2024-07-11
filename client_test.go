@@ -2,7 +2,6 @@ package warc
 
 import (
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,7 +25,7 @@ func TestHTTPClient(t *testing.T) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -37,7 +36,7 @@ func TestHTTPClient(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +105,7 @@ func TestHTTPClientWithProxy(t *testing.T) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +116,7 @@ func TestHTTPClientWithProxy(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +174,7 @@ func TestHTTPClientConcurrent(t *testing.T) {
 	)
 
 	// init test HTTP endpoint
-	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+	fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +187,7 @@ func TestHTTPClientConcurrent(t *testing.T) {
 	defer server.Close()
 
 	// init WARC rotator settings
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +256,7 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 	)
 
 	// init test HTTP endpoint
-	fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+	fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +269,7 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 	defer server.Close()
 
 	// init WARC rotator settings
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +344,7 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -356,7 +355,7 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,6 +410,11 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
 		testFileRevisitVailidity(t, path, "", "")
 	}
+
+	// verify that the local dedupe count is correct
+	if LocalDedupeTotal.Value() != 26882 {
+		t.Fatalf("remote dedupe total mismatch, expected: 26882 got: %d", LocalDedupeTotal.Value())
+	}
 }
 
 func TestHTTPClientRemoteDedupe(t *testing.T) {
@@ -425,7 +429,7 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -444,19 +448,18 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
 	rotatorSettings.Prefix = "DEDUP2"
-
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
 		RotatorSettings: rotatorSettings,
 		DedupeOptions: DedupeOptions{
-			LocalDedupe: true,
+			LocalDedupe: false,
 			CDXDedupe:   true,
 			CDXURL:      server.URL,
 		},
@@ -501,6 +504,11 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 4)
 		testFileRevisitVailidity(t, path, "20220320002518", "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3")
 	}
+
+	// verify that the remote dedupe count is correct
+	if RemoteDedupeTotal.Value() != 55896 {
+		t.Fatalf("remote dedupe total mismatch, expected: 55896 got: %d", RemoteDedupeTotal.Value())
+	}
 }
 
 func TestHTTPClientDisallow429(t *testing.T) {
@@ -512,7 +520,7 @@ func TestHTTPClientDisallow429(t *testing.T) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -523,7 +531,7 @@ func TestHTTPClientDisallow429(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -586,7 +594,7 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "2MB.jpg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -597,7 +605,7 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -656,7 +664,7 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "2MB.jpg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -667,7 +675,7 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -741,7 +749,7 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 
 	// init test (self-signed) HTTPS endpoint
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -752,7 +760,7 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -809,7 +817,7 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 
 	// init test (self-signed) HTTPS endpoint
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -820,7 +828,7 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -879,7 +887,7 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -890,7 +898,7 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -950,7 +958,7 @@ func TestHTTPClientWithoutIoCopy(t *testing.T) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -961,7 +969,7 @@ func TestHTTPClientWithoutIoCopy(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1021,7 +1029,7 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "image.svg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1032,7 +1040,7 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1093,7 +1101,7 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fileBytes, err := ioutil.ReadFile(path.Join("testdata", "2MB.jpg"))
+		fileBytes, err := os.ReadFile(path.Join("testdata", "2MB.jpg"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1104,7 +1112,7 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = ioutil.TempDir("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -275,6 +275,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			if r.Header.Get("WARC-Type") == "response" {
 				d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
 					responseUUID: recordIDs[i],
+					size:         getContentLength(r.Content),
 					targetURI:    warcTargetURI,
 					date:         batch.CaptureTime,
 				})
@@ -326,11 +327,14 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	if bytesCopied >= int64(d.client.dedupeOptions.SizeThreshold) {
 		if d.client.dedupeOptions.LocalDedupe {
 			revisit = d.checkLocalRevisit(payloadDigest)
+
+			LocalDedupeTotal.Incr(int64(revisit.size))
 		}
 
 		// Allow both to be checked. If local dedupe does not find anything, check CDX (if set).
 		if d.client.dedupeOptions.CDXDedupe && revisit.targetURI == "" {
 			revisit, _ = checkCDXRevisit(d.client.dedupeOptions.CDXURL, payloadDigest, warcTargetURI, d.client.dedupeOptions.CDXCookie)
+			RemoteDedupeTotal.Incr(int64(revisit.size))
 		}
 	}
 
