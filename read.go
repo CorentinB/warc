@@ -3,39 +3,31 @@ package warc
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
-
-	gzip "github.com/klauspost/compress/gzip"
+	"strconv"
 )
 
 // Reader store the bufio.Reader and gzip.Reader for a WARC file
 type Reader struct {
-	reader     *bufio.Reader
-	gzipReader *gzip.Reader
-	record     *Record
+	bufReader *bufio.Reader
+	record    *Record
 }
 
-// Close closes the reader.
-func (r *Reader) Close() {
-	r.gzipReader.Close()
-}
 type reader interface {
 	ReadString(delim byte) (line string, err error)
 }
 
 // NewReader returns a new WARC reader
-func NewReader(reader io.Reader) (*Reader, error) {
-	bufioReader := bufio.NewReader(reader)
-
-	// Wrap the reader into a bufio.Reader to add the ByteReader method
-	zr, err := gzip.NewReader(bufioReader)
+func NewReader(reader io.ReadCloser) (*Reader, error) {
+	decReader, err := NewDecompressionReader(reader)
 	if err != nil {
 		return nil, err
 	}
+	bufioReader := bufio.NewReader(decReader)
 
 	return &Reader{
-		reader:     bufioReader,
-		gzipReader: zr,
+		bufReader: bufioReader,
 	}, nil
 }
 
@@ -62,8 +54,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		tempReader *bufio.Reader
 	)
 
-	r.gzipReader.Multistream(false)
-	tempReader = bufio.NewReader(r.gzipReader)
+	tempReader = bufio.NewReader(r.bufReader)
 
 	// Skip first line (WARC version)
 	// TODO: add check for WARC version
@@ -90,13 +81,19 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		}
 	}
 
-	// Parse the record content
-	var tempBuf bytes.Buffer
-	if _, err := tempBuf.ReadFrom(tempReader); err != nil {
-		return nil, err
+	// Get the content length
+	length, err := strconv.Atoi(header.Get("Content-Length"))
+	if err != nil {
+		panic(err)
 	}
 
-	tempBuf.Truncate(bytes.LastIndex(tempBuf.Bytes(), []byte("\r\n\r\n")))
+	lr := io.LimitReader(r.bufReader, int64(length))
+
+	tempBuf := new(bytes.Buffer)
+	_, err = tempBuf.ReadFrom(lr)
+	if err != nil {
+		return nil, err
+	}
 
 	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
 	buf := NewSpooledTempFile("warc", "", false)
@@ -110,13 +107,16 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		Content: buf,
 	}
 
-	// Reset the reader for the next block
-	err = r.gzipReader.Reset(r.reader)
-	if err == io.EOF {
-		return r.record, nil
-	}
-	if err != nil {
-		return r.record, err
+	// Skip two empty lines
+	for i := 0; i < 2; i++ {
+		boundary, _, err := r.bufReader.ReadLine()
+		if (err != nil) && (err != io.EOF) {
+			return nil, fmt.Errorf("read record boundary: %w", err)
+		}
+
+		if len(boundary) != 0 {
+			return nil, fmt.Errorf("non-empty record boundary [boundary: %s]", boundary)
+		}
 	}
 
 	return r.record, nil
