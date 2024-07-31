@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -44,9 +43,10 @@ func verify(cmd *cobra.Command, files []string) {
 
 	for _, filepath := range files {
 		startTime := time.Now()
-		valid := true
+		valid := true             // The WARC file is valid
+		allRecordsReaded := false // All records readed successfully
 		errorsCount := 0
-		recordCount := 0
+		recordCount := 0 // Count of records processed
 
 		recordChan := make(chan *warc.Record, threads*2)
 		results := make(chan result, threads*2)
@@ -55,7 +55,8 @@ func verify(cmd *cobra.Command, files []string) {
 		var recordReaderWg sync.WaitGroup
 
 		if !cmd.Flags().Lookup("json").Changed {
-			logger.WithFields(logrus.Fields{
+			// Output the message if not in --json mode
+			logrus.WithFields(logrus.Fields{
 				"file":    filepath,
 				"threads": threads,
 			}).Info("verifying")
@@ -80,7 +81,7 @@ func verify(cmd *cobra.Command, files []string) {
 
 		reader, err := warc.NewReader(f)
 		if err != nil {
-			logger.WithFields(logrus.Fields{
+			logrus.WithFields(logrus.Fields{
 				"file": filepath,
 			}).Errorf("warc.NewReader failed: %v", err)
 			return
@@ -92,16 +93,25 @@ func verify(cmd *cobra.Command, files []string) {
 			defer recordReaderWg.Done()
 			defer close(recordChan)
 			for {
-				record, err := reader.ReadRecord()
+				record, eof, err := reader.ReadRecord()
+				if eof {
+					allRecordsReaded = true
+					break
+				}
 				if err != nil {
-					if err != io.EOF {
+					if record == nil {
+						logrus.WithFields(logrus.Fields{
+							"file": filepath,
+						}).Errorf("failed to read record: %v", err)
+					} else {
 						logrus.WithFields(logrus.Fields{
 							"file":     filepath,
 							"recordId": record.Header.Get("WARC-Record-ID"),
-						}).Errorf("failed to read all record content: %v", err)
-						return
+						}).Errorf("failed to read record: %v", err)
 					}
-					break
+					errorsCount++
+					valid = false
+					return
 				}
 				recordCount++
 
@@ -150,10 +160,11 @@ func verify(cmd *cobra.Command, files []string) {
 		recordReaderWg.Wait()
 
 		logger.WithFields(logrus.Fields{
-			"file":   filepath,
-			"valid":  valid,
-			"errors": errorsCount,
-			"count":  recordCount,
+			"file":             filepath,
+			"valid":            valid,
+			"errors":           errorsCount,
+			"count":            recordCount,
+			"allRecordsReaded": allRecordsReaded,
 		}).Infof("verified in %s", time.Since(startTime))
 	}
 }

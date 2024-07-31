@@ -48,7 +48,11 @@ func readUntilDelim(r reader, delim []byte) (line []byte, err error) {
 }
 
 // ReadRecord reads the next record from the opened WARC file
-func (r *Reader) ReadRecord() (*Record, error) {
+// returns:
+//   - Record: if an error occurred, record **may be** nil. if eol is true, record **must be** nil.
+//   - bool (eol): if true, we readed all records successfully.
+//   - error: error
+func (r *Reader) ReadRecord() (*Record, bool, error) {
 	var (
 		err        error
 		tempReader *bufio.Reader
@@ -61,9 +65,9 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	warcVer, err = readUntilDelim(tempReader, []byte("\r\n"))
 	if err != nil {
 		if err == io.EOF {
-			return &Record{Header: nil, Content: nil}, err
+			return nil, true, nil // EOF, no error
 		}
-		return nil, err
+		return nil, false, fmt.Errorf("read WARC version: %w", err)
 	}
 
 	// Parse the record headers
@@ -71,7 +75,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	for {
 		line, err := readUntilDelim(tempReader, []byte("\r\n"))
 		if err != nil {
-			return nil, err
+			return nil, false, fmt.Errorf("read header: %w", err)
 		}
 		if len(line) == 0 {
 			break
@@ -81,17 +85,17 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		}
 	}
 
-	// Get the content length
-	length, err := strconv.Atoi(header.Get("Content-Length"))
+	// Get the Content-Length
+	length, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("invalid content length: %w", err)
+		return nil, false, fmt.Errorf("parse Content-Length: %w", err)
 	}
 
 	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
 	buf := NewSpooledTempFile("warc", "", false)
 	_, err = io.CopyN(buf, tempReader, length)
 	if err != nil {
-		return nil, err
+		return nil, false, fmt.Errorf("copy record content: %w", err)
 	}
 
 	r.record = &Record{
@@ -104,13 +108,13 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	for i := 0; i < 2; i++ {
 		boundary, _, err := r.bufReader.ReadLine()
 		if (err != nil) && (err != io.EOF) {
-			return nil, fmt.Errorf("read record boundary: %w", err)
+			return r.record, false, fmt.Errorf("read record boundary: %w", err)
 		}
 
 		if len(boundary) != 0 {
-			return nil, fmt.Errorf("non-empty record boundary [boundary: %s]", boundary)
+			return r.record, false, fmt.Errorf("non-empty record boundary [boundary: %s]", boundary)
 		}
 	}
 
-	return r.record, nil
+	return r.record, false, nil // ok
 }

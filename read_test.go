@@ -2,7 +2,6 @@ package warc
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"testing"
 )
@@ -22,11 +21,12 @@ func testFileHash(t *testing.T, path string) {
 	}
 
 	for {
-		record, err := reader.ReadRecord()
+		record, eol, err := reader.ReadRecord()
+		if eol {
+			break
+		}
 		if err != nil {
-			if err != io.EOF {
-				t.Fatalf("failed to read all record content: %v", err)
-			}
+			t.Fatalf("failed to read all record content: %v", err)
 			break
 		}
 
@@ -53,7 +53,12 @@ func testFileScan(t *testing.T, path string) {
 
 	total := 0
 	for {
-		if _, err := reader.ReadRecord(); err != nil {
+		_, eol, err := reader.ReadRecord()
+		if eol {
+			break
+		}
+		if err != nil {
+			t.Fatalf("failed to read all record content: %v", err)
 			break
 		}
 		total++
@@ -84,8 +89,8 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 	totalRead := 0
 
 	for {
-		record, err := reader.ReadRecord()
-		if err == io.EOF {
+		record, eol, err := reader.ReadRecord()
+		if eol {
 			if expectedTotal == -1 {
 				// This is expected for multiple file WARCs as we need to count the total count outside of this function.
 				return totalRead
@@ -154,15 +159,13 @@ func testFileRevisitVailidity(t *testing.T, path string, originalTime string, or
 	}
 
 	for {
-		record, err := reader.ReadRecord()
-
-		if err == io.EOF {
+		record, eol, err := reader.ReadRecord()
+		if eol {
 			if revisitRecordsFound {
 				return
-			} else {
-				t.Fatalf("No revisit records found.")
-				break
 			}
+			t.Fatalf("No revisit records found.")
+			break
 		}
 
 		if err != nil {
