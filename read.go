@@ -84,20 +84,18 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	// Get the content length
 	length, err := strconv.Atoi(header.Get("Content-Length"))
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("invalid content length: %w", err)
 	}
 
-	lr := io.LimitReader(r.bufReader, int64(length))
-
-	tempBuf := new(bytes.Buffer)
-	_, err = tempBuf.ReadFrom(lr)
+	// Use a buffer to read the content directly
+	content := make([]byte, length)
+	_, err = io.ReadFull(tempReader, content)
 	if err != nil {
 		return nil, err
 	}
 
-	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
 	buf := NewSpooledTempFile("warc", "", false)
-	_, err = buf.Write(tempBuf.Bytes())
+	_, err = buf.Write(content)
 	if err != nil {
 		return nil, err
 	}
