@@ -87,15 +87,9 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		return nil, fmt.Errorf("invalid content length: %w", err)
 	}
 
-	// Use a buffer to read the content directly
-	content := make([]byte, length)
-	_, err = io.ReadFull(tempReader, content)
-	if err != nil {
-		return nil, err
-	}
-
+	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
 	buf := NewSpooledTempFile("warc", "", false)
-	_, err = buf.Write(content)
+	_, err = io.CopyN(buf, tempReader, length)
 	if err != nil {
 		return nil, err
 	}
