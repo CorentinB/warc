@@ -45,7 +45,7 @@ func verify(cmd *cobra.Command, files []string) {
 			return
 		}
 
-		record_count := 0
+		recordCount := 0
 		for {
 			record, err := reader.ReadRecord()
 			if err != nil {
@@ -58,7 +58,7 @@ func verify(cmd *cobra.Command, files []string) {
 				}
 				break
 			}
-			record_count++
+			recordCount++
 
 			// Only process Content-Type: application/http; msgtype=response (no reason to process requests or other records)
 			if !strings.Contains(record.Header.Get("Content-Type"), "msgtype=response") {
@@ -92,7 +92,7 @@ func verify(cmd *cobra.Command, files []string) {
 			"file":   filepath,
 			"valid":  valid,
 			"errors": errorsCount,
-			"count":  record_count,
+			"count":  recordCount,
 		}).Infof("verified in %s", time.Since(startTime))
 	}
 }
