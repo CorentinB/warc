@@ -56,9 +56,9 @@ func (r *Reader) ReadRecord() (*Record, error) {
 
 	tempReader = bufio.NewReader(r.bufReader)
 
-	// Skip first line (WARC version)
-	// TODO: add check for WARC version
-	_, err = readUntilDelim(tempReader, []byte("\r\n"))
+	// first line: WARC version
+	var warcVer []byte
+	warcVer, err = readUntilDelim(tempReader, []byte("\r\n"))
 	if err != nil {
 		if err == io.EOF {
 			return &Record{Header: nil, Content: nil}, err
@@ -103,6 +103,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	r.record = &Record{
 		Header:  header,
 		Content: buf,
+		Version: string(warcVer),
 	}
 
 	// Skip two empty lines

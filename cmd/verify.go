@@ -19,10 +19,12 @@ func processVerifyRecord(record *warc.Record, filepath string, results chan<- re
 	var res result
 	res.blockDigestErrorsCount, res.blockDigestValid = verifyBlockDigest(record, filepath)
 	res.payloadDigestErrorsCount, res.payloadDigestValid = verifyPayloadDigest(record, filepath)
+	res.warcVersionValid = verifyWarcVersion(record, filepath)
 	results <- res
 }
 
 type result struct {
+	warcVersionValid         bool
 	blockDigestErrorsCount   int
 	blockDigestValid         bool
 	payloadDigestErrorsCount int
@@ -128,13 +130,17 @@ func verify(cmd *cobra.Command, files []string) {
 		go func() {
 			defer recordReaderWg.Done()
 			for res := range results {
-				errorsCount += res.blockDigestErrorsCount
 				if !res.blockDigestValid {
 					valid = false
+					errorsCount += res.blockDigestErrorsCount
 				}
-				errorsCount += res.payloadDigestErrorsCount
 				if !res.payloadDigestValid {
 					valid = false
+					errorsCount += res.payloadDigestErrorsCount
+				}
+				if !res.warcVersionValid {
+					valid = false
+					errorsCount++
 				}
 			}
 		}()
@@ -295,4 +301,17 @@ func verifyBlockDigest(record *warc.Record, filepath string) (errorsCount int, v
 	}
 
 	return errorsCount, valid
+}
+
+func verifyWarcVersion(record *warc.Record, filepath string) (valid bool) {
+	valid = true
+	if record.Version != "WARC/1.0" && record.Version != "WARC/1.1" {
+		logrus.WithFields(logrus.Fields{
+			"file":     filepath,
+			"recordId": record.Header.Get("WARC-Record-ID"),
+		}).Errorf("invalid WARC version: %s", record.Version)
+		valid = false
+	}
+
+	return valid
 }
