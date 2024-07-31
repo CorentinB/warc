@@ -5,7 +5,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/CorentinB/warc"
@@ -13,11 +15,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func processVerifyRecord(record *warc.Record, filepath string, results chan<- result) {
+	var res result
+	res.blockDigestErrorsCount, res.blockDigestValid = verifyBlockDigest(record, filepath)
+	res.payloadDigestErrorsCount, res.payloadDigestValid = verifyPayloadDigest(record, filepath)
+	results <- res
+}
+
+type result struct {
+	blockDigestErrorsCount   int
+	blockDigestValid         bool
+	payloadDigestErrorsCount int
+	payloadDigestValid       bool
+}
+
 func verify(cmd *cobra.Command, files []string) {
-	// threads, err := strconv.Atoi(cmd.Flags().Lookup("threads").Value.String())
-	// if err != nil {
-	// 	logrus.Fatalf("failed to parse threads: %s", err.Error())
-	// }
+	threads, err := strconv.Atoi(cmd.Flags().Lookup("threads").Value.String())
+	if err != nil {
+		logrus.Fatalf("failed to parse threads: %s", err.Error())
+	}
 
 	logger := logrus.New()
 	if cmd.Flags().Lookup("json").Changed {
@@ -28,6 +44,29 @@ func verify(cmd *cobra.Command, files []string) {
 		startTime := time.Now()
 		valid := true
 		errorsCount := 0
+		recordCount := 0
+
+		recordChan := make(chan *warc.Record, threads*2)
+		results := make(chan result, threads*2)
+
+		var processWg sync.WaitGroup
+		var recordReaderWg sync.WaitGroup
+
+		if !cmd.Flags().Lookup("json").Changed {
+			logger.WithFields(logrus.Fields{
+				"file":    filepath,
+				"threads": threads,
+			}).Info("verifying")
+		}
+		for i := 0; i < threads; i++ {
+			processWg.Add(1)
+			go func() {
+				defer processWg.Done()
+				for record := range recordChan {
+					processVerifyRecord(record, filepath, results)
+				}
+			}()
+		}
 
 		f, err := os.Open(filepath)
 		if err != nil {
@@ -39,54 +78,70 @@ func verify(cmd *cobra.Command, files []string) {
 
 		reader, err := warc.NewReader(f)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{
+			logger.WithFields(logrus.Fields{
 				"file": filepath,
 			}).Errorf("warc.NewReader failed: %v", err)
 			return
 		}
 
-		recordCount := 0
-		for {
-			record, err := reader.ReadRecord()
-			if err != nil {
-				if err != io.EOF {
+		// Read records and send them to workers
+		recordReaderWg.Add(1)
+		go func() {
+			defer recordReaderWg.Done()
+			defer close(recordChan)
+			for {
+				record, err := reader.ReadRecord()
+				if err != nil {
+					if err != io.EOF {
+						logrus.WithFields(logrus.Fields{
+							"file":     filepath,
+							"recordId": record.Header.Get("WARC-Record-ID"),
+						}).Errorf("failed to read all record content: %v", err)
+						return
+					}
+					break
+				}
+				recordCount++
+
+				// Only process Content-Type: application/http; msgtype=response (no reason to process requests or other records)
+				if !strings.Contains(record.Header.Get("Content-Type"), "msgtype=response") {
 					logrus.WithFields(logrus.Fields{
 						"file":     filepath,
 						"recordId": record.Header.Get("WARC-Record-ID"),
-					}).Errorf("failed to read all record content: %v", err)
-					return
+					}).Debugf("skipping record with Content-Type: %s", record.Header.Get("Content-Type"))
+					continue
 				}
-				break
-			}
-			recordCount++
 
-			// Only process Content-Type: application/http; msgtype=response (no reason to process requests or other records)
-			if !strings.Contains(record.Header.Get("Content-Type"), "msgtype=response") {
-				logrus.WithFields(logrus.Fields{
-					"file":     filepath,
-					"recordId": record.Header.Get("WARC-Record-ID"),
-				}).Debugf("skipping record with Content-Type: %s", record.Header.Get("Content-Type"))
-				continue
-			}
+				// We cannot verify the validity of Payload-Digest on revisit records yet.
+				if record.Header.Get("WARC-Type") == "revisit" {
+					logrus.Debugf("skipping revisit record")
+					continue
+				}
 
-			// We cannot verify the validity of Payload-Digest on revisit records yet.
-			if record.Header.Get("WARC-Type") == "revisit" {
-				logrus.Debugf("skipping revisit record")
-				continue
+				recordChan <- record
 			}
+		}()
 
-			blockDigestErrorsCount, blockDigestValid := verifyBlockDigest(record, filepath)
-			errorsCount += blockDigestErrorsCount
-			if !blockDigestValid {
-				valid = false
-			}
+		// Collect results from workers
 
-			payloadDigestErrorsCount, payloadDigestValid := verifyPayloadDigest(record, filepath)
-			errorsCount += payloadDigestErrorsCount
-			if !payloadDigestValid {
-				valid = false
+		recordReaderWg.Add(1)
+		go func() {
+			defer recordReaderWg.Done()
+			for res := range results {
+				errorsCount += res.blockDigestErrorsCount
+				if !res.blockDigestValid {
+					valid = false
+				}
+				errorsCount += res.payloadDigestErrorsCount
+				if !res.payloadDigestValid {
+					valid = false
+				}
 			}
-		}
+		}()
+
+		processWg.Wait()
+		close(results)
+		recordReaderWg.Wait()
 
 		logger.WithFields(logrus.Fields{
 			"file":   filepath,
