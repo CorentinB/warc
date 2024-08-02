@@ -39,6 +39,7 @@ type RecordBatch struct {
 type Record struct {
 	Header  Header
 	Content ReadWriteSeekCloser
+	Version string // WARC/1.0, WARC/1.1 ...
 }
 
 // WriteRecord writes a record to the underlying WARC file.

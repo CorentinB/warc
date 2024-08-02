@@ -3,39 +3,31 @@ package warc
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
-
-	gzip "github.com/klauspost/compress/gzip"
+	"strconv"
 )
 
 // Reader store the bufio.Reader and gzip.Reader for a WARC file
 type Reader struct {
-	reader     *bufio.Reader
-	gzipReader *gzip.Reader
-	record     *Record
+	bufReader *bufio.Reader
+	record    *Record
 }
 
-// Close closes the reader.
-func (r *Reader) Close() {
-	r.gzipReader.Close()
-}
 type reader interface {
 	ReadString(delim byte) (line string, err error)
 }
 
 // NewReader returns a new WARC reader
-func NewReader(reader io.Reader) (*Reader, error) {
-	bufioReader := bufio.NewReader(reader)
-
-	// Wrap the reader into a bufio.Reader to add the ByteReader method
-	zr, err := gzip.NewReader(bufioReader)
+func NewReader(reader io.ReadCloser) (*Reader, error) {
+	decReader, err := NewDecompressionReader(reader)
 	if err != nil {
 		return nil, err
 	}
+	bufioReader := bufio.NewReader(decReader)
 
 	return &Reader{
-		reader:     bufioReader,
-		gzipReader: zr,
+		bufReader: bufioReader,
 	}, nil
 }
 
@@ -56,23 +48,26 @@ func readUntilDelim(r reader, delim []byte) (line []byte, err error) {
 }
 
 // ReadRecord reads the next record from the opened WARC file
-func (r *Reader) ReadRecord() (*Record, error) {
+// returns:
+//   - Record: if an error occurred, record **may be** nil. if eol is true, record **must be** nil.
+//   - bool (eol): if true, we readed all records successfully.
+//   - error: error
+func (r *Reader) ReadRecord() (*Record, bool, error) {
 	var (
 		err        error
 		tempReader *bufio.Reader
 	)
 
-	r.gzipReader.Multistream(false)
-	tempReader = bufio.NewReader(r.gzipReader)
+	tempReader = bufio.NewReader(r.bufReader)
 
-	// Skip first line (WARC version)
-	// TODO: add check for WARC version
-	_, err = readUntilDelim(tempReader, []byte("\r\n"))
+	// first line: WARC version
+	var warcVer []byte
+	warcVer, err = readUntilDelim(tempReader, []byte("\r\n"))
 	if err != nil {
 		if err == io.EOF {
-			return &Record{Header: nil, Content: nil}, err
+			return nil, true, nil // EOF, no error
 		}
-		return nil, err
+		return nil, false, fmt.Errorf("reading WARC version: %w", err)
 	}
 
 	// Parse the record headers
@@ -80,7 +75,7 @@ func (r *Reader) ReadRecord() (*Record, error) {
 	for {
 		line, err := readUntilDelim(tempReader, []byte("\r\n"))
 		if err != nil {
-			return nil, err
+			return nil, false, fmt.Errorf("reading header: %w", err)
 		}
 		if len(line) == 0 {
 			break
@@ -90,34 +85,40 @@ func (r *Reader) ReadRecord() (*Record, error) {
 		}
 	}
 
-	// Parse the record content
-	var tempBuf bytes.Buffer
-	if _, err := tempBuf.ReadFrom(tempReader); err != nil {
-		return nil, err
+	// Get the Content-Length
+	length, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
+	if err != nil {
+		return nil, false, fmt.Errorf("parsing Content-Length: %w", err)
 	}
-
-	tempBuf.Truncate(bytes.LastIndex(tempBuf.Bytes(), []byte("\r\n\r\n")))
 
 	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
 	buf := NewSpooledTempFile("warc", "", false)
-	_, err = buf.Write(tempBuf.Bytes())
+	_, err = io.CopyN(buf, tempReader, length)
 	if err != nil {
-		return nil, err
+		return nil, false, fmt.Errorf("copying record content: %w", err)
 	}
 
 	r.record = &Record{
 		Header:  header,
 		Content: buf,
+		Version: string(warcVer),
 	}
 
-	// Reset the reader for the next block
-	err = r.gzipReader.Reset(r.reader)
-	if err == io.EOF {
-		return r.record, nil
-	}
-	if err != nil {
-		return r.record, err
+	// Skip two empty lines
+	for i := 0; i < 2; i++ {
+		boundary, _, err := r.bufReader.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				// record shall consist of a record header followed by a record content block and two newlines
+				return r.record, false, fmt.Errorf("early EOF record boundary: %w", err)
+			}
+			return r.record, false, fmt.Errorf("reading record boundary: %w", err)
+		}
+
+		if len(boundary) != 0 {
+			return r.record, false, fmt.Errorf("non-empty record boundary [boundary: %s]", boundary)
+		}
 	}
 
-	return r.record, nil
+	return r.record, false, nil // ok
 }

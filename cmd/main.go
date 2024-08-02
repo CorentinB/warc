@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
@@ -17,7 +18,7 @@ func init() {
 	extractCmd.Flags().Bool("host-sort", false, "Sort the extracted URLs by host")
 	extractCmd.Flags().Bool("hash-suffix", false, "When duplicate file names exist, the hash will be added if a duplicate file name exists. ")
 
-	verifyCmd.Flags().IntP("threads", "t", 1, "Number of threads to use for verification")
+	verifyCmd.Flags().IntP("threads", "t", runtime.NumCPU(), "Number of threads to use for verification")
 	verifyCmd.Flags().Bool("json", false, "Output results in JSON format")
 }
 

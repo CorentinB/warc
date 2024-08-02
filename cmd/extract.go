@@ -53,13 +53,13 @@ func extract(cmd *cobra.Command, files []string) {
 		}(resultsChan)
 
 		for {
-			record, err := reader.ReadRecord()
-			if err != nil {
-				if err != io.EOF {
-					logrus.Errorf("failed to read all record content: %v", err)
-					return
-				}
+			record, eol, err := reader.ReadRecord()
+			if eol {
 				break
+			}
+			if err != nil {
+				logrus.Errorf("failed to read all record content: %v", err)
+				return
 			}
 
 			swg.Add()
