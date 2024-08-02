@@ -67,7 +67,7 @@ func (r *Reader) ReadRecord() (*Record, bool, error) {
 		if err == io.EOF {
 			return nil, true, nil // EOF, no error
 		}
-		return nil, false, fmt.Errorf("read WARC version: %w", err)
+		return nil, false, fmt.Errorf("reading WARC version: %w", err)
 	}
 
 	// Parse the record headers
@@ -75,7 +75,7 @@ func (r *Reader) ReadRecord() (*Record, bool, error) {
 	for {
 		line, err := readUntilDelim(tempReader, []byte("\r\n"))
 		if err != nil {
-			return nil, false, fmt.Errorf("read header: %w", err)
+			return nil, false, fmt.Errorf("reading header: %w", err)
 		}
 		if len(line) == 0 {
 			break
@@ -88,14 +88,14 @@ func (r *Reader) ReadRecord() (*Record, bool, error) {
 	// Get the Content-Length
 	length, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
 	if err != nil {
-		return nil, false, fmt.Errorf("parse Content-Length: %w", err)
+		return nil, false, fmt.Errorf("parsing Content-Length: %w", err)
 	}
 
 	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
 	buf := NewSpooledTempFile("warc", "", false)
 	_, err = io.CopyN(buf, tempReader, length)
 	if err != nil {
-		return nil, false, fmt.Errorf("copy record content: %w", err)
+		return nil, false, fmt.Errorf("copying record content: %w", err)
 	}
 
 	r.record = &Record{
@@ -107,8 +107,12 @@ func (r *Reader) ReadRecord() (*Record, bool, error) {
 	// Skip two empty lines
 	for i := 0; i < 2; i++ {
 		boundary, _, err := r.bufReader.ReadLine()
-		if (err != nil) && (err != io.EOF) {
-			return r.record, false, fmt.Errorf("read record boundary: %w", err)
+		if err != nil {
+			if err == io.EOF {
+				// record shall consist of a record header followed by a record content block and two newlines
+				return r.record, false, fmt.Errorf("early EOF record boundary: %w", err)
+			}
+			return r.record, false, fmt.Errorf("reading record boundary: %w", err)
 		}
 
 		if len(boundary) != 0 {

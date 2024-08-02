@@ -1,8 +1,11 @@
 package warc
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -201,6 +204,47 @@ func testFileRevisitVailidity(t *testing.T, path string, originalTime string, or
 	}
 }
 
+func testFileEarlyEOF(t *testing.T, path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("failed to open %q: %v", path, err)
+	}
+	reader, err := NewReader(file)
+	if err != nil {
+		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
+	}
+	// read the file into memory
+	data, err := io.ReadAll(reader.bufReader)
+	if err != nil {
+		t.Fatalf("failed to read %q: %v", path, err)
+	}
+	// delete the last two bytes (\r\n)
+	if data[len(data)-2] != '\r' || data[len(data)-1] != '\n' {
+		t.Fatalf("expected \\r\\n, got %q", data[len(data)-2:])
+	}
+	data = data[:len(data)-2]
+	// new reader
+	reader, err = NewReader(io.NopCloser(bytes.NewReader(data)))
+	if err != nil {
+		t.Fatalf("warc.NewReader failed for %q: %v", path, err)
+	}
+	// read the records
+	for {
+		_, eol, err := reader.ReadRecord()
+		if eol {
+			break
+		}
+		if err != nil {
+			if strings.Contains(err.Error(), "early EOF record boundary") {
+				return // ok
+			} else {
+				t.Fatalf("expected early EOF record boundary, got %v", err)
+			}
+		}
+	}
+	t.Fatalf("expected early EOF record boundary, got none")
+}
+
 func TestReader(t *testing.T) {
 	var paths = []string{
 		"testdata/test.warc.gz",
@@ -208,5 +252,6 @@ func TestReader(t *testing.T) {
 	for _, path := range paths {
 		testFileHash(t, path)
 		testFileScan(t, path)
+		testFileEarlyEOF(t, path)
 	}
 }

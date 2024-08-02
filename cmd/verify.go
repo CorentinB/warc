@@ -43,8 +43,8 @@ func verify(cmd *cobra.Command, files []string) {
 
 	for _, filepath := range files {
 		startTime := time.Now()
-		valid := true             // The WARC file is valid
-		allRecordsReaded := false // All records readed successfully
+		valid := true           // The WARC file is valid
+		allRecordsRead := false // All records readed successfully
 		errorsCount := 0
 		recordCount := 0 // Count of records processed
 
@@ -95,7 +95,7 @@ func verify(cmd *cobra.Command, files []string) {
 			for {
 				record, eof, err := reader.ReadRecord()
 				if eof {
-					allRecordsReaded = true
+					allRecordsRead = true
 					break
 				}
 				if err != nil {
@@ -160,11 +160,11 @@ func verify(cmd *cobra.Command, files []string) {
 		recordReaderWg.Wait()
 
 		logger.WithFields(logrus.Fields{
-			"file":             filepath,
-			"valid":            valid,
-			"errors":           errorsCount,
-			"count":            recordCount,
-			"allRecordsReaded": allRecordsReaded,
+			"file":           filepath,
+			"valid":          valid,
+			"errors":         errorsCount,
+			"count":          recordCount,
+			"allRecordsRead": allRecordsRead,
 		}).Infof("verified in %s", time.Since(startTime))
 	}
 }
