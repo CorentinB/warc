@@ -30,8 +30,8 @@ func TestHTTPClient(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -79,7 +79,7 @@ func TestHTTPClient(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
 	}
 }
 
@@ -110,8 +110,8 @@ func TestHTTPClientWithProxy(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -161,7 +161,7 @@ func TestHTTPClientWithProxy(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
 	}
 }
 
@@ -180,8 +180,8 @@ func TestHTTPClientConcurrent(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -243,7 +243,7 @@ func TestHTTPClientConcurrent(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 256)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 256)
 	}
 }
 
@@ -262,8 +262,8 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -327,7 +327,7 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 
 	totalRead := 0
 	for _, path := range files {
-		totalRead += testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, -1)
+		totalRead += testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, -1)
 	}
 
 	if totalRead != concurrency {
@@ -349,8 +349,8 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -407,13 +407,13 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 2)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 2)
 		testFileRevisitVailidity(t, path, "", "")
 	}
 
 	// verify that the local dedupe count is correct
-	if LocalDedupeTotal.Value() != 26882 {
-		t.Fatalf("remote dedupe total mismatch, expected: 26882 got: %d", LocalDedupeTotal.Value())
+	if LocalDedupeTotal.Value() != 26872 {
+		t.Fatalf("remote dedupe total mismatch, expected: 26872 got: %d", LocalDedupeTotal.Value())
 	}
 }
 
@@ -434,14 +434,14 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	})
 
 	mux.HandleFunc(dedupePath, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "text/plain;charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(dedupeResp))
 	})
 
@@ -501,7 +501,7 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882", "142"}, 4)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 4)
 		testFileRevisitVailidity(t, path, "20220320002518", "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3")
 	}
 
@@ -599,8 +599,8 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -669,8 +669,8 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -754,8 +754,8 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -803,7 +803,7 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
 		os.Remove(path)
 	}
 }
@@ -892,8 +892,8 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -942,7 +942,7 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26882"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
 	}
 }
 
@@ -963,8 +963,8 @@ func TestHTTPClientWithoutIoCopy(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -1020,10 +1020,72 @@ func TestHTTPClientWithoutIoCopy(t *testing.T) {
 	}
 }
 
+func TestHTTPClientWithoutChunkEncoding(t *testing.T) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("small text string to ensure it isn't chunked"))
+	}))
+	defer server.Close()
+
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "TESTUNCHUNKED"
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for err := range httpClient.ErrChan {
+			t.Errorf("Error writing to WARC: %s", err.Err.Error())
+		}
+	}()
+
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	io.Copy(io.Discard, resp.Body)
+
+	httpClient.Close()
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:3TOI6NZK7GYJSFYGATOMMNM2C5VPT3ZD", []string{"180"}, 1)
+	}
+}
+
 func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	var (
 		rotatorSettings = NewRotatorSettings()
 		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
 		err             error
 	)
 
@@ -1034,8 +1096,8 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -1044,15 +1106,9 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	defer func() {
-		err = os.RemoveAll(rotatorSettings.OutputDirectory)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}()
-
-	rotatorSettings.Prefix = "TEST"
+	rotatorSettings.Prefix = "BENCHUNDER2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1060,9 +1116,9 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	wg.Add(1)
+	errWg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer errWg.Done()
 		for err := range httpClient.ErrChan {
 			b.Errorf("Error writing to WARC: %s", err.Err.Error())
 		}
@@ -1076,11 +1132,13 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 			req, err := http.NewRequest("GET", server.URL, nil)
 			if err != nil {
 				httpClient.ErrChan <- &Error{Err: err}
+				return
 			}
 
 			resp, err := httpClient.Do(req)
 			if err != nil {
 				httpClient.ErrChan <- &Error{Err: err}
+				return
 			}
 			defer resp.Body.Close()
 
@@ -1096,6 +1154,7 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 	var (
 		rotatorSettings = NewRotatorSettings()
 		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
 		err             error
 	)
 
@@ -1106,8 +1165,8 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusOK)
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
@@ -1116,15 +1175,9 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
-	defer func() {
-		err = os.RemoveAll(rotatorSettings.OutputDirectory)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}()
-
-	rotatorSettings.Prefix = "CONCTEST2MB"
+	rotatorSettings.Prefix = "BENCHOVER2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1132,9 +1185,9 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
 
-	wg.Add(1)
+	errWg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer errWg.Done()
 		for err := range httpClient.ErrChan {
 			b.Errorf("Error writing to WARC: %s", err.Err.Error())
 		}
@@ -1148,11 +1201,13 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 			req, err := http.NewRequest("GET", server.URL, nil)
 			if err != nil {
 				httpClient.ErrChan <- &Error{Err: err}
+				return
 			}
 
 			resp, err := httpClient.Do(req)
 			if err != nil {
 				httpClient.ErrChan <- &Error{Err: err}
+				return
 			}
 			defer resp.Body.Close()
 
