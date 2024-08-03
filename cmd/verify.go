@@ -160,7 +160,7 @@ func verify(cmd *cobra.Command, files []string) {
 		recordReaderWg.Wait()
 
 		if recordCount == 0 {
-			logrus.Errorf("No records present in files. Nothing has been checked.")
+			logrus.Errorf("no records present in files. Nothing has been checked")
 		}
 
 		fields := logger.WithFields(logrus.Fields{
@@ -175,7 +175,7 @@ func verify(cmd *cobra.Command, files []string) {
 		if errorsCount > 0 {
 			fields.Errorf("checked in %s", time.Since(startTime))
 		} else {
-			fields.Infof("verified in %s", time.Since(startTime))
+			fields.Infof("checked in %s", time.Since(startTime))
 		}
 
 	}
@@ -236,7 +236,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 		logrus.WithFields(logrus.Fields{
 			"file":     filepath,
 			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("headers prevent accurate payload digest calculation")
+		}).Errorf("malformed headers prevent accurate payload digest calculation")
 
 		valid = false
 		errorsCount++
