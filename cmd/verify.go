@@ -163,13 +163,21 @@ func verify(cmd *cobra.Command, files []string) {
 			logrus.Errorf("No records present in files. Nothing has been checked.")
 		}
 
-		logger.WithFields(logrus.Fields{
+		fields := logger.WithFields(logrus.Fields{
 			"file":           filepath,
 			"valid":          valid,
 			"errors":         errorsCount,
 			"count":          recordCount,
 			"allRecordsRead": allRecordsRead,
-		}).Infof("verified in %s", time.Since(startTime))
+		})
+
+		// Ensure there is a visible difference when errors are present.
+		if errorsCount > 0 {
+			fields.Errorf("checked in %s", time.Since(startTime))
+		} else {
+			fields.Infof("verified in %s", time.Since(startTime))
+		}
+
 	}
 }
 
