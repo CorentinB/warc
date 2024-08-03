@@ -231,6 +231,18 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 	defer resp.Body.Close()
 	defer record.Content.Seek(0, 0)
 
+	if resp.Header.Get("X-Crawler-Transfer-Encoding") != "" || resp.Header.Get("X-Crawler-Content-Encoding") != "" {
+		// This header being present in the HTTP headers indicates transfer-encoding and/or content-encoding were incorrectly stripped, causing us to not be able to verify the payload digest.
+		logrus.WithFields(logrus.Fields{
+			"file":     filepath,
+			"recordId": record.Header.Get("WARC-Record-ID"),
+		}).Errorf("headers prevent accurate payload digest calculation")
+
+		valid = false
+		errorsCount++
+		return errorsCount, valid
+	}
+
 	if payloadDigestSplitted[0] == "sha1" {
 		payloadDigest := warc.GetSHA1(resp.Body)
 		if payloadDigest == "ERROR" {
