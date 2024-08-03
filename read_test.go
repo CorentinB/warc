@@ -255,3 +255,41 @@ func TestReader(t *testing.T) {
 		testFileEarlyEOF(t, path)
 	}
 }
+
+func BenchmarkBasicRead(b *testing.B) {
+	// default test warc location
+	path := "testdata/test.warc.gz"
+
+	for n := 0; n < b.N; n++ {
+		b.Logf("checking 'WARC-Block-Digest' on %q", path)
+
+		file, err := os.Open(path)
+		if err != nil {
+			b.Fatalf("failed to open %q: %v", path, err)
+		}
+		defer file.Close()
+
+		reader, err := NewReader(file)
+		if err != nil {
+			b.Fatalf("warc.NewReader failed for %q: %v", path, err)
+		}
+
+		for {
+			record, eol, err := reader.ReadRecord()
+			if eol {
+				break
+			}
+			if err != nil {
+				b.Fatalf("failed to read all record content: %v", err)
+				break
+			}
+
+			hash := fmt.Sprintf("sha1:%s", GetSHA1(record.Content))
+			if hash != record.Header["WARC-Block-Digest"] {
+				record.Content.Close()
+				b.Fatalf("expected %s, got %s", record.Header.Get("WARC-Block-Digest"), hash)
+			}
+			record.Content.Close()
+		}
+	}
+}

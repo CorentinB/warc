@@ -159,20 +159,32 @@ func verify(cmd *cobra.Command, files []string) {
 		close(results)
 		recordReaderWg.Wait()
 
-		logger.WithFields(logrus.Fields{
+		if recordCount == 0 {
+			logrus.Errorf("no records present in files. Nothing has been checked")
+		}
+
+		fields := logger.WithFields(logrus.Fields{
 			"file":           filepath,
 			"valid":          valid,
 			"errors":         errorsCount,
 			"count":          recordCount,
 			"allRecordsRead": allRecordsRead,
-		}).Infof("verified in %s", time.Since(startTime))
+		})
+
+		// Ensure there is a visible difference when errors are present.
+		if errorsCount > 0 {
+			fields.Errorf("checked in %s", time.Since(startTime))
+		} else {
+			fields.Infof("checked in %s", time.Since(startTime))
+		}
+
 	}
 }
 
 func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int, valid bool) {
 	valid = true
 
-	// Verify that the Payload-Digest is SHA1
+	// Verify that the Payload-Digest field exists
 	if record.Header.Get("WARC-Payload-Digest") == "" {
 		logrus.WithFields(logrus.Fields{
 			"file":     filepath,
@@ -219,6 +231,18 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 	defer resp.Body.Close()
 	defer record.Content.Seek(0, 0)
 
+	if resp.Header.Get("X-Crawler-Transfer-Encoding") != "" || resp.Header.Get("X-Crawler-Content-Encoding") != "" {
+		// This header being present in the HTTP headers indicates transfer-encoding and/or content-encoding were incorrectly stripped, causing us to not be able to verify the payload digest.
+		logrus.WithFields(logrus.Fields{
+			"file":     filepath,
+			"recordId": record.Header.Get("WARC-Record-ID"),
+		}).Errorf("malformed headers prevent accurate payload digest calculation")
+
+		valid = false
+		errorsCount++
+		return errorsCount, valid
+	}
+
 	if payloadDigestSplitted[0] == "sha1" {
 		payloadDigest := warc.GetSHA1(resp.Body)
 		if payloadDigest == "ERROR" {
@@ -245,7 +269,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 		logrus.WithFields(logrus.Fields{
 			"file":     filepath,
 			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("WARC-Payload-Digest is not sha1: %s", record.Header.Get("WARC-Payload-Digest"))
+		}).Errorf("WARC-Payload-Digest is not SHA1 or SHA256: %s", record.Header.Get("WARC-Payload-Digest"))
 		valid = false
 		errorsCount++
 		return errorsCount, valid
