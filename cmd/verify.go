@@ -249,7 +249,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 		logrus.WithFields(logrus.Fields{
 			"file":     filepath,
 			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("WARC-Payload-Digest is not sha1: %s", record.Header.Get("WARC-Payload-Digest"))
+		}).Errorf("WARC-Payload-Digest is not SHA1 or SHA256: %s", record.Header.Get("WARC-Payload-Digest"))
 		valid = false
 		errorsCount++
 		return errorsCount, valid
