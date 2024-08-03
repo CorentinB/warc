@@ -159,6 +159,10 @@ func verify(cmd *cobra.Command, files []string) {
 		close(results)
 		recordReaderWg.Wait()
 
+		if recordCount == 0 {
+			logrus.Errorf("No records present in files. Nothing has been checked.")
+		}
+
 		logger.WithFields(logrus.Fields{
 			"file":           filepath,
 			"valid":          valid,
@@ -172,7 +176,7 @@ func verify(cmd *cobra.Command, files []string) {
 func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int, valid bool) {
 	valid = true
 
-	// Verify that the Payload-Digest is SHA1
+	// Verify that the Payload-Digest field exists
 	if record.Header.Get("WARC-Payload-Digest") == "" {
 		logrus.WithFields(logrus.Fields{
 			"file":     filepath,
