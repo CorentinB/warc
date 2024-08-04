@@ -3,3 +3,4 @@ temp/**
 output/**
 warc
 *.warc.gz
+*.warc.zst
