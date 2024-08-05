@@ -25,6 +25,15 @@ type customDialer struct {
 	net.Dialer
 	proxyDialer proxy.Dialer
 	client      *CustomHTTPClient
+	resolver    *net.Resolver
+}
+
+type customConnection struct {
+	net.Conn
+	io.Reader
+	io.Writer
+	closers []io.Closer
+	sync.WaitGroup
 }
 
 func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, TCPTimeout time.Duration) (d *customDialer, err error) {
@@ -32,6 +41,14 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, TCPTimeout t
 
 	d.Timeout = TCPTimeout
 	d.client = httpClient
+
+	d.resolver = &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{}
+			return d.DialContext(ctx, network, address)
+		},
+	}
 
 	if proxyURL != "" {
 		u, err := url.Parse(proxyURL)
@@ -45,30 +62,6 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, TCPTimeout t
 	}
 
 	return d, nil
-}
-
-type customConnection struct {
-	net.Conn
-	io.Reader
-	io.Writer
-	closers []io.Closer
-	sync.WaitGroup
-}
-
-func (cc *customConnection) Read(b []byte) (int, error) {
-	return cc.Reader.Read(b)
-}
-
-func (cc *customConnection) Write(b []byte) (int, error) {
-	return cc.Writer.Write(b)
-}
-
-func (cc *customConnection) Close() error {
-	for _, c := range cc.closers {
-		c.Close()
-	}
-
-	return cc.Conn.Close()
 }
 
 func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
@@ -87,85 +80,115 @@ func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 }
 
 func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err error) {
-	if d.proxyDialer != nil {
-		conn, err = d.proxyDialer.Dial(network, address)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		if d.client.randomLocalIP {
-			localAddr := getLocalAddr(network, address)
-			if localAddr != nil {
-				if network == "tcp" {
-					d.LocalAddr = localAddr.(*net.TCPAddr)
-				} else if network == "udp" {
-					d.LocalAddr = localAddr.(*net.UDPAddr)
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := context.Background()
+	ips, err := customResolver(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, ip := range ips {
+		addr := net.JoinHostPort(ip.String(), port)
+		if d.proxyDialer != nil {
+			conn, err = d.proxyDialer.Dial(network, addr)
+		} else {
+			if d.client.randomLocalIP {
+				localAddr := getLocalAddr(network, addr)
+				if localAddr != nil {
+					if network == "tcp" {
+						d.LocalAddr = localAddr.(*net.TCPAddr)
+					} else if network == "udp" {
+						d.LocalAddr = localAddr.(*net.UDPAddr)
+					}
 				}
 			}
+			conn, err = d.Dial(network, addr)
 		}
+		if err == nil {
+			break
+		}
+	}
 
-		conn, err = d.Dial(network, address)
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	return d.wrapConnection(conn, "http"), nil
 }
 
 func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
-	var (
-		plainConn net.Conn
-		err       error
-	)
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
 
-	if d.proxyDialer != nil {
-		plainConn, err = d.proxyDialer.Dial(network, address)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		if d.client.randomLocalIP {
-			localAddr := getLocalAddr(network, address)
-			if localAddr != nil {
-				if network == "tcp" {
-					d.LocalAddr = localAddr.(*net.TCPAddr)
-				} else if network == "udp" {
-					d.LocalAddr = localAddr.(*net.UDPAddr)
+	ctx := context.Background()
+	ips, err := customResolver(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+
+	var tlsConn *tls.UConn
+	for _, ip := range ips {
+		addr := net.JoinHostPort(ip.String(), port)
+		var plainConn net.Conn
+
+		if d.proxyDialer != nil {
+			plainConn, err = d.proxyDialer.Dial(network, addr)
+		} else {
+			if d.client.randomLocalIP {
+				localAddr := getLocalAddr(network, addr)
+				if localAddr != nil {
+					if network == "tcp" {
+						d.LocalAddr = localAddr.(*net.TCPAddr)
+					} else if network == "udp" {
+						d.LocalAddr = localAddr.(*net.UDPAddr)
+					}
 				}
 			}
+			plainConn, err = d.Dial(network, addr)
 		}
 
-		plainConn, err = d.Dial(network, address)
 		if err != nil {
-			return nil, err
+			continue
 		}
+
+		cfg := new(tls.Config)
+		cfg.ServerName = host
+		cfg.InsecureSkipVerify = d.client.verifyCerts
+
+		tlsConn = tls.UClient(plainConn, cfg, tls.HelloCustom)
+
+		if err := tlsConn.ApplyPreset(getCustomTLSSpec()); err != nil {
+			plainConn.Close()
+			continue
+		}
+
+		errc := make(chan error, 2)
+		timer := time.AfterFunc(time.Second, func() {
+			errc <- errors.New("TLS handshake timeout")
+		})
+
+		go func() {
+			err := tlsConn.Handshake()
+			timer.Stop()
+			errc <- err
+		}()
+
+		if err := <-errc; err != nil {
+			plainConn.Close()
+			continue
+		}
+
+		break
 	}
 
-	cfg := new(tls.Config)
-	serverName := address[:strings.LastIndex(address, ":")]
-	cfg.ServerName = serverName
-	cfg.InsecureSkipVerify = d.client.verifyCerts
-
-	tlsConn := tls.UClient(plainConn, cfg, tls.HelloCustom)
-
-	if err := tlsConn.ApplyPreset(getCustomTLSSpec()); err != nil {
-		return nil, err
-	}
-
-	errc := make(chan error, 2)
-	timer := time.AfterFunc(time.Second, func() {
-		errc <- errors.New("TLS handshake timeout")
-	})
-
-	go func() {
-		err := tlsConn.Handshake()
-		timer.Stop()
-		errc <- err
-	}()
-	if err := <-errc; err != nil {
-		plainConn.Close()
-		return nil, err
+	if tlsConn == nil {
+		return nil, fmt.Errorf("failed to establish TLS connection to %s", address)
 	}
 
 	return d.wrapConnection(tlsConn, "https"), nil
@@ -322,6 +345,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	}
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
+
 	// Write revisit record if local or CDX dedupe is activated
 	var revisit = revisitRecord{}
 	if bytesCopied >= int64(d.client.dedupeOptions.SizeThreshold) {
@@ -531,4 +555,20 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 	recordChan <- requestRecord
 
 	return nil
+}
+
+func (cc *customConnection) Read(b []byte) (int, error) {
+	return cc.Reader.Read(b)
+}
+
+func (cc *customConnection) Write(b []byte) (int, error) {
+	return cc.Writer.Write(b)
+}
+
+func (cc *customConnection) Close() error {
+	for _, c := range cc.closers {
+		c.Close()
+	}
+
+	return cc.Conn.Close()
 }

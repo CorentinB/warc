@@ -328,6 +328,6 @@ func getContentLength(rwsc ReadWriteSeekCloser) int {
 			panic(err)
 		}
 
-		return int(fileInfo.Size())
+		return int(fileInfo.Size())	
 	}
 }
