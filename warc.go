@@ -76,8 +76,6 @@ func (s *RotatorSettings) NewWARCRotator() (recordWriterChan chan *RecordBatch, 
 func (w *Writer) CloseCompressedWriter() {
 	if w.GZIPWriter != nil {
 		w.GZIPWriter.Close()
-	} else if w.PGZIPWriter != nil {
-		w.PGZIPWriter.Close()
 	} else if w.ZSTDWriter != nil {
 		w.ZSTDWriter.Close()
 	}

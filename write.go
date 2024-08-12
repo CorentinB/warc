@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/gzip"
-	"github.com/klauspost/pgzip"
 
 	"github.com/klauspost/compress/zstd"
 	uuid "github.com/satori/go.uuid"
@@ -20,7 +19,6 @@ type Writer struct {
 	FileName     string
 	Compression  string
 	GZIPWriter   *gzip.Writer
-	PGZIPWriter  *pgzip.Writer
 	ZSTDWriter   *zstd.Encoder
 	FileWriter   *bufio.Writer
 	ParallelGZIP bool
