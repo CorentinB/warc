@@ -10,8 +10,8 @@ import (
 
 	"github.com/klauspost/compress/gzip"
 
+	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
-	uuid "github.com/satori/go.uuid"
 )
 
 // Writer writes WARC records to WARC files.
@@ -65,7 +65,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	}
 
 	if r.Header.Get("WARC-Record-ID") == "" {
-		recordID = uuid.NewV4().String()
+		recordID = uuid.NewString()
 		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordID+">")
 	}
 
