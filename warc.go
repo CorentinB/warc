@@ -13,13 +13,24 @@ import (
 // RotatorSettings is used to store the settings
 // needed by recordWriter to write WARC files
 type RotatorSettings struct {
-	WarcinfoContent       Header
-	Prefix                string
-	Compression           string
+	// Content of the warcinfo record that will be written
+	// to all WARC files
+	WarcinfoContent Header
+	// Prefix used for WARC filenames, WARC 1.1 specifications
+	// recommend to name files this way:
+	// Prefix-Timestamp-Serial-Crawlhost.warc.gz
+	Prefix string
+	// Compression algorithm to use
+	Compression string
+	// Path to a ZSTD compression dictionary to embed (and use) in .warc.zst files
 	CompressionDictionary string
-	OutputDirectory       string
-	WarcSize              float64
-	WARCWriterPoolSize    int
+	// Directory where the created WARC files will be stored,
+	// default will be the current directory
+	OutputDirectory string
+	// WarcSize is in Megabytes
+	WarcSize float64
+	// WARCWriterPoolSize defines the number of parallel WARC writers
+	WARCWriterPoolSize int
 }
 
 var (

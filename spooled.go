@@ -45,7 +45,7 @@ type spooledTempFile struct {
 	tempDir         string
 	maxInMemorySize int
 	fullOnDisk      bool
-	reading         bool
+	reading         bool // transitions at most once from false -> true
 	closed          bool
 }
 
