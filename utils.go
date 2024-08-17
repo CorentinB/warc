@@ -18,7 +18,6 @@ import (
 	"time"
 
 	gzip "github.com/klauspost/compress/gzip"
-	"github.com/klauspost/pgzip"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -118,26 +117,8 @@ func isLineStartingWithHTTPMethod(line string) bool {
 func NewWriter(writer io.Writer, fileName string, compression string, contentLengthHeader string, newFileCreation bool, dictionary []byte) (*Writer, error) {
 	if compression != "" {
 		if compression == "GZIP" {
-			var gzipWriter *gzip.Writer
-			// If the record's Content-Length is bigger than a megabyte, we use the parallel gzip library
-			if contentLengthHeader != "" {
-				contentLength, err := strconv.Atoi(contentLengthHeader)
-				if err != nil {
-					return nil, err
-				}
+			gzipWriter := gzip.NewWriter(writer)
 
-				if contentLength > 1000000 {
-					pgzipWriter := pgzip.NewWriter(writer)
-					return &Writer{
-						FileName:    fileName,
-						Compression: compression,
-						PGZIPWriter: pgzipWriter,
-						FileWriter:  bufio.NewWriter(pgzipWriter),
-					}, nil
-				}
-			}
-
-			gzipWriter = gzip.NewWriter(writer)
 			return &Writer{
 				FileName:    fileName,
 				Compression: compression,
@@ -198,7 +179,7 @@ func NewWriter(writer io.Writer, fileName string, compression string, contentLen
 				}, nil
 			}
 		}
-		return nil, errors.New("Invalid compression algorithm: " + compression)
+		return nil, errors.New("invalid compression algorithm: " + compression)
 	}
 
 	return &Writer{
@@ -282,7 +263,7 @@ func checkRotatorSettings(settings *RotatorSettings) (err error) {
 
 	// Check if the specified compression algorithm is valid
 	if settings.Compression != "" && settings.Compression != "GZIP" && settings.Compression != "ZSTD" {
-		return errors.New("Invalid compression algorithm: " + settings.Compression)
+		return errors.New("invalid compression algorithm: " + settings.Compression)
 	}
 
 	// Add few headers to the warcinfo payload, to not have it empty

@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	tls "github.com/refraction-networking/utls"
-	uuid "github.com/satori/go.uuid"
 	"golang.org/x/net/proxy"
 	"golang.org/x/sync/errgroup"
 )
@@ -210,7 +210,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	for record := range recordChan {
-		recordIDs = append(recordIDs, uuid.NewV4().String())
+		recordIDs = append(recordIDs, uuid.NewString())
 		batch.Records = append(batch.Records, record)
 	}
 

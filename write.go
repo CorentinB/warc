@@ -9,16 +9,14 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/gzip"
-	"github.com/klauspost/pgzip"
 
+	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
-	uuid "github.com/satori/go.uuid"
 )
 
 // Writer writes WARC records to WARC files.
 type Writer struct {
 	GZIPWriter   *gzip.Writer
-	PGZIPWriter  *pgzip.Writer
 	ZSTDWriter   *zstd.Encoder
 	FileWriter   *bufio.Writer
 	FileName     string
@@ -67,7 +65,7 @@ func (w *Writer) WriteRecord(r *Record) (recordID string, err error) {
 	}
 
 	if r.Header.Get("WARC-Record-ID") == "" {
-		recordID = uuid.NewV4().String()
+		recordID = uuid.NewString()
 		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordID+">")
 	}
 
