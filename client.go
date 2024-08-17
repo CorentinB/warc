@@ -42,6 +42,7 @@ type CustomHTTPClient struct {
 	FullOnDisk             bool
 	MaxReadBeforeTruncate  int
 	randomLocalIP          bool
+	TLSHandshakeTimeout    time.Duration
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -136,6 +137,8 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	if HTTPClientSettings.TLSHandshakeTimeout == 0 {
 		HTTPClientSettings.TLSHandshakeTimeout = 10 * time.Second
 	}
+
+	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
 	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.TCPTimeout)
