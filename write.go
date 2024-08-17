@@ -17,12 +17,12 @@ import (
 
 // Writer writes WARC records to WARC files.
 type Writer struct {
-	FileName     string
-	Compression  string
 	GZIPWriter   *gzip.Writer
 	PGZIPWriter  *pgzip.Writer
 	ZSTDWriter   *zstd.Encoder
 	FileWriter   *bufio.Writer
+	FileName     string
+	Compression  string
 	ParallelGZIP bool
 }
 
@@ -30,9 +30,9 @@ type Writer struct {
 // records to be written at the same time, and a common
 // capture timestamp
 type RecordBatch struct {
-	Records     []*Record
 	Done        chan bool
 	CaptureTime string
+	Records     []*Record
 }
 
 // Record represents a WARC record.

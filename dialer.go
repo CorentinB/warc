@@ -22,9 +22,9 @@ import (
 )
 
 type customDialer struct {
-	net.Dialer
 	proxyDialer proxy.Dialer
 	client      *CustomHTTPClient
+	net.Dialer
 }
 
 func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, TCPTimeout time.Duration) (d *customDialer, err error) {

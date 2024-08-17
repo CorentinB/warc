@@ -21,18 +21,18 @@ var CDXHTTPClient = http.Client{
 }
 
 type DedupeOptions struct {
-	LocalDedupe   bool
-	CDXDedupe     bool
 	CDXURL        string
 	CDXCookie     string
 	SizeThreshold int
+	LocalDedupe   bool
+	CDXDedupe     bool
 }
 
 type revisitRecord struct {
 	responseUUID string
 	targetURI    string
-	size         int
 	date         string
+	size         int
 }
 
 func (d *customDialer) checkLocalRevisit(digest string) revisitRecord {

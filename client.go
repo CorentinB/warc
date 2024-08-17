@@ -14,35 +14,35 @@ type Error struct {
 
 type HTTPClientSettings struct {
 	RotatorSettings       *RotatorSettings
-	DedupeOptions         DedupeOptions
 	Proxy                 string
-	DecompressBody        bool
-	SkipHTTPStatusCodes   []int
-	VerifyCerts           bool
 	TempDir               string
-	FullOnDisk            bool
+	DedupeOptions         DedupeOptions
+	SkipHTTPStatusCodes   []int
 	MaxReadBeforeTruncate int
-	FollowRedirects       bool
-	TCPTimeout            time.Duration
 	TLSHandshakeTimeout   time.Duration
+	TCPTimeout            time.Duration
+	DecompressBody        bool
+	FollowRedirects       bool
+	FullOnDisk            bool
+	VerifyCerts           bool
 	RandomLocalIP         bool
 }
 
 type CustomHTTPClient struct {
+	ErrChan         chan *Error
+	WARCWriter      chan *RecordBatch
+	WaitGroup       *WaitGroupWithCount
+	dedupeHashTable *sync.Map
 	http.Client
-	WARCWriter             chan *RecordBatch
-	WARCWriterDoneChannels []chan bool
-	WaitGroup              *WaitGroupWithCount
-	dedupeHashTable        *sync.Map
+	TempDir                string
 	dedupeOptions          DedupeOptions
 	skipHTTPStatusCodes    []int
-	ErrChan                chan *Error
-	verifyCerts            bool
-	TempDir                string
-	FullOnDisk             bool
+	WARCWriterDoneChannels []chan bool
 	MaxReadBeforeTruncate  int
-	randomLocalIP          bool
 	TLSHandshakeTimeout    time.Duration
+	verifyCerts            bool
+	FullOnDisk             bool
+	randomLocalIP          bool
 }
 
 func (c *CustomHTTPClient) Close() error {
