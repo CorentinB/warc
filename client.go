@@ -16,10 +16,10 @@ type HTTPClientSettings struct {
 	RotatorSettings       *RotatorSettings
 	Proxy                 string
 	TempDir               string
-	DedupeOptions         DedupeOptions
 	SkipHTTPStatusCodes   []int
-	MaxReadBeforeTruncate int
+	DedupeOptions         DedupeOptions
 	TLSHandshakeTimeout   time.Duration
+	MaxReadBeforeTruncate int
 	TCPTimeout            time.Duration
 	DecompressBody        bool
 	FollowRedirects       bool
@@ -29,15 +29,15 @@ type HTTPClientSettings struct {
 }
 
 type CustomHTTPClient struct {
-	ErrChan         chan *Error
 	WARCWriter      chan *RecordBatch
 	WaitGroup       *WaitGroupWithCount
 	dedupeHashTable *sync.Map
+	ErrChan         chan *Error
 	http.Client
 	TempDir                string
-	dedupeOptions          DedupeOptions
-	skipHTTPStatusCodes    []int
 	WARCWriterDoneChannels []chan bool
+	skipHTTPStatusCodes    []int
+	dedupeOptions          DedupeOptions
 	MaxReadBeforeTruncate  int
 	TLSHandshakeTimeout    time.Duration
 	verifyCerts            bool
