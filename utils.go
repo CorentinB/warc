@@ -36,7 +36,7 @@ func GetSHA1(r io.Reader) string {
 		}
 
 		if err != nil {
-			return "ERROR"
+			return "ERROR: " + err.Error()
 		}
 	}
 
@@ -58,7 +58,7 @@ func GetSHA256(r io.Reader) string {
 		}
 
 		if err != nil {
-			return "ERROR"
+			return "ERROR: " + err.Error()
 		}
 	}
 
@@ -80,7 +80,7 @@ func GetSHA256Base16(r io.Reader) string {
 		}
 
 		if err != nil {
-			return "ERROR"
+			return "ERROR: " + err.Error()
 		}
 	}
 

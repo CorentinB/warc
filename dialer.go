@@ -27,10 +27,10 @@ type customDialer struct {
 	client      *CustomHTTPClient
 }
 
-func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, TCPTimeout time.Duration) (d *customDialer, err error) {
+func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout time.Duration) (d *customDialer, err error) {
 	d = new(customDialer)
 
-	d.Timeout = TCPTimeout
+	d.Timeout = DialTimeout
 	d.client = httpClient
 
 	if proxyURL != "" {
@@ -316,12 +316,13 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 
 	// Calculate the WARC-Payload-Digest
 	payloadDigest := GetSHA1(resp.Body)
-	if payloadDigest == "ERROR" {
+	if strings.HasPrefix(payloadDigest, "ERROR: ") {
 		// This should _never_ happen.
-		return fmt.Errorf("SHA1 ran into an unrecoverable error url: '%s'", warcTargetURI)
+		return fmt.Errorf("SHA1 ran into an unrecoverable error: %s url: %s", payloadDigest, warcTargetURI)
 	}
 	resp.Body.Close()
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
+
 	// Write revisit record if local or CDX dedupe is activated
 	var revisit = revisitRecord{}
 	if bytesCopied >= int64(d.client.dedupeOptions.SizeThreshold) {

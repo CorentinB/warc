@@ -1033,7 +1033,7 @@ func TestHTTPClientWithoutIoCopy(t *testing.T) {
 		defer errWg.Done()
 		for err := range httpClient.ErrChan {
 			// validate 429 filtering as well as error reporting by url
-			if err.Err.Error() != "SHA1 ran into an unrecoverable error url: '"+server.URL+"/'" {
+			if strings.Contains(err.Err.Error(), "SHA1 ran into an unrecoverable error url") {
 				t.Errorf("Error writing to WARC: %s", err.Err.Error())
 			}
 		}
