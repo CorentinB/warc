@@ -22,9 +22,9 @@ import (
 )
 
 type customDialer struct {
-	net.Dialer
 	proxyDialer proxy.Dialer
 	client      *CustomHTTPClient
+	net.Dialer
 }
 
 func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout time.Duration) (d *customDialer, err error) {
@@ -154,7 +154,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	}
 
 	errc := make(chan error, 2)
-	timer := time.AfterFunc(time.Second, func() {
+	timer := time.AfterFunc(d.client.TLSHandshakeTimeout, func() {
 		errc <- errors.New("TLS handshake timeout")
 	})
 

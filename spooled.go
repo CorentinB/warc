@@ -43,8 +43,8 @@ type spooledTempFile struct {
 	file            *os.File
 	filePrefix      string
 	tempDir         string
-	fullOnDisk      bool
 	maxInMemorySize int
+	fullOnDisk      bool
 	reading         bool // transitions at most once from false -> true
 	closed          bool
 }

@@ -22,11 +22,13 @@ type RotatorSettings struct {
 	Prefix string
 	// Compression algorithm to use
 	Compression string
-	// WarcSize is in MegaBytes
-	WarcSize float64
+	// Path to a ZSTD compression dictionary to embed (and use) in .warc.zst files
+	CompressionDictionary string
 	// Directory where the created WARC files will be stored,
 	// default will be the current directory
 	OutputDirectory string
+	// WarcSize is in Megabytes
+	WarcSize float64
 	// WARCWriterPoolSize defines the number of parallel WARC writers
 	WARCWriterPoolSize int
 }
@@ -102,8 +104,17 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	}
 	fileMutex.Unlock()
 
+	var dictionary []byte
+
+	if settings.CompressionDictionary != "" {
+		dictionary, err = os.ReadFile(settings.CompressionDictionary)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	// Initialize WARC writer
-	warcWriter, err := NewWriter(warcFile, currentFileName, settings.Compression, "")
+	warcWriter, err := NewWriter(warcFile, currentFileName, settings.Compression, "", true, dictionary)
 	if err != nil {
 		panic(err)
 	}
@@ -118,13 +129,13 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	if settings.Compression != "" {
 		if settings.Compression == "GZIP" {
 			warcWriter.CloseCompressedWriter()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "")
+			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "", false, dictionary)
 			if err != nil {
 				panic(err)
 			}
 		} else if settings.Compression == "ZSTD" {
 			warcWriter.CloseCompressedWriter()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "")
+			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "", false, dictionary)
 			if err != nil {
 				panic(err)
 			}
@@ -157,7 +168,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				}
 
 				// Initialize new WARC writer
-				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "")
+				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "", true, dictionary)
 				if err != nil {
 					panic(err)
 				}
@@ -177,7 +188,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 			// Write all the records of the record batch
 			for _, record := range recordBatch.Records {
-				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, record.Header.Get("Content-Length"))
+				warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, record.Header.Get("Content-Length"), false, dictionary)
 				if err != nil {
 					panic(err)
 				}

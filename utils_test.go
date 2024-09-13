@@ -39,4 +39,8 @@ func TestNewRotatorSettings(t *testing.T) {
 	if rotatorSettings.Compression != "GZIP" {
 		t.Error("Failed to set WARC rotator's compression algorithm")
 	}
+
+	if rotatorSettings.CompressionDictionary != "" {
+		t.Error("Failed to set WARC rotator's compression dictionary")
+	}
 }

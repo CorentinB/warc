@@ -14,34 +14,36 @@ type Error struct {
 
 type HTTPClientSettings struct {
 	RotatorSettings       *RotatorSettings
-	DedupeOptions         DedupeOptions
 	Proxy                 string
-	DecompressBody        bool
-	SkipHTTPStatusCodes   []int
-	VerifyCerts           bool
 	TempDir               string
-	FullOnDisk            bool
-	MaxReadBeforeTruncate int
-	FollowRedirects       bool
+	SkipHTTPStatusCodes   []int
+	DedupeOptions         DedupeOptions
 	DialTimeout           time.Duration
 	ResponseHeaderTimeout time.Duration
 	TLSHandshakeTimeout   time.Duration
+	MaxReadBeforeTruncate int
+	TCPTimeout            time.Duration
+	DecompressBody        bool
+	FollowRedirects       bool
+	FullOnDisk            bool
+	VerifyCerts           bool
 	RandomLocalIP         bool
 }
 
 type CustomHTTPClient struct {
+	WARCWriter      chan *RecordBatch
+	WaitGroup       *WaitGroupWithCount
+	dedupeHashTable *sync.Map
+	ErrChan         chan *Error
 	http.Client
-	WARCWriter             chan *RecordBatch
-	WARCWriterDoneChannels []chan bool
-	WaitGroup              *WaitGroupWithCount
-	dedupeHashTable        *sync.Map
-	dedupeOptions          DedupeOptions
-	skipHTTPStatusCodes    []int
-	ErrChan                chan *Error
-	verifyCerts            bool
 	TempDir                string
-	FullOnDisk             bool
+	WARCWriterDoneChannels []chan bool
+	skipHTTPStatusCodes    []int
+	dedupeOptions          DedupeOptions
 	MaxReadBeforeTruncate  int
+	TLSHandshakeTimeout    time.Duration
+	verifyCerts            bool
+	FullOnDisk             bool
 	randomLocalIP          bool
 }
 
@@ -141,6 +143,8 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	if HTTPClientSettings.TLSHandshakeTimeout == 0 {
 		HTTPClientSettings.TLSHandshakeTimeout = 10 * time.Second
 	}
+
+	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
 	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout)

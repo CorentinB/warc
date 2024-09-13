@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base32"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -113,7 +114,7 @@ func isLineStartingWithHTTPMethod(line string) bool {
 }
 
 // NewWriter creates a new WARC writer.
-func NewWriter(writer io.Writer, fileName string, compression string, contentLengthHeader string) (*Writer, error) {
+func NewWriter(writer io.Writer, fileName string, compression string, contentLengthHeader string, newFileCreation bool, dictionary []byte) (*Writer, error) {
 	if compression != "" {
 		if compression == "GZIP" {
 			gzipWriter := gzip.NewWriter(writer)
@@ -125,16 +126,58 @@ func NewWriter(writer io.Writer, fileName string, compression string, contentLen
 				FileWriter:  bufio.NewWriter(gzipWriter),
 			}, nil
 		} else if compression == "ZSTD" {
-			zstdWriter, err := zstd.NewWriter(writer, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
-			if err != nil {
-				return nil, err
+			if newFileCreation && len(dictionary) > 0 {
+				dictionaryZstdwriter, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedBetterCompression))
+				if err != nil {
+					return nil, err
+				}
+
+				// Compress dictionary with ZSTD.
+				// TODO: Option to allow uncompressed dictionary (maybe? not sure there's any need.)
+				payload := dictionaryZstdwriter.EncodeAll(dictionary, nil)
+
+				// Magic number for skippable dictionary frame (0x184D2A5D).
+				// https://github.com/ArchiveTeam/wget-lua/releases/tag/v1.20.3-at.20200401.01
+				// https://iipc.github.io/warc-specifications/specifications/warc-zstd/
+				magic := uint32(0x184D2A5D)
+
+				// Create the frame header (magic + payload size)
+				header := make([]byte, 8)
+				binary.LittleEndian.PutUint32(header[:4], magic)
+				binary.LittleEndian.PutUint32(header[4:], uint32(len(payload)))
+
+				// Combine header and payload together into a full frame.
+				frame := append(header, payload...)
+
+				// Write generated frame directly to WARC file.
+				// The regular ZStandard writer will continue afterwards with normal ZStandard frames.
+				writer.Write(frame)
 			}
-			return &Writer{
-				FileName:    fileName,
-				Compression: compression,
-				ZSTDWriter:  zstdWriter,
-				FileWriter:  bufio.NewWriter(zstdWriter),
-			}, nil
+
+			// Create ZStandard writer either with or without the encoder dictionary and return it.
+			if len(dictionary) > 0 {
+				zstdWriter, err := zstd.NewWriter(writer, zstd.WithEncoderLevel(zstd.SpeedBetterCompression), zstd.WithEncoderDict(dictionary))
+				if err != nil {
+					return nil, err
+				}
+				return &Writer{
+					FileName:    fileName,
+					Compression: compression,
+					ZSTDWriter:  zstdWriter,
+					FileWriter:  bufio.NewWriter(zstdWriter),
+				}, nil
+			} else {
+				zstdWriter, err := zstd.NewWriter(writer, zstd.WithEncoderLevel(zstd.SpeedBetterCompression))
+				if err != nil {
+					return nil, err
+				}
+				return &Writer{
+					FileName:    fileName,
+					Compression: compression,
+					ZSTDWriter:  zstdWriter,
+					FileWriter:  bufio.NewWriter(zstdWriter),
+				}, nil
+			}
 		}
 		return nil, errors.New("invalid compression algorithm: " + compression)
 	}
@@ -166,11 +209,12 @@ func NewRecordBatch() *RecordBatch {
 // and initialize it with default values
 func NewRotatorSettings() *RotatorSettings {
 	return &RotatorSettings{
-		WarcinfoContent: NewHeader(),
-		Prefix:          "WARC",
-		WarcSize:        1000,
-		Compression:     "GZIP",
-		OutputDirectory: "./",
+		WarcinfoContent:       NewHeader(),
+		Prefix:                "WARC",
+		WarcSize:              1000,
+		Compression:           "GZIP",
+		CompressionDictionary: "",
+		OutputDirectory:       "./",
 	}
 }
 

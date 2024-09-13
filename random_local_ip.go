@@ -14,9 +14,9 @@ var (
 )
 
 type availableIPs struct {
+	IPs []net.IP
 	sync.Mutex
 	Index uint32
-	IPs   []net.IP
 }
 
 func getAvailableIPs() (IPs []net.IP, err error) {
