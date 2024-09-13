@@ -18,6 +18,8 @@ type HTTPClientSettings struct {
 	TempDir               string
 	SkipHTTPStatusCodes   []int
 	DedupeOptions         DedupeOptions
+	DialTimeout           time.Duration
+	ResponseHeaderTimeout time.Duration
 	TLSHandshakeTimeout   time.Duration
 	MaxReadBeforeTruncate int
 	TCPTimeout            time.Duration
@@ -130,8 +132,12 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	}
 
 	// Verify timeouts and set default values
-	if HTTPClientSettings.TCPTimeout == 0 {
-		HTTPClientSettings.TCPTimeout = 10 * time.Second
+	if HTTPClientSettings.DialTimeout == 0 {
+		HTTPClientSettings.DialTimeout = 10 * time.Second
+	}
+
+	if HTTPClientSettings.ResponseHeaderTimeout == 0 {
+		HTTPClientSettings.ResponseHeaderTimeout = 10 * time.Second
 	}
 
 	if HTTPClientSettings.TLSHandshakeTimeout == 0 {
@@ -141,7 +147,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
-	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.TCPTimeout)
+	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout)
 	if err != nil {
 		return nil, err
 	}
