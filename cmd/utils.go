@@ -1,9 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"log/slog"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 func printExtractReport(filePath string, results map[string]int, elapsed time.Duration) {
@@ -13,9 +13,9 @@ func printExtractReport(filePath string, results map[string]int, elapsed time.Du
 		total += v
 	}
 
-	logrus.Infof("Processed file %s in %s", filePath, elapsed.String())
-	logrus.Infof("Number of files extracted: %d", total)
+	slog.Info(fmt.Sprintf("Processed file %s in %s", filePath, elapsed.String()))
+	slog.Info(fmt.Sprintf("Number of files extracted: %d", total))
 	for k, v := range results {
-		logrus.Infof("- %s: %d\n", k, v)
+		slog.Info(fmt.Sprintf("- %s: %d\n", k, v))
 	}
 }
