@@ -218,10 +218,24 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 			errorsCount++
 			return errorsCount, valid
 		}
+
+		if payloadDigest != payloadDigestSplitted[1] {
+			logger.Error("payload digests do not match", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"), "expected", payloadDigestSplitted[1], "got", payloadDigest)
+			valid = false
+			errorsCount++
+			return errorsCount, valid
+		}
 	} else if payloadDigestSplitted[0] == "sha256" {
 		payloadDigest := warc.GetSHA256Base16(resp.Body)
 		if payloadDigest == "ERROR" {
 			logger.Error("failed to calculate payload digest", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
+			valid = false
+			errorsCount++
+			return errorsCount, valid
+		}
+
+		if payloadDigest != payloadDigestSplitted[1] {
+			logger.Error("payload digests do not match", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"), "expected", payloadDigestSplitted[1], "got", payloadDigest)
 			valid = false
 			errorsCount++
 			return errorsCount, valid
