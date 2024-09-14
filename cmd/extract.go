@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
@@ -17,14 +18,14 @@ import (
 
 	"github.com/CorentinB/warc"
 	"github.com/remeh/sizedwaitgroup"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
 func extract(cmd *cobra.Command, files []string) {
 	threads, err := strconv.Atoi(cmd.Flags().Lookup("threads").Value.String())
 	if err != nil {
-		logrus.Fatalf("failed to parse threads: %s", err.Error())
+		slog.Error("invalid threads value", "err", err.Error())
+		return
 	}
 
 	swg := sizedwaitgroup.New(threads)
@@ -36,13 +37,13 @@ func extract(cmd *cobra.Command, files []string) {
 
 		f, err := os.Open(filepath)
 		if err != nil {
-			logrus.Errorf("failed to open file: %s", err.Error())
+			slog.Error("unable to open file", "err", err.Error(), "file", filepath)
 			return
 		}
 
 		reader, err := warc.NewReader(f)
 		if err != nil {
-			logrus.Errorf("warc.NewReader failed for %q: %v", filepath, err)
+			slog.Error("warc.NewReader failed", "err", err.Error(), "file", filepath)
 			return
 		}
 
@@ -58,7 +59,7 @@ func extract(cmd *cobra.Command, files []string) {
 				break
 			}
 			if err != nil {
-				logrus.Errorf("failed to read all record content: %v", err)
+				slog.Error("failed to read record", "err", err.Error(), "file", filepath)
 				return
 			}
 
@@ -79,19 +80,19 @@ func processRecord(cmd *cobra.Command, record *warc.Record, resultsChan *chan st
 
 	// Only process Content-Type: application/http; msgtype=response (no reason to process requests or other records)
 	if !strings.Contains(record.Header.Get("Content-Type"), "msgtype=response") {
-		logrus.Debugf("skipping record with Content-Type: %s", record.Header.Get("Content-Type"))
+		slog.Debug("skipping record with Content-Type", "contentType", record.Header.Get("Content-Type"), "recordID", record.Header.Get("WARC-Record-ID"))
 		return
 	}
 
 	if record.Header.Get("WARC-Type") == "revisit" {
-		logrus.Debugf("skipping revisit record.")
+		slog.Debug("skipping revisit record", "recordID", record.Header.Get("WARC-Record-ID"))
 		return
 	}
 
 	// Read the entire record.Content into a bufio.Reader
 	response, err := http.ReadResponse(bufio.NewReader(record.Content), nil)
 	if err != nil {
-		logrus.Errorf("failed to read response: %v", err)
+		slog.Error("failed to read response", "err", err.Error())
 		return
 	}
 
@@ -103,7 +104,7 @@ func processRecord(cmd *cobra.Command, record *warc.Record, resultsChan *chan st
 	}) {
 		err = writeFile(cmd, response, record)
 		if err != nil {
-			logrus.Errorf("failed to write file: %v", err)
+			slog.Error("failed to write file", "err", err.Error())
 			return
 		}
 
@@ -123,7 +124,7 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 				filename = params["filename"]
 			}
 		} else {
-			logrus.Debugf("failed to parse Content-Disposition header: %v", err)
+			slog.Debug("failed to parse Content-Disposition header", "err", err.Error())
 
 			if !strings.HasSuffix(filename, ".pdf") {
 				filename += ".pdf"
@@ -218,18 +219,18 @@ func writeFile(vmd *cobra.Command, resp *http.Response, record *warc.Record) err
 				// Double check that the new file doesn't exist
 				if _, err := os.Stat(outputPath); err == nil {
 					if !vmd.Flags().Lookup("allow-overwrite").Changed {
-						logrus.Infof("file %s already exists, skipping", filename)
+						slog.Info("file already exists, skipping", "file", filename)
 						return nil
 					}
 				}
 			} else {
 				// Matches!
-				logrus.Infof("file %s already exists and hash matches, skipping", filename)
+				slog.Info("file already exists and hash matches, skipping", "file", filename)
 				return nil
 			}
 
 		} else if !vmd.Flags().Lookup("allow-overwrite").Changed {
-			logrus.Infof("file %s already exists, skipping", filename)
+			slog.Info("file already exists, skipping", "file", filename)
 			return nil
 		}
 	}

@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -10,9 +12,10 @@ import (
 	"time"
 
 	"github.com/CorentinB/warc"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
+
+var logger *slog.Logger
 
 func processVerifyRecord(record *warc.Record, filepath string, results chan<- result) {
 	var res result
@@ -33,12 +36,14 @@ type result struct {
 func verify(cmd *cobra.Command, files []string) {
 	threads, err := strconv.Atoi(cmd.Flags().Lookup("threads").Value.String())
 	if err != nil {
-		logrus.Fatalf("failed to parse threads: %s", err.Error())
+		slog.Error("invalid threads value", "err", err.Error())
+		return
 	}
 
-	logger := logrus.New()
 	if cmd.Flags().Lookup("json").Changed {
-		logger.SetFormatter(&logrus.JSONFormatter{})
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	} else {
+		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
 
 	for _, filepath := range files {
@@ -56,10 +61,7 @@ func verify(cmd *cobra.Command, files []string) {
 
 		if !cmd.Flags().Lookup("json").Changed {
 			// Output the message if not in --json mode
-			logrus.WithFields(logrus.Fields{
-				"file":    filepath,
-				"threads": threads,
-			}).Info("verifying")
+			logger.Info("verifying", "file", filepath, "threads", threads)
 		}
 		for i := 0; i < threads; i++ {
 			processWg.Add(1)
@@ -73,17 +75,13 @@ func verify(cmd *cobra.Command, files []string) {
 
 		f, err := os.Open(filepath)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"file": filepath,
-			}).Errorf("failed to open file: %v", err)
+			logger.Error("unable to open file", "err", err.Error(), "file", filepath)
 			return
 		}
 
 		reader, err := warc.NewReader(f)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"file": filepath,
-			}).Errorf("warc.NewReader failed: %v", err)
+			logger.Error("warc.NewReader failed", "err", err.Error(), "file", filepath)
 			return
 		}
 
@@ -100,14 +98,9 @@ func verify(cmd *cobra.Command, files []string) {
 				}
 				if err != nil {
 					if record == nil {
-						logrus.WithFields(logrus.Fields{
-							"file": filepath,
-						}).Errorf("failed to read record: %v", err)
+						logger.Error("failed to read record", "err", err.Error(), "file", filepath)
 					} else {
-						logrus.WithFields(logrus.Fields{
-							"file":     filepath,
-							"recordId": record.Header.Get("WARC-Record-ID"),
-						}).Errorf("failed to read record: %v", err)
+						logger.Error("failed to read record", "err", err.Error(), "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 					}
 					errorsCount++
 					valid = false
@@ -117,16 +110,13 @@ func verify(cmd *cobra.Command, files []string) {
 
 				// Only process Content-Type: application/http; msgtype=response (no reason to process requests or other records)
 				if !strings.Contains(record.Header.Get("Content-Type"), "msgtype=response") {
-					logrus.WithFields(logrus.Fields{
-						"file":     filepath,
-						"recordId": record.Header.Get("WARC-Record-ID"),
-					}).Debugf("skipping record with Content-Type: %s", record.Header.Get("Content-Type"))
+					logger.Debug("skipping record with Content-Type", "contentType", record.Header.Get("Content-Type"), "recordID", record.Header.Get("WARC-Record-ID"), "file", filepath)
 					continue
 				}
 
 				// We cannot verify the validity of Payload-Digest on revisit records yet.
 				if record.Header.Get("WARC-Type") == "revisit" {
-					logrus.Debugf("skipping revisit record")
+					logger.Debug("skipping revisit record", "recordID", record.Header.Get("WARC-Record-ID"), "file", filepath)
 					continue
 				}
 
@@ -160,22 +150,14 @@ func verify(cmd *cobra.Command, files []string) {
 		recordReaderWg.Wait()
 
 		if recordCount == 0 {
-			logrus.Errorf("no records present in files. Nothing has been checked")
+			logger.Error("no record in file", "file", filepath)
 		}
-
-		fields := logger.WithFields(logrus.Fields{
-			"file":           filepath,
-			"valid":          valid,
-			"errors":         errorsCount,
-			"count":          recordCount,
-			"allRecordsRead": allRecordsRead,
-		})
 
 		// Ensure there is a visible difference when errors are present.
 		if errorsCount > 0 {
-			fields.Errorf("checked in %s", time.Since(startTime))
+			logger.Error(fmt.Sprintf("checked in %s", time.Since(startTime).String()), "file", filepath, "valid", valid, "errors", errorsCount, "count", recordCount, "allRecordsRead", allRecordsRead)
 		} else {
-			fields.Infof("checked in %s", time.Since(startTime))
+			logger.Info(fmt.Sprintf("checked in %s", time.Since(startTime).String()), "file", filepath, "valid", valid, "errors", errorsCount, "count", recordCount, "allRecordsRead", allRecordsRead)
 		}
 
 	}
@@ -186,10 +168,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 
 	// Verify that the Payload-Digest field exists
 	if record.Header.Get("WARC-Payload-Digest") == "" {
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("WARC-Payload-Digest is missing")
+		logger.Error("WARC-Payload-Digest is missing", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 		valid = false
 		errorsCount++
 		return errorsCount, valid
@@ -197,10 +176,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 
 	payloadDigestSplitted := strings.Split(record.Header.Get("WARC-Payload-Digest"), ":")
 	if len(payloadDigestSplitted) != 2 {
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("Malformed WARC-Payload-Digest: %s", record.Header.Get("WARC-Payload-Digest"))
+		logger.Error("malformed WARC-Payload-Digest", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 		valid = false
 		errorsCount++
 		return errorsCount, valid
@@ -209,10 +185,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 	// Calculate expected WARC-Payload-Digest
 	_, err := record.Content.Seek(0, 0)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("failed to seek record content: %v", err)
+		logger.Error("failed to seek record content", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"), "err", err.Error())
 		valid = false
 		errorsCount++
 		return errorsCount, valid
@@ -220,10 +193,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 
 	resp, err := http.ReadResponse(bufio.NewReader(record.Content), nil)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("failed to read response: %v", err)
+		logger.Error("failed to read response", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"), "err", err.Error())
 		valid = false
 		errorsCount++
 		return errorsCount, valid
@@ -233,10 +203,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 
 	if resp.Header.Get("X-Crawler-Transfer-Encoding") != "" || resp.Header.Get("X-Crawler-Content-Encoding") != "" {
 		// This header being present in the HTTP headers indicates transfer-encoding and/or content-encoding were incorrectly stripped, causing us to not be able to verify the payload digest.
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("malformed headers prevent accurate payload digest calculation")
+		logger.Error("malfomed headers prevent accurate payload digest calculation", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 
 		valid = false
 		errorsCount++
@@ -246,10 +213,7 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 	if payloadDigestSplitted[0] == "sha1" {
 		payloadDigest := warc.GetSHA1(resp.Body)
 		if payloadDigest == "ERROR" {
-			logrus.WithFields(logrus.Fields{
-				"file":     filepath,
-				"recordId": record.Header.Get("WARC-Record-ID"),
-			}).Errorf("failed to calculate payload digest")
+			logger.Error("failed to calculate payload digest", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 			valid = false
 			errorsCount++
 			return errorsCount, valid
@@ -257,19 +221,13 @@ func verifyPayloadDigest(record *warc.Record, filepath string) (errorsCount int,
 	} else if payloadDigestSplitted[0] == "sha256" {
 		payloadDigest := warc.GetSHA256Base16(resp.Body)
 		if payloadDigest == "ERROR" {
-			logrus.WithFields(logrus.Fields{
-				"file":     filepath,
-				"recordId": record.Header.Get("WARC-Record-ID"),
-			}).Errorf("failed to calculate payload digest")
+			logger.Error("failed to calculate payload digest", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 			valid = false
 			errorsCount++
 			return errorsCount, valid
 		}
 	} else {
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("WARC-Payload-Digest is not SHA1 or SHA256: %s", record.Header.Get("WARC-Payload-Digest"))
+		logger.Error("WARC-Payload-Digest is not SHA1 or SHA256", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 		valid = false
 		errorsCount++
 		return errorsCount, valid
@@ -283,10 +241,7 @@ func verifyBlockDigest(record *warc.Record, filepath string) (errorsCount int, v
 
 	// Verify that the WARC-Block-Digest is sha1
 	if record.Header.Get("WARC-Block-Digest") == "" {
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("WARC-Block-Digest is missing")
+		logger.Error("WARC-Block-Digest is missing", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 		valid = false
 		errorsCount++
 		return errorsCount, valid
@@ -294,10 +249,7 @@ func verifyBlockDigest(record *warc.Record, filepath string) (errorsCount int, v
 
 	blockDigestSplitted := strings.Split(record.Header.Get("WARC-Block-Digest"), ":")
 	if len(blockDigestSplitted) != 2 {
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("malformed WARC-Block-Digest: %s", record.Header.Get("WARC-Block-Digest"))
+		logger.Error("malformed WARC-Block-Digest", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 		valid = false
 		errorsCount++
 		return errorsCount, valid
@@ -308,28 +260,19 @@ func verifyBlockDigest(record *warc.Record, filepath string) (errorsCount int, v
 	if blockDigestSplitted[0] == "sha1" {
 		expectedPayloadDigest := warc.GetSHA1(record.Content)
 		if expectedPayloadDigest != blockDigestSplitted[1] {
-			logrus.WithFields(logrus.Fields{
-				"file":     filepath,
-				"recordId": record.Header.Get("WARC-Record-ID"),
-			}).Errorf("WARC-Block-Digest mismatch: expected %s, got %s", expectedPayloadDigest, blockDigestSplitted[1])
+			logger.Error("WARC-Block-Digest mismatch", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"), "expected", expectedPayloadDigest, "got", blockDigestSplitted[1])
 			valid = false
 			errorsCount++
 		}
 	} else if blockDigestSplitted[0] == "sha256" {
 		expectedPayloadDigest := warc.GetSHA256Base16(record.Content)
 		if expectedPayloadDigest != blockDigestSplitted[1] {
-			logrus.WithFields(logrus.Fields{
-				"file":     filepath,
-				"recordId": record.Header.Get("WARC-Record-ID"),
-			}).Errorf("WARC-Block-Digest mismatch: expected %s, got %s", expectedPayloadDigest, blockDigestSplitted[1])
+			logger.Error("WARC-Block-Digest mismatch", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"), "expected", expectedPayloadDigest, "got", blockDigestSplitted[1])
 			valid = false
 			errorsCount++
 		}
 	} else {
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("WARC-Block-Digest is not sha1: %s", record.Header.Get("WARC-Block-Digest"))
+		logger.Error("WARC-Block-Digest is not sha1 or sha256", "file", filepath, "recordID", record.Header.Get("WARC-Record-ID"))
 		valid = false
 		errorsCount++
 		return errorsCount, valid
@@ -341,10 +284,7 @@ func verifyBlockDigest(record *warc.Record, filepath string) (errorsCount int, v
 func verifyWarcVersion(record *warc.Record, filepath string) (valid bool) {
 	valid = true
 	if record.Version != "WARC/1.0" && record.Version != "WARC/1.1" {
-		logrus.WithFields(logrus.Fields{
-			"file":     filepath,
-			"recordId": record.Header.Get("WARC-Record-ID"),
-		}).Errorf("invalid WARC version: %s", record.Version)
+		logger.Error("invalid WARC version", "file", filepath, "recordID", record.Header.Get("WARC-Record)"))
 		valid = false
 	}
 

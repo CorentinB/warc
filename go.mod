@@ -9,7 +9,6 @@ require (
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/refraction-networking/utls v1.6.7
 	github.com/remeh/sizedwaitgroup v1.0.0
-	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.1
 	github.com/ulikunitz/xz v0.5.12
 	go.uber.org/goleak v1.3.0
