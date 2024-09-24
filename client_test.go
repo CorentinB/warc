@@ -1,6 +1,7 @@
 package warc
 
 import (
+	"context"
 	"io"
 	"net"
 	"net/http"
@@ -1264,6 +1265,148 @@ func TestHTTPClientWithZStandardDictionary(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
+	}
+}
+
+func setupIPv4Server(t *testing.T) (string, func()) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to set up IPv4 server: %v", err)
+	}
+
+	server := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("IPv4 Server"))
+		}),
+	}
+
+	go server.Serve(listener)
+
+	return "http://" + listener.Addr().String(), func() {
+		server.Shutdown(context.Background())
+	}
+}
+
+func setupIPv6Server(t *testing.T) (string, func()) {
+	listener, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Fatalf("Failed to set up IPv6 server: %v", err)
+	}
+
+	server := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("IPv6 Server"))
+		}),
+	}
+
+	go server.Serve(listener)
+
+	return "http://" + listener.Addr().String(), func() {
+		server.Shutdown(context.Background())
+	}
+}
+
+func TestHTTPClientWithIPv4Disabled(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	ipv4URL, closeIPv4 := setupIPv4Server(t)
+	defer closeIPv4()
+
+	ipv6URL, closeIPv6 := setupIPv6Server(t)
+	defer closeIPv6()
+
+	rotatorSettings := NewRotatorSettings()
+	rotatorSettings.OutputDirectory, _ = os.MkdirTemp("", "warc-tests-")
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+	rotatorSettings.Prefix = "TESTIPv6Only"
+
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
+		RotatorSettings: rotatorSettings,
+		DisableIPv4:     true,
+	})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	// Try IPv4 - should fail
+	_, err = httpClient.Get(ipv4URL)
+	if err == nil {
+		t.Fatalf("Expected error when connecting to IPv4 server, but got none")
+	}
+
+	// Try IPv6 - should succeed
+	resp, err := httpClient.Get(ipv6URL)
+	if err != nil {
+		t.Fatalf("Failed to connect to IPv6 server: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "IPv6 Server" {
+		t.Fatalf("Unexpected response from IPv6 server: %s", string(body))
+	}
+
+	httpClient.Close()
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:RTK62UJNR5UCIPX2J64LMV7J4JJ6EXCJ", []string{"147"}, 1)
+	}
+}
+
+func TestHTTPClientWithIPv6Disabled(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	ipv4URL, closeIPv4 := setupIPv4Server(t)
+	defer closeIPv4()
+
+	ipv6URL, closeIPv6 := setupIPv6Server(t)
+	defer closeIPv6()
+
+	rotatorSettings := NewRotatorSettings()
+	rotatorSettings.OutputDirectory, _ = os.MkdirTemp("", "warc-tests-")
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+	rotatorSettings.Prefix = "TESTIPv4Only"
+
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
+		RotatorSettings: rotatorSettings,
+		DisableIPv6:     true,
+	})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	// Try IPv6 - should fail
+	_, err = httpClient.Get(ipv6URL)
+	if err == nil {
+		t.Fatalf("Expected error when connecting to IPv6 server, but got none")
+	}
+
+	// Try IPv4 - should succeed
+	resp, err := httpClient.Get(ipv4URL)
+	if err != nil {
+		t.Fatalf("Failed to connect to IPv4 server: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "IPv4 Server" {
+		t.Fatalf("Unexpected response from IPv4 server: %s", string(body))
+	}
+
+	httpClient.Close()
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:JZIRQ2YRCQ55F6SSNPTXHKMDSKJV6QFM", []string{"147"}, 1)
 	}
 }
 
