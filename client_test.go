@@ -1327,7 +1327,6 @@ func TestHTTPClientWithIPv4Disabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
-	defer httpClient.Close()
 
 	// Try IPv4 - should fail
 	_, err = httpClient.Get(ipv4URL)
@@ -1345,6 +1344,17 @@ func TestHTTPClientWithIPv4Disabled(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "IPv6 Server" {
 		t.Fatalf("Unexpected response from IPv6 server: %s", string(body))
+	}
+
+	httpClient.Close()
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:RTK62UJNR5UCIPX2J64LMV7J4JJ6EXCJ", []string{"147"}, 1)
 	}
 }
 
@@ -1369,7 +1379,6 @@ func TestHTTPClientWithIPv6Disabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
-	defer httpClient.Close()
 
 	// Try IPv6 - should fail
 	_, err = httpClient.Get(ipv6URL)
@@ -1387,6 +1396,17 @@ func TestHTTPClientWithIPv6Disabled(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "IPv4 Server" {
 		t.Fatalf("Unexpected response from IPv4 server: %s", string(body))
+	}
+
+	httpClient.Close()
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:JZIRQ2YRCQ55F6SSNPTXHKMDSKJV6QFM", []string{"147"}, 1)
 	}
 }
 
