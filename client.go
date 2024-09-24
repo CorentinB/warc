@@ -28,6 +28,8 @@ type HTTPClientSettings struct {
 	FullOnDisk            bool
 	VerifyCerts           bool
 	RandomLocalIP         bool
+	DisableIPv4           bool
+	DisableIPv6           bool
 }
 
 type CustomHTTPClient struct {
@@ -147,7 +149,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
-	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout)
+	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
 	if err != nil {
 		return nil, err
 	}
