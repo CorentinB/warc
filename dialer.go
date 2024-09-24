@@ -24,14 +24,18 @@ import (
 type customDialer struct {
 	proxyDialer proxy.Dialer
 	client      *CustomHTTPClient
+	disableIPv4 bool
+	disableIPv6 bool
 	net.Dialer
 }
 
-func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout time.Duration) (d *customDialer, err error) {
+func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout time.Duration, disableIPv4, disableIPv6 bool) (d *customDialer, err error) {
 	d = new(customDialer)
 
 	d.Timeout = DialTimeout
 	d.client = httpClient
+	d.disableIPv4 = disableIPv4
+	d.disableIPv6 = disableIPv6
 
 	if proxyURL != "" {
 		u, err := url.Parse(proxyURL)
@@ -87,59 +91,65 @@ func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 }
 
 func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err error) {
+	// Determine the network based on IPv4/IPv6 settings
+	network = d.getNetworkType(network)
+	if network == "" {
+		return nil, errors.New("no supported network type available")
+	}
+
 	if d.proxyDialer != nil {
 		conn, err = d.proxyDialer.Dial(network, address)
-		if err != nil {
-			return nil, err
-		}
 	} else {
 		if d.client.randomLocalIP {
 			localAddr := getLocalAddr(network, address)
 			if localAddr != nil {
-				if network == "tcp" {
+				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)
-				} else if network == "udp" {
+				} else if network == "udp" || network == "udp4" || network == "udp6" {
 					d.LocalAddr = localAddr.(*net.UDPAddr)
 				}
 			}
 		}
 
 		conn, err = d.Dial(network, address)
-		if err != nil {
-			return nil, err
-		}
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	return d.wrapConnection(conn, "http"), nil
 }
 
 func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
-	var (
-		plainConn net.Conn
-		err       error
-	)
+	// Determine the network based on IPv4/IPv6 settings
+	network = d.getNetworkType(network)
+	if network == "" {
+		return nil, errors.New("no supported network type available")
+	}
+
+	var plainConn net.Conn
+	var err error
 
 	if d.proxyDialer != nil {
 		plainConn, err = d.proxyDialer.Dial(network, address)
-		if err != nil {
-			return nil, err
-		}
 	} else {
 		if d.client.randomLocalIP {
 			localAddr := getLocalAddr(network, address)
 			if localAddr != nil {
-				if network == "tcp" {
+				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)
-				} else if network == "udp" {
+				} else if network == "udp" || network == "udp4" || network == "udp6" {
 					d.LocalAddr = localAddr.(*net.UDPAddr)
 				}
 			}
 		}
 
 		plainConn, err = d.Dial(network, address)
-		if err != nil {
-			return nil, err
-		}
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := new(tls.Config)
@@ -169,6 +179,31 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	}
 
 	return d.wrapConnection(tlsConn, "https"), nil
+}
+
+func (d *customDialer) getNetworkType(network string) string {
+	switch network {
+	case "tcp", "udp":
+		if d.disableIPv4 && !d.disableIPv6 {
+			return network + "6"
+		}
+		if !d.disableIPv4 && d.disableIPv6 {
+			return network + "4"
+		}
+		return network // Both enabled or both disabled, use default
+	case "tcp4", "udp4":
+		if d.disableIPv4 {
+			return ""
+		}
+		return network
+	case "tcp6", "udp6":
+		if d.disableIPv6 {
+			return ""
+		}
+		return network
+	default:
+		return "" // Unsupported network type
+	}
 }
 
 func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader, scheme string, conn net.Conn) {
