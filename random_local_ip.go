@@ -65,7 +65,7 @@ func getAvailableIPs(IPv6AnyIP bool) (IPs []net.IP, err error) {
 					}
 
 					// Process Global Unicast IPv6 addresses
-					if ip.IsGlobalUnicast() && ip.To16() != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
+					if ip.IsGlobalUnicast() && ip.To16() != nil && ip.To4() == nil {
 						newIPv6 = append(newIPv6, *ipNet)
 					}
 
