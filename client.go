@@ -16,14 +16,14 @@ type HTTPClientSettings struct {
 	RotatorSettings       *RotatorSettings
 	Proxy                 string
 	TempDir               string
+	DNSServer             string
 	SkipHTTPStatusCodes   []int
 	DedupeOptions         DedupeOptions
-	DialTimeout           time.Duration
-	ResponseHeaderTimeout time.Duration
-	TLSHandshakeTimeout   time.Duration
 	TCPTimeout            time.Duration
+	TLSHandshakeTimeout   time.Duration
+	ResponseHeaderTimeout time.Duration
 	DNSResolutionTimeout  time.Duration
-	DNSServer             string
+	DialTimeout           time.Duration
 	MaxReadBeforeTruncate int
 	DecompressBody        bool
 	FollowRedirects       bool
@@ -35,22 +35,22 @@ type HTTPClientSettings struct {
 }
 
 type CustomHTTPClient struct {
-	WARCWriter      chan *RecordBatch
-	WaitGroup       *WaitGroupWithCount
-	dedupeHashTable *sync.Map
-	ErrChan         chan *Error
-	http.Client
-	TempDir                  string
-	WARCWriterDoneChannels   []chan bool
-	skipHTTPStatusCodes      []int
-	dedupeOptions            DedupeOptions
-	MaxReadBeforeTruncate    int
-	TLSHandshakeTimeout      time.Duration
-	verifyCerts              bool
-	FullOnDisk               bool
-	randomLocalIP            bool
 	interfacesWatcherStop    chan bool
+	WaitGroup                *WaitGroupWithCount
+	dedupeHashTable          *sync.Map
+	ErrChan                  chan *Error
+	WARCWriter               chan *RecordBatch
 	interfacesWatcherStarted chan bool
+	http.Client
+	TempDir                string
+	WARCWriterDoneChannels []chan bool
+	skipHTTPStatusCodes    []int
+	dedupeOptions          DedupeOptions
+	TLSHandshakeTimeout    time.Duration
+	MaxReadBeforeTruncate  int
+	verifyCerts            bool
+	FullOnDisk             bool
+	randomLocalIP          bool
 }
 
 func (c *CustomHTTPClient) Close() error {
