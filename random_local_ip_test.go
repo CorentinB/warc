@@ -150,6 +150,27 @@ func TestGetNextIPAnyIP(t *testing.T) {
 	}
 }
 
+// TestGetNextIPAnyIPv6MultipleIPv6 tests the function with multiple IPv6 addresses and AnyIP set to true.
+func TestGetNextIPAnyIPMultipleIPv6(t *testing.T) {
+	baseIP1 := net.ParseIP("2001:db8::")
+	baseIPNet1 := net.IPNet{IP: baseIP1, Mask: net.CIDRMask(64, 128)}
+	baseIP2 := net.ParseIP("2001:db9::")
+	baseIPNet2 := net.IPNet{IP: baseIP2, Mask: net.CIDRMask(64, 128)}
+	ipList := []net.IPNet{baseIPNet1, baseIPNet2}
+	availableIPs := &availableIPs{AnyIP: true}
+	availableIPs.IPs.Store(&ipList)
+
+	for i := 0; i < 5; i++ {
+		ip := getNextIP(availableIPs)
+		if ip == nil {
+			t.Error("Expected non-nil IP, got nil")
+		}
+		if !baseIPNet1.Contains(ip) && !baseIPNet2.Contains(ip) {
+			t.Errorf("Generated IP %v is not within base IP network %v or %v", ip, baseIPNet1, baseIPNet2)
+		}
+	}
+}
+
 // TestTestGetNextIPAnyIPv6Randomness tests the randomness of generated IPv6 addresses.
 func TestTestGetNextIPAnyIPv6Randomness(t *testing.T) {
 	baseIP := net.ParseIP("2001:db8::")
