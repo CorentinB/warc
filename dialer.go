@@ -23,14 +23,12 @@ import (
 )
 
 type customDialer struct {
-	proxyDialer          proxy.Dialer
-	client               *CustomHTTPClient
-	disableIPv4          bool
-	disableIPv6          bool
-	DNSResolutionTimeout time.Duration
-	DNSResolutions       *sync.Map
-	DNSServer            string
-	DNSClient            *dns.Client
+	proxyDialer proxy.Dialer
+	client      *CustomHTTPClient
+	disableIPv4 bool
+	disableIPv6 bool
+	DNSServer   string
+	DNSClient   *dns.Client
 	net.Dialer
 }
 
@@ -41,9 +39,6 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout,
 	d.client = httpClient
 	d.disableIPv4 = disableIPv4
 	d.disableIPv6 = disableIPv6
-
-	d.DNSResolutionTimeout = DNSResolutionTimeout
-	d.DNSResolutions = new(sync.Map)
 
 	d.DNSServer = DNSServer
 	if DNSServer == "" {
@@ -136,7 +131,7 @@ func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err e
 		conn, err = d.proxyDialer.Dial(network, address)
 	} else {
 		if d.client.randomLocalIP {
-			localAddr := d.getLocalAddr(network, address)
+			localAddr := getLocalAddr(network, address)
 			if localAddr != nil {
 				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)
@@ -185,7 +180,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 		plainConn, err = d.proxyDialer.Dial(network, address)
 	} else {
 		if d.client.randomLocalIP {
-			localAddr := d.getLocalAddr(network, address)
+			localAddr := getLocalAddr(network, address)
 			if localAddr != nil {
 				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)
