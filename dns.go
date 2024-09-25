@@ -3,11 +3,27 @@ package warc
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/miekg/dns"
 )
 
+type cachedIP struct {
+	ip        net.IP
+	expiresAt time.Time
+}
+
 func (d *customDialer) resolveDNS(address string) (net.IP, error) {
+	// Check cache first
+	if cached, ok := d.DNSRecords.Load(address); ok {
+		cachedEntry := cached.(cachedIP)
+		if time.Now().Before(cachedEntry.expiresAt) {
+			return cachedEntry.ip, nil
+		}
+		// Cache entry expired, remove it
+		d.DNSRecords.Delete(address)
+	}
+
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(address), dns.TypeA)
 
@@ -16,8 +32,8 @@ func (d *customDialer) resolveDNS(address string) (net.IP, error) {
 		return nil, err
 	}
 
-	// Print raw DNS output
-	// fmt.Printf("Raw DNS response for %s:\n%s\n", address, r.String())
+	// Record the DNS response
+	d.client.WriteRecord("dns:"+address, "resource", "text/dns", r.String())
 
 	var ipv4, ipv6 net.IP
 
@@ -30,13 +46,21 @@ func (d *customDialer) resolveDNS(address string) (net.IP, error) {
 		}
 	}
 
+	var resolvedIP net.IP
 	// Prioritize IPv6 if both are available and enabled
 	if ipv6 != nil {
-		return ipv6, nil
+		resolvedIP = ipv6
+	} else if ipv4 != nil {
+		resolvedIP = ipv4
 	}
 
-	if ipv4 != nil {
-		return ipv4, nil
+	if resolvedIP != nil {
+		// Cache the result
+		d.DNSRecords.Store(address, cachedIP{
+			ip:        resolvedIP,
+			expiresAt: time.Now().Add(d.DNSRecordsTTL),
+		})
+		return resolvedIP, nil
 	}
 
 	return nil, fmt.Errorf("no suitable IP address found for %s", address)

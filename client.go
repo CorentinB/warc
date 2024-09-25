@@ -23,6 +23,7 @@ type HTTPClientSettings struct {
 	DialTimeout           time.Duration
 	ResponseHeaderTimeout time.Duration
 	DNSResolutionTimeout  time.Duration
+	DNSRecordsTTL         time.Duration
 	TLSHandshakeTimeout   time.Duration
 	TCPTimeout            time.Duration
 	MaxReadBeforeTruncate int
@@ -167,10 +168,14 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		HTTPClientSettings.DNSResolutionTimeout = 5 * time.Second
 	}
 
+	if HTTPClientSettings.DNSRecordsTTL == 0 {
+		HTTPClientSettings.DNSRecordsTTL = 5 * time.Minute
+	}
+
 	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
-	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DNSResolutionTimeout, HTTPClientSettings.DNSServers, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
+	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DNSRecordsTTL, HTTPClientSettings.DNSResolutionTimeout, HTTPClientSettings.DNSServers, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
 	if err != nil {
 		return nil, err
 	}
