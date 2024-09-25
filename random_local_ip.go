@@ -108,9 +108,12 @@ func getNextIP(availableIPs *availableIPs) net.IP {
 	return ipNet.IP
 }
 
-func getLocalAddr(network, address string) any {
-	lastColon := strings.LastIndex(address, ":")
-	destAddr := address[:lastColon]
+func getLocalAddr(destNetwork, destAddress string) any {
+	lastColon := strings.LastIndex(destAddress, ":")
+	if lastColon == -1 {
+		return nil
+	}
+	destAddr := destAddress[:lastColon]
 
 	destAddr = strings.TrimPrefix(destAddr, "[")
 	destAddr = strings.TrimSuffix(destAddr, "]")
@@ -121,16 +124,16 @@ func getLocalAddr(network, address string) any {
 	}
 
 	if destIP.To4() != nil {
-		if network == "tcp" {
+		if destNetwork == "tcp" {
 			return &net.TCPAddr{IP: getNextIP(IPv4)}
-		} else if network == "udp" {
+		} else if destNetwork == "udp" {
 			return &net.UDPAddr{IP: getNextIP(IPv4)}
 		}
 		return nil
 	} else {
-		if network == "tcp" {
+		if destNetwork == "tcp" {
 			return &net.TCPAddr{IP: getNextIP(IPv6)}
-		} else if network == "udp" {
+		} else if destNetwork == "udp" {
 			return &net.UDPAddr{IP: getNextIP(IPv6)}
 		}
 		return nil
