@@ -21,8 +21,10 @@ type HTTPClientSettings struct {
 	DialTimeout           time.Duration
 	ResponseHeaderTimeout time.Duration
 	TLSHandshakeTimeout   time.Duration
-	MaxReadBeforeTruncate int
 	TCPTimeout            time.Duration
+	DNSResolutionTimeout  time.Duration
+	DNSServer             string
+	MaxReadBeforeTruncate int
 	DecompressBody        bool
 	FollowRedirects       bool
 	FullOnDisk            bool
@@ -38,15 +40,17 @@ type CustomHTTPClient struct {
 	dedupeHashTable *sync.Map
 	ErrChan         chan *Error
 	http.Client
-	TempDir                string
-	WARCWriterDoneChannels []chan bool
-	skipHTTPStatusCodes    []int
-	dedupeOptions          DedupeOptions
-	MaxReadBeforeTruncate  int
-	TLSHandshakeTimeout    time.Duration
-	verifyCerts            bool
-	FullOnDisk             bool
-	randomLocalIP          bool
+	TempDir                  string
+	WARCWriterDoneChannels   []chan bool
+	skipHTTPStatusCodes      []int
+	dedupeOptions            DedupeOptions
+	MaxReadBeforeTruncate    int
+	TLSHandshakeTimeout      time.Duration
+	verifyCerts              bool
+	FullOnDisk               bool
+	randomLocalIP            bool
+	interfacesWatcherStop    chan bool
+	interfacesWatcherStarted chan bool
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -67,6 +71,11 @@ func (c *CustomHTTPClient) Close() error {
 	wg.Wait()
 	close(c.ErrChan)
 
+	if c.randomLocalIP {
+		c.interfacesWatcherStop <- true
+		close(c.interfacesWatcherStop)
+	}
+
 	return nil
 }
 
@@ -76,7 +85,10 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	// Configure random local IP
 	httpClient.randomLocalIP = HTTPClientSettings.RandomLocalIP
 	if httpClient.randomLocalIP {
-		go getAvailableIPs()
+		httpClient.interfacesWatcherStop = make(chan bool)
+		httpClient.interfacesWatcherStarted = make(chan bool)
+		go httpClient.getAvailableIPs()
+		<-httpClient.interfacesWatcherStarted
 	}
 
 	// Toggle deduplication options and create map for deduplication records.
@@ -146,10 +158,18 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		HTTPClientSettings.TLSHandshakeTimeout = 10 * time.Second
 	}
 
+	if HTTPClientSettings.TCPTimeout == 0 {
+		HTTPClientSettings.TCPTimeout = 10 * time.Second
+	}
+
+	if HTTPClientSettings.DNSResolutionTimeout == 0 {
+		HTTPClientSettings.DNSResolutionTimeout = 5 * time.Second
+	}
+
 	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
-	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
+	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DNSResolutionTimeout, HTTPClientSettings.DNSServer, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
 	if err != nil {
 		return nil, err
 	}
