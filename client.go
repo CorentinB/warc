@@ -30,6 +30,7 @@ type HTTPClientSettings struct {
 	RandomLocalIP         bool
 	DisableIPv4           bool
 	DisableIPv6           bool
+	IPv6AnyIP             bool
 }
 
 type CustomHTTPClient struct {
@@ -76,7 +77,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	// Configure random local IP
 	httpClient.randomLocalIP = HTTPClientSettings.RandomLocalIP
 	if httpClient.randomLocalIP {
-		go getAvailableIPs()
+		go getAvailableIPs(HTTPClientSettings.IPv6AnyIP)
 	}
 
 	// Toggle deduplication options and create map for deduplication records.
