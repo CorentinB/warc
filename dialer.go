@@ -25,6 +25,7 @@ import (
 type customDialer struct {
 	proxyDialer proxy.Dialer
 	client      *CustomHTTPClient
+	DNSConfig   *dns.ClientConfig
 	DNSClient   *dns.Client
 	net.Dialer
 	DNSServer   string
@@ -32,7 +33,7 @@ type customDialer struct {
 	disableIPv6 bool
 }
 
-func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout, DNSResolutionTimeout time.Duration, DNSServer string, disableIPv4, disableIPv6 bool) (d *customDialer, err error) {
+func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout, DNSResolutionTimeout time.Duration, DNSServers []string, disableIPv4, disableIPv6 bool) (d *customDialer, err error) {
 	d = new(customDialer)
 
 	d.Timeout = DialTimeout
@@ -40,9 +41,13 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout,
 	d.disableIPv4 = disableIPv4
 	d.disableIPv6 = disableIPv6
 
-	d.DNSServer = DNSServer
-	if DNSServer == "" {
-		d.DNSServer = "1.1.1.1:53"
+	d.DNSConfig, err = dns.ClientConfigFromFile("/etc/resolv.conf")
+	if err != nil {
+		return nil, err
+	}
+
+	if len(DNSServers) > 0 {
+		d.DNSConfig.Servers = DNSServers
 	}
 
 	d.DNSClient = &dns.Client{

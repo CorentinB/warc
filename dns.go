@@ -11,7 +11,7 @@ func (d *customDialer) resolveDNS(address string) (net.IP, error) {
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(address), dns.TypeA)
 
-	r, _, err := d.DNSClient.Exchange(m, d.DNSServer)
+	r, _, err := d.DNSClient.Exchange(m, net.JoinHostPort(d.DNSConfig.Servers[0], d.DNSConfig.Port))
 	if err != nil {
 		return nil, err
 	}

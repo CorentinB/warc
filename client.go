@@ -18,12 +18,13 @@ type HTTPClientSettings struct {
 	TempDir               string
 	DNSServer             string
 	SkipHTTPStatusCodes   []int
+	DNSServers            []string
 	DedupeOptions         DedupeOptions
-	TCPTimeout            time.Duration
-	TLSHandshakeTimeout   time.Duration
+	DialTimeout           time.Duration
 	ResponseHeaderTimeout time.Duration
 	DNSResolutionTimeout  time.Duration
-	DialTimeout           time.Duration
+	TLSHandshakeTimeout   time.Duration
+	TCPTimeout            time.Duration
 	MaxReadBeforeTruncate int
 	DecompressBody        bool
 	FollowRedirects       bool
@@ -169,7 +170,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
-	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DNSResolutionTimeout, HTTPClientSettings.DNSServer, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
+	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DNSResolutionTimeout, HTTPClientSettings.DNSServers, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
 	if err != nil {
 		return nil, err
 	}
