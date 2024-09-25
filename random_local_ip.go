@@ -1,8 +1,6 @@
 package warc
 
 import (
-	"context"
-	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -109,74 +107,32 @@ func getNextIP(availableIPs *availableIPs) net.IP {
 	return ip
 }
 
-func (d *customDialer) getLocalAddr(network, address string) any {
-	var destAddr string
-
-	// Check if the address is already an IP
-	if IP := net.ParseIP(address); IP != nil {
-		destAddr = address
-	} else {
-		// If it's not an IP, split the host and port
-		var err error
-		destAddr, _, err = net.SplitHostPort(address)
-		if err != nil {
-			return nil
-		}
-		destAddr = strings.Trim(destAddr, "[]")
+func getLocalAddr(network, address string) any {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil
 	}
+
+	destAddr := strings.Trim(host, "[]")
 
 	destIP := net.ParseIP(destAddr)
 	if destIP == nil {
-		ctx, cancel := context.WithTimeout(context.Background(), d.DNSResolutionTimeout)
-		defer cancel()
-
-		// Determine which IP versions to look up
-		var lookupType string
-		switch {
-		case !d.disableIPv4 && !d.disableIPv6:
-			lookupType = "ip"
-		case !d.disableIPv4:
-			lookupType = "ip4"
-		case !d.disableIPv6:
-			lookupType = "ip6"
-		default:
-			return nil // Both IPv4 and IPv6 are disabled
-		}
-
-		IPs, err := net.DefaultResolver.LookupIP(ctx, lookupType, destAddr)
-		if err != nil || len(IPs) == 0 {
-			return nil
-		}
-
-		fmt.Printf("Found %+v\n", IPs)
-
-		destIP = IPs[0] // Use the first resolved IP
-
-		fmt.Printf("Resolved %s to %s\n", destAddr, destIP)
-
-		// Store the resolved IP in d.DNSResolutions
-		d.DNSResolutions.Store(destAddr, destIP)
+		return nil
 	}
 
-	var localIP net.IP
 	if destIP.To4() != nil {
-		if d.disableIPv4 {
-			return nil
+		if network == "tcp" {
+			return &net.TCPAddr{IP: getNextIP(IPv4)}
+		} else if network == "udp" {
+			return &net.UDPAddr{IP: getNextIP(IPv4)}
 		}
-		localIP = getNextIP(IPv4)
+		return nil
 	} else {
-		if d.disableIPv6 {
-			return nil
+		if network == "tcp" {
+			return &net.TCPAddr{IP: getNextIP(IPv6)}
+		} else if network == "udp" {
+			return &net.UDPAddr{IP: getNextIP(IPv6)}
 		}
-		localIP = getNextIP(IPv6)
-	}
-
-	switch network {
-	case "tcp":
-		return &net.TCPAddr{IP: localIP}
-	case "udp":
-		return &net.UDPAddr{IP: localIP}
-	default:
 		return nil
 	}
 }
