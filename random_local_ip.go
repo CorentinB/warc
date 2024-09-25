@@ -7,8 +7,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 var (
@@ -97,8 +95,6 @@ func getNextIP(availableIPs *availableIPs) net.IP {
 		return nil
 	}
 
-	spew.Dump(IPs)
-
 	currentIndex := availableIPs.Index.Add(1) - 1
 	ipNet := IPs[currentIndex%uint64(len(IPs))]
 
@@ -128,16 +124,16 @@ func getLocalAddr(destNetwork, destAddress string) any {
 	}
 
 	if destIP.To4() != nil {
-		if destNetwork == "tcp" {
+		if strings.Contains(destNetwork, "tcp") {
 			return &net.TCPAddr{IP: getNextIP(IPv4)}
-		} else if destNetwork == "udp" {
+		} else if strings.Contains(destNetwork, "udp") {
 			return &net.UDPAddr{IP: getNextIP(IPv4)}
 		}
 		return nil
 	} else {
-		if destNetwork == "tcp" {
+		if strings.Contains(destNetwork, "tcp") {
 			return &net.TCPAddr{IP: getNextIP(IPv6)}
-		} else if destNetwork == "udp" {
+		} else if strings.Contains(destNetwork, "udp") {
 			return &net.UDPAddr{IP: getNextIP(IPv6)}
 		}
 		return nil
