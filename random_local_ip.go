@@ -3,7 +3,6 @@ package warc
 import (
 	"crypto/rand"
 	"fmt"
-	"math/big"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -140,29 +139,38 @@ func getLocalAddr(network, address string) any {
 
 func generateRandomIPv6(baseIPv6Net net.IPNet) (net.IP, error) {
 	baseIP := baseIPv6Net.IP.To16()
-	if baseIP == nil {
-		return nil, fmt.Errorf("invalid base IPv6 address")
+	if baseIP == nil || len(baseIPv6Net.Mask) != net.IPv6len {
+		return nil, fmt.Errorf("invalid base IPv6 address or mask")
 	}
 
-	maskLength, _ := baseIPv6Net.Mask.Size()
-	if maskLength < 0 || maskLength > 128 {
+	ones, bits := baseIPv6Net.Mask.Size()
+	if bits != 128 || ones < 0 || ones > bits {
 		return nil, fmt.Errorf("invalid network mask length")
 	}
 
-	hostBits := 128 - maskLength
+	hostBits := bits - ones
 
-	max := new(big.Int).Lsh(big.NewInt(1), uint(hostBits)) // 2^hostBits
-	randomBits, err := rand.Int(rand.Reader, max)
+	// Generate random host bits
+	nBytes := (hostBits + 7) / 8 // Number of bytes needed for host bits
+	randomBytes := make([]byte, nBytes)
+	_, err := rand.Read(randomBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate random bits: %v", err)
 	}
 
-	randomizedIP := make(net.IP, len(baseIP))
-	copy(randomizedIP, baseIP)
+	// Mask the random bytes if hostBits is not a multiple of 8
+	if hostBits%8 != 0 {
+		extraBits := 8 - (hostBits % 8)
+		randomBytes[0] = randomBytes[0] & (0xFF >> extraBits)
+	}
 
-	for i := maskLength / 8; i < 16; i++ {
-		remainingBits := 8 * (15 - i) // Shift bits to the correct byte position
-		randomizedIP[i] = baseIP[i] | byte(randomBits.Int64()>>remainingBits)
+	// Construct the randomized IP address
+	randomizedIP := make(net.IP, net.IPv6len)
+	copy(randomizedIP, baseIP.Mask(baseIPv6Net.Mask)) // Copy the network prefix
+
+	// Apply the random host bits to the randomized IP
+	for i := 0; i < nBytes; i++ {
+		randomizedIP[16-nBytes+i] |= randomBytes[i]
 	}
 
 	return randomizedIP, nil

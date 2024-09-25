@@ -42,6 +42,31 @@ func TestGenerateRandomIPv6InvalidMask(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for invalid mask length, got nil")
 	}
+
+	baseIPNet = net.IPNet{
+		IP: net.ParseIP("2001:db8::"),
+		Mask: net.IPMask([]byte{
+			0xff, 0xfe, 0xff, 0xff, // Non-contiguous mask (invalid) (2nd byte)
+			0xff, 0xff, 0xff, 0xff,
+			0xff, 0xff, 0xff, 0xff,
+			0xff, 0xff, 0xff, 0xff,
+		}),
+	}
+	_, err = generateRandomIPv6(baseIPNet)
+	if err == nil {
+		t.Error("Expected error for invalid mask length, got nil")
+	}
+}
+
+func TestGenerateRandomIPv6EmptyMask(t *testing.T) {
+	baseIPNet := net.IPNet{
+		IP:   net.ParseIP("2001:db8::"),
+		Mask: net.IPMask([]byte{}), // Empty mask
+	}
+	_, err := generateRandomIPv6(baseIPNet)
+	if err == nil {
+		t.Error("Expected error for empty mask, got nil")
+	}
 }
 
 // TestGenerateRandomIPv6FullMask tests the function with a /128 mask (no host bits).
