@@ -2,6 +2,7 @@ package warc
 
 import (
 	"net"
+	"strings"
 	"testing"
 )
 
@@ -306,4 +307,65 @@ func TestGetLocalAddrMalformedAddress(t *testing.T) {
 }
 
 // TestGetAvailableIPs is difficult due to its infinite loop and dependency on system interfaces.
-// It's recommended to refactor the function for better testability or to use integration tests.
+func TestGetAvailableIPsAnyIP(t *testing.T) {
+	if IPv6 == nil {
+		IPv6 = &availableIPs{
+			AnyIP: true,
+		}
+	}
+
+	if IPv4 == nil {
+		IPv4 = &availableIPs{}
+	}
+
+	// Get all network interfaces
+	interfaces, err := net.Interfaces()
+	if err != nil {
+
+	}
+
+	// Iterate over the interfaces
+	newIPv4 := make([]net.IPNet, 0)
+	newIPv6 := make([]net.IPNet, 0)
+	for _, iface := range interfaces {
+		if strings.Contains(iface.Name, "docker") {
+			continue
+		}
+
+		// Get the addresses associated with the interface
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		// Iterate over the addresses
+		for _, addr := range addrs {
+			if ipNet, ok := addr.(*net.IPNet); ok {
+				t.Logf("IPNet: %v", ipNet)
+				ip := ipNet.IP
+
+				if ip.IsLoopback() {
+					continue
+				}
+
+				// Process Global Unicast IPv6 addresses
+				if ip.IsGlobalUnicast() && ip.To16() != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
+					newIPv6 = append(newIPv6, *ipNet)
+				}
+
+				// Process Global Unicast IPv4 addresses
+				if ip.IsGlobalUnicast() && ip.To16() == nil && ip.To4() != nil {
+					// Add IPv4 addresses to the list
+					newIPv4 = append(newIPv4, *ipNet)
+				}
+			}
+		}
+	}
+
+	// Add the new addresses to the list
+	IPv6.IPs.Store(&newIPv6)
+	IPv4.IPs.Store(&newIPv4)
+
+	tcpv6Addr := getLocalAddr("tcp", "[2001:db8::2]:80")
+	t.Logf("IPv6 TCP address: %v", tcpv6Addr)
+}

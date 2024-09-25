@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 var (
@@ -94,6 +96,8 @@ func getNextIP(availableIPs *availableIPs) net.IP {
 	if len(IPs) == 0 {
 		return nil
 	}
+
+	spew.Dump(IPs)
 
 	currentIndex := availableIPs.Index.Add(1) - 1
 	ipNet := IPs[currentIndex%uint64(len(IPs))]
