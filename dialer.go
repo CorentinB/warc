@@ -16,20 +16,25 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/miekg/dns"
 	tls "github.com/refraction-networking/utls"
 	"golang.org/x/net/proxy"
 	"golang.org/x/sync/errgroup"
 )
 
 type customDialer struct {
-	proxyDialer proxy.Dialer
-	client      *CustomHTTPClient
-	disableIPv4 bool
-	disableIPv6 bool
+	proxyDialer          proxy.Dialer
+	client               *CustomHTTPClient
+	disableIPv4          bool
+	disableIPv6          bool
+	DNSResolutionTimeout time.Duration
+	DNSResolutions       *sync.Map
+	DNSServer            string
+	DNSClient            *dns.Client
 	net.Dialer
 }
 
-func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout time.Duration, disableIPv4, disableIPv6 bool) (d *customDialer, err error) {
+func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout, DNSResolutionTimeout time.Duration, DNSServer string, disableIPv4, disableIPv6 bool) (d *customDialer, err error) {
 	d = new(customDialer)
 
 	d.Timeout = DialTimeout
@@ -37,14 +42,27 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout 
 	d.disableIPv4 = disableIPv4
 	d.disableIPv6 = disableIPv6
 
+	d.DNSResolutionTimeout = DNSResolutionTimeout
+	d.DNSResolutions = new(sync.Map)
+
+	d.DNSServer = DNSServer
+	if DNSServer == "" {
+		d.DNSServer = "1.1.1.1:53"
+	}
+
+	d.DNSClient = &dns.Client{
+		Net:     "udp",
+		Timeout: DNSResolutionTimeout,
+	}
+
 	if proxyURL != "" {
 		u, err := url.Parse(proxyURL)
 		if err != nil {
-			panic(err.Error())
+			return nil, err
 		}
 
 		if d.proxyDialer, err = proxy.FromURL(u, d); err != nil {
-			panic(err.Error())
+			return nil, err
 		}
 	}
 
@@ -97,11 +115,28 @@ func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err e
 		return nil, errors.New("no supported network type available")
 	}
 
+	// Get the address without the port if there is one
+	address, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+
+	IP, err := d.resolveDNS(address)
+	if err != nil {
+		return nil, err
+	}
+
+	if port != "" {
+		address = net.JoinHostPort(IP.String(), port)
+	} else {
+		address = IP.String() + ":80"
+	}
+
 	if d.proxyDialer != nil {
 		conn, err = d.proxyDialer.Dial(network, address)
 	} else {
 		if d.client.randomLocalIP {
-			localAddr := getLocalAddr(network, address)
+			localAddr := d.getLocalAddr(network, address)
 			if localAddr != nil {
 				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)
@@ -111,7 +146,7 @@ func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err e
 			}
 		}
 
-		conn, err = d.Dial(network, address)
+		conn, err = d.DialContext(context.Background(), network, address)
 	}
 
 	if err != nil {
@@ -128,14 +163,29 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 		return nil, errors.New("no supported network type available")
 	}
 
+	address, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+
+	IP, err := d.resolveDNS(address)
+	if err != nil {
+		return nil, err
+	}
+
+	if port != "" {
+		address = net.JoinHostPort(IP.String(), port)
+	} else {
+		address = IP.String() + ":443"
+	}
+
 	var plainConn net.Conn
-	var err error
 
 	if d.proxyDialer != nil {
 		plainConn, err = d.proxyDialer.Dial(network, address)
 	} else {
 		if d.client.randomLocalIP {
-			localAddr := getLocalAddr(network, address)
+			localAddr := d.getLocalAddr(network, address)
 			if localAddr != nil {
 				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)
