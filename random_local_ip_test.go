@@ -150,6 +150,21 @@ func TestGetNextIPAnyIP(t *testing.T) {
 	}
 }
 
+// TestTestGetNextIPAnyIPv6Randomness tests the randomness of generated IPv6 addresses.
+func TestTestGetNextIPAnyIPv6Randomness(t *testing.T) {
+	baseIP := net.ParseIP("2001:db8::")
+	baseIPNet := net.IPNet{IP: baseIP, Mask: net.CIDRMask(64, 128)}
+	ipList := []net.IPNet{baseIPNet}
+	availableIPs := &availableIPs{AnyIP: true}
+	availableIPs.IPs.Store(&ipList)
+
+	ip1 := getNextIP(availableIPs)
+	ip2 := getNextIP(availableIPs)
+	if ip1.Equal(ip2) {
+		t.Errorf("Expected different IPs, got %v", ip1)
+	}
+}
+
 // TestGetNextIPHighIndex tests the function with a high index value.
 func TestGetNextIPHighIndex(t *testing.T) {
 	ip1 := net.ParseIP("192.168.1.1")
