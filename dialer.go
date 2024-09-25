@@ -25,11 +25,11 @@ import (
 type customDialer struct {
 	proxyDialer proxy.Dialer
 	client      *CustomHTTPClient
-	disableIPv4 bool
-	disableIPv6 bool
-	DNSServer   string
 	DNSClient   *dns.Client
 	net.Dialer
+	DNSServer   string
+	disableIPv4 bool
+	disableIPv6 bool
 }
 
 func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout, DNSResolutionTimeout time.Duration, DNSServer string, disableIPv4, disableIPv6 bool) (d *customDialer, err error) {
