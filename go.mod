@@ -1,12 +1,13 @@
 module github.com/CorentinB/warc
 
-go 1.22
+go 1.22.0
 
 require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/davecgh/go-spew v1.1.1
 	github.com/google/uuid v1.6.0
-	github.com/klauspost/compress v1.17.9
+	github.com/klauspost/compress v1.17.10
+	github.com/miekg/dns v1.1.62
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/refraction-networking/utls v1.6.7
 	github.com/remeh/sizedwaitgroup v1.0.0
@@ -23,5 +24,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	golang.org/x/crypto v0.27.0 // indirect
+	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/tools v0.25.0 // indirect
 )

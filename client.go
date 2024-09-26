@@ -16,13 +16,17 @@ type HTTPClientSettings struct {
 	RotatorSettings       *RotatorSettings
 	Proxy                 string
 	TempDir               string
+	DNSServer             string
 	SkipHTTPStatusCodes   []int
+	DNSServers            []string
 	DedupeOptions         DedupeOptions
 	DialTimeout           time.Duration
 	ResponseHeaderTimeout time.Duration
+	DNSResolutionTimeout  time.Duration
+	DNSRecordsTTL         time.Duration
 	TLSHandshakeTimeout   time.Duration
-	MaxReadBeforeTruncate int
 	TCPTimeout            time.Duration
+	MaxReadBeforeTruncate int
 	DecompressBody        bool
 	FollowRedirects       bool
 	FullOnDisk            bool
@@ -34,17 +38,19 @@ type HTTPClientSettings struct {
 }
 
 type CustomHTTPClient struct {
-	WARCWriter      chan *RecordBatch
-	WaitGroup       *WaitGroupWithCount
-	dedupeHashTable *sync.Map
-	ErrChan         chan *Error
+	interfacesWatcherStop    chan bool
+	WaitGroup                *WaitGroupWithCount
+	dedupeHashTable          *sync.Map
+	ErrChan                  chan *Error
+	WARCWriter               chan *RecordBatch
+	interfacesWatcherStarted chan bool
 	http.Client
 	TempDir                string
 	WARCWriterDoneChannels []chan bool
 	skipHTTPStatusCodes    []int
 	dedupeOptions          DedupeOptions
-	MaxReadBeforeTruncate  int
 	TLSHandshakeTimeout    time.Duration
+	MaxReadBeforeTruncate  int
 	verifyCerts            bool
 	FullOnDisk             bool
 	randomLocalIP          bool
@@ -68,6 +74,11 @@ func (c *CustomHTTPClient) Close() error {
 	wg.Wait()
 	close(c.ErrChan)
 
+	if c.randomLocalIP {
+		c.interfacesWatcherStop <- true
+		close(c.interfacesWatcherStop)
+	}
+
 	return nil
 }
 
@@ -77,7 +88,10 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	// Configure random local IP
 	httpClient.randomLocalIP = HTTPClientSettings.RandomLocalIP
 	if httpClient.randomLocalIP {
-		go getAvailableIPs(HTTPClientSettings.IPv6AnyIP)
+		httpClient.interfacesWatcherStop = make(chan bool)
+		httpClient.interfacesWatcherStarted = make(chan bool)
+		go httpClient.getAvailableIPs(HTTPClientSettings.IPv6AnyIP)
+		<-httpClient.interfacesWatcherStarted
 	}
 
 	// Toggle deduplication options and create map for deduplication records.
@@ -147,10 +161,22 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		HTTPClientSettings.TLSHandshakeTimeout = 10 * time.Second
 	}
 
+	if HTTPClientSettings.TCPTimeout == 0 {
+		HTTPClientSettings.TCPTimeout = 10 * time.Second
+	}
+
+	if HTTPClientSettings.DNSResolutionTimeout == 0 {
+		HTTPClientSettings.DNSResolutionTimeout = 5 * time.Second
+	}
+
+	if HTTPClientSettings.DNSRecordsTTL == 0 {
+		HTTPClientSettings.DNSRecordsTTL = 5 * time.Minute
+	}
+
 	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
-	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
+	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DNSRecordsTTL, HTTPClientSettings.DNSResolutionTimeout, HTTPClientSettings.DNSServers, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
 	if err != nil {
 		return nil, err
 	}
