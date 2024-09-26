@@ -268,6 +268,34 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		slices.Reverse(batch.Records)
 	}
 
+	var selectedCipherSuite string
+	var selectedProtocol string
+
+	if cc, ok := conn.(*tls.UConn); ok {
+		state := cc.ConnectionState()
+		for _, cipherSuite := range tls.CipherSuites() {
+			// List based on https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml
+			// example: WARC-Cipher-Suite: TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+			if cipherSuite.ID == state.CipherSuite {
+				selectedCipherSuite = cipherSuite.Name
+			}
+		}
+		// Add the negotiated protocol version
+		// Values as defined in WARC proposal https://github.com/iipc/warc-specifications/issues/42
+		switch state.Version {
+		case tls.VersionSSL30:
+			selectedProtocol = "ssl/3"
+		case tls.VersionTLS10:
+			selectedProtocol = "tls/1.0"
+		case tls.VersionTLS11:
+			selectedProtocol = "tls/1.1"
+		case tls.VersionTLS12:
+			selectedProtocol = "tls/1.2"
+		case tls.VersionTLS13:
+			selectedProtocol = "tls/1.3"
+		}
+	}
+
 	// Get the WARC-Target-URI value
 	var warcTargetURI = <-warcTargetURIChannel
 
@@ -287,6 +315,14 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 		// Set WARC-Record-ID and WARC-Concurrent-To
 		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordIDs[i]+">")
+
+		if selectedCipherSuite != "" {
+			r.Header.Set("WARC-Cipher-Suite", selectedCipherSuite)
+		}
+
+		if selectedProtocol != "" {
+			r.Header.Set("WARC-Protocol", selectedProtocol)
+		}
 
 		if i == len(recordIDs)-1 {
 			r.Header.Set("WARC-Concurrent-To", "<urn:uuid:"+recordIDs[0]+">")
