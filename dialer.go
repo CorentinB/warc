@@ -28,12 +28,11 @@ type customDialer struct {
 	DNSConfig   *dns.ClientConfig
 	DNSClient   *dns.Client
 	DNSRecords  *sync.Map
-	// This defines the TTL for DNS records in the cache
-	DNSRecordsTTL time.Duration
 	net.Dialer
-	DNSServer   string
-	disableIPv4 bool
-	disableIPv6 bool
+	DNSServer     string
+	DNSRecordsTTL time.Duration
+	disableIPv4   bool
+	disableIPv6   bool
 }
 
 func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout, DNSRecordsTTL, DNSResolutionTimeout time.Duration, DNSServers []string, disableIPv4, disableIPv6 bool) (d *customDialer, err error) {
@@ -120,22 +119,16 @@ func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err e
 		return nil, errors.New("no supported network type available")
 	}
 
-	IP, port, err := d.resolveDNS(address)
+	IP, err := d.archiveDNS(address)
 	if err != nil {
 		return nil, err
-	}
-
-	if port != "" {
-		address = net.JoinHostPort(IP.String(), port)
-	} else {
-		address = IP.String() + ":80"
 	}
 
 	if d.proxyDialer != nil {
 		conn, err = d.proxyDialer.Dial(network, address)
 	} else {
 		if d.client.randomLocalIP {
-			localAddr := getLocalAddr(network, address)
+			localAddr := getLocalAddr(network, IP.String())
 			if localAddr != nil {
 				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)
@@ -162,15 +155,9 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 		return nil, errors.New("no supported network type available")
 	}
 
-	IP, port, err := d.resolveDNS(address)
+	IP, err := d.archiveDNS(address)
 	if err != nil {
 		return nil, err
-	}
-
-	if port != "" {
-		address = net.JoinHostPort(IP.String(), port)
-	} else {
-		address = IP.String() + ":443"
 	}
 
 	var plainConn net.Conn
@@ -179,7 +166,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 		plainConn, err = d.proxyDialer.Dial(network, address)
 	} else {
 		if d.client.randomLocalIP {
-			localAddr := getLocalAddr(network, address)
+			localAddr := getLocalAddr(network, IP.String())
 			if localAddr != nil {
 				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)

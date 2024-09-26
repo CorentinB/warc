@@ -107,30 +107,23 @@ func getNextIP(availableIPs *availableIPs) net.IP {
 	return ip
 }
 
-func getLocalAddr(network, address string) any {
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		return nil
-	}
-
-	destAddr := strings.Trim(host, "[]")
-
-	destIP := net.ParseIP(destAddr)
+func getLocalAddr(network, IP string) any {
+	destIP := net.ParseIP(strings.Trim(IP, "[]"))
 	if destIP == nil {
 		return nil
 	}
 
 	if destIP.To4() != nil {
-		if network == "tcp" {
+		if strings.Contains(network, "tcp") {
 			return &net.TCPAddr{IP: getNextIP(IPv4)}
-		} else if network == "udp" {
+		} else if strings.Contains(network, "udp") {
 			return &net.UDPAddr{IP: getNextIP(IPv4)}
 		}
 		return nil
 	} else {
-		if network == "tcp" {
+		if strings.Contains(network, "tcp") {
 			return &net.TCPAddr{IP: getNextIP(IPv6)}
-		} else if network == "udp" {
+		} else if strings.Contains(network, "udp") {
 			return &net.UDPAddr{IP: getNextIP(IPv6)}
 		}
 		return nil

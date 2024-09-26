@@ -9,28 +9,28 @@ import (
 )
 
 type cachedIP struct {
-	ip        net.IP
 	expiresAt time.Time
+	ip        net.IP
 }
 
-func (d *customDialer) resolveDNS(address string) (IP net.IP, port string, err error) {
+func (d *customDialer) archiveDNS(address string) (resolvedIP net.IP, err error) {
 	// Get the address without the port if there is one
-	address, port, err = net.SplitHostPort(address)
+	address, _, err = net.SplitHostPort(address)
 	if err != nil {
-		return nil, "", err
+		return resolvedIP, err
 	}
 
 	// Check if the address is already an IP
-	IP = net.ParseIP(address)
-	if IP != nil {
-		return IP, port, nil
+	resolvedIP = net.ParseIP(address)
+	if resolvedIP != nil {
+		return resolvedIP, nil
 	}
 
 	// Check cache first
 	if cached, ok := d.DNSRecords.Load(address); ok {
 		cachedEntry := cached.(cachedIP)
 		if time.Now().Before(cachedEntry.expiresAt) {
-			return cachedEntry.ip, port, nil
+			return resolvedIP, nil
 		}
 		// Cache entry expired, remove it
 		d.DNSRecords.Delete(address)
@@ -41,7 +41,7 @@ func (d *customDialer) resolveDNS(address string) (IP net.IP, port string, err e
 
 	r, _, err := d.DNSClient.Exchange(m, net.JoinHostPort(d.DNSConfig.Servers[0], d.DNSConfig.Port))
 	if err != nil {
-		return nil, port, err
+		return resolvedIP, err
 	}
 
 	// Record the DNS response
@@ -58,7 +58,6 @@ func (d *customDialer) resolveDNS(address string) (IP net.IP, port string, err e
 		}
 	}
 
-	var resolvedIP net.IP
 	// Prioritize IPv6 if both are available and enabled
 	if ipv6 != nil {
 		resolvedIP = ipv6
@@ -72,8 +71,8 @@ func (d *customDialer) resolveDNS(address string) (IP net.IP, port string, err e
 			ip:        resolvedIP,
 			expiresAt: time.Now().Add(d.DNSRecordsTTL),
 		})
-		return resolvedIP, port, nil
+		return resolvedIP, nil
 	}
 
-	return nil, port, fmt.Errorf("no suitable IP address found for %s", address)
+	return resolvedIP, fmt.Errorf("no suitable IP address found for %s", address)
 }
