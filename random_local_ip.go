@@ -38,66 +38,66 @@ func (c *CustomHTTPClient) getAvailableIPs(IPv6AnyIP bool) (IPs []net.IP, err er
 		case <-c.interfacesWatcherStop:
 			return nil, nil
 		default:
-		// Get all network interfaces
-		interfaces, err := net.Interfaces()
-		if err != nil {
-			time.Sleep(time.Second)
-			continue
-		}
-
-		// Iterate over the interfaces
-		newIPv4 := make([]net.IPNet, 0)
-		newIPv6 := make([]net.IPNet, 0)
-		for _, iface := range interfaces {
-			if strings.Contains(iface.Name, "docker") {
-				continue
-			}
-
-			// Get the addresses associated with the interface
-			addrs, err := iface.Addrs()
+			// Get all network interfaces
+			interfaces, err := net.Interfaces()
 			if err != nil {
 				time.Sleep(time.Second)
 				continue
 			}
 
-			// Iterate over the addresses
-			for _, addr := range addrs {
-				if ipNet, ok := addr.(*net.IPNet); ok {
-					ip := ipNet.IP
+			// Iterate over the interfaces
+			newIPv4 := make([]net.IPNet, 0)
+			newIPv6 := make([]net.IPNet, 0)
+			for _, iface := range interfaces {
+				if strings.Contains(iface.Name, "docker") {
+					continue
+				}
 
-					if ip.IsLoopback() {
-						continue
-					}
+				// Get the addresses associated with the interface
+				addrs, err := iface.Addrs()
+				if err != nil {
+					time.Sleep(time.Second)
+					continue
+				}
 
-					// Process Global Unicast IPv6 addresses
-					if ip.IsGlobalUnicast() && ip.To16() != nil && ip.To4() == nil {
-						newIPv6 = append(newIPv6, *ipNet)
-					}
+				// Iterate over the addresses
+				for _, addr := range addrs {
+					if ipNet, ok := addr.(*net.IPNet); ok {
+						ip := ipNet.IP
 
-					// Process Global Unicast IPv4 addresses
-					if ip.IsGlobalUnicast() && ip.To16() == nil && ip.To4() != nil {
-						// Add IPv4 addresses to the list
-						newIPv4 = append(newIPv4, *ipNet)
+						if ip.IsLoopback() {
+							continue
+						}
+
+						// Process Global Unicast IPv6 addresses
+						if ip.IsGlobalUnicast() && ip.To16() != nil && ip.To4() == nil {
+							newIPv6 = append(newIPv6, *ipNet)
+						}
+
+						// Process Global Unicast IPv4 addresses
+						if ip.IsGlobalUnicast() && ip.To16() == nil && ip.To4() != nil {
+							// Add IPv4 addresses to the list
+							newIPv4 = append(newIPv4, *ipNet)
+						}
 					}
 				}
+
+				if first {
+					c.interfacesWatcherStarted <- true
+					close(c.interfacesWatcherStarted)
+					first = false
+				}
+
+				time.Sleep(time.Second)
 			}
 
-			if first {
-				c.interfacesWatcherStarted <- true
-				close(c.interfacesWatcherStarted)
-				first = false
-			}
+			// Add the new addresses to the list
+			IPv6.IPs.Store(&newIPv6)
+			IPv4.IPs.Store(&newIPv4)
 
 			time.Sleep(time.Second)
 		}
-
-		// Add the new addresses to the list
-		IPv6.IPs.Store(&newIPv6)
-		IPv4.IPs.Store(&newIPv4)
-
-		time.Sleep(time.Second)
 	}
-}
 }
 
 func getNextIP(availableIPs *availableIPs) net.IP {
@@ -124,49 +124,32 @@ func getNextIP(availableIPs *availableIPs) net.IP {
 	return ipNet.IP
 }
 
-<<<<<<< HEAD
-func getLocalAddr(destNetwork, destAddress string) any {
-	lastColon := strings.LastIndex(destAddress, ":")
+func getLocalAddr(network, IP string) any {
+	lastColon := strings.LastIndex(IP, ":")
 	if lastColon == -1 {
 		return nil
 	}
-	destAddr := destAddress[:lastColon]
 
-	destAddr = strings.TrimPrefix(destAddr, "[")
-	destAddr = strings.TrimSuffix(destAddr, "]")
+	ip := IP[:lastColon]
+	ip = strings.TrimPrefix(ip, "[")
+	ip = strings.TrimSuffix(ip, "]")
 
-	destIP := net.ParseIP(destAddr)
-=======
-func getLocalAddr(network, IP string) any {
-	destIP := net.ParseIP(strings.Trim(IP, "[]"))
->>>>>>> upstream/master
+	destIP := net.ParseIP(ip)
 	if destIP == nil {
 		return nil
 	}
 
 	if destIP.To4() != nil {
-<<<<<<< HEAD
-		if strings.Contains(destNetwork, "tcp") {
-			return &net.TCPAddr{IP: getNextIP(IPv4)}
-		} else if strings.Contains(destNetwork, "udp") {
-=======
 		if strings.Contains(network, "tcp") {
 			return &net.TCPAddr{IP: getNextIP(IPv4)}
 		} else if strings.Contains(network, "udp") {
->>>>>>> upstream/master
 			return &net.UDPAddr{IP: getNextIP(IPv4)}
 		}
 		return nil
 	} else {
-<<<<<<< HEAD
-		if strings.Contains(destNetwork, "tcp") {
-			return &net.TCPAddr{IP: getNextIP(IPv6)}
-		} else if strings.Contains(destNetwork, "udp") {
-=======
 		if strings.Contains(network, "tcp") {
 			return &net.TCPAddr{IP: getNextIP(IPv6)}
 		} else if strings.Contains(network, "udp") {
->>>>>>> upstream/master
 			return &net.UDPAddr{IP: getNextIP(IPv6)}
 		}
 		return nil

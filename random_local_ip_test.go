@@ -228,13 +228,30 @@ func TestGetLocalAddrIPv6TCP(t *testing.T) {
 	ipList := []net.IPNet{ipNet1}
 	IPv6.IPs.Store(&ipList)
 
-	addr := getLocalAddr("tcp", "[2001:db8::2]:80")
+	addr := getLocalAddr("tcp6", "[2001:db8::2]:80")
 	tcpAddr, ok := addr.(*net.TCPAddr)
 	if !ok {
 		t.Errorf("Expected *net.TCPAddr, got %T", addr)
 	}
 	if !tcpAddr.IP.Equal(ip1) {
 		t.Errorf("Expected IP %v, got %v", ip1, tcpAddr.IP)
+	}
+}
+
+func TestGetLocalAddrIPv6TCPAnyIP(t *testing.T) {
+	IPv6 = &availableIPs{AnyIP: true}
+	ip1 := net.ParseIP("2001:db8::1")
+	ipNet1 := net.IPNet{IP: ip1, Mask: net.CIDRMask(64, 128)}
+	ipList := []net.IPNet{ipNet1}
+	IPv6.IPs.Store(&ipList)
+
+	addr := getLocalAddr("tcp6", "[2001:db12::20]:80")
+	tcpAddr, ok := addr.(*net.TCPAddr)
+	if !ok {
+		t.Errorf("Expected *net.TCPAddr, got %T", addr)
+	}
+	if !ipNet1.Contains(tcpAddr.IP) {
+		t.Errorf("Expected IP within %v, got %v", ipNet1, tcpAddr.IP)
 	}
 }
 
