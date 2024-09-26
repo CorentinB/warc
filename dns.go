@@ -93,7 +93,7 @@ func (d *customDialer) lookupIP(address string, recordType uint16) (net.IP, erro
 		recordTypeStr = "AAAA"
 	}
 
-	d.client.WriteRecord(fmt.Sprintf("dns:%s:%s", address, recordTypeStr), "resource", "text/dns", r.String())
+	d.client.WriteRecord(fmt.Sprintf("dns:%s?%s", address, recordTypeStr), "resource", "text/dns", r.String())
 
 	for _, answer := range r.Answer {
 		switch recordType {
