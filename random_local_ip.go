@@ -81,19 +81,17 @@ func (c *CustomHTTPClient) getAvailableIPs(IPv6AnyIP bool) (IPs []net.IP, err er
 						}
 					}
 				}
-
-				if first {
-					c.interfacesWatcherStarted <- true
-					close(c.interfacesWatcherStarted)
-					first = false
-				}
-
-				time.Sleep(time.Second)
 			}
 
 			// Add the new addresses to the list
 			IPv6.IPs.Store(&newIPv6)
 			IPv4.IPs.Store(&newIPv4)
+
+			if first {
+				c.interfacesWatcherStarted <- true
+				close(c.interfacesWatcherStarted)
+				first = false
+			}
 
 			time.Sleep(time.Second)
 		}
