@@ -120,20 +120,9 @@ func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err e
 		return nil, errors.New("no supported network type available")
 	}
 
-	// Get the address without the port if there is one
-	address, port, err := net.SplitHostPort(address)
+	IP, port, err := d.resolveDNS(address)
 	if err != nil {
 		return nil, err
-	}
-
-	// Check if the address is already an IP
-	IP := net.ParseIP(address)
-	if IP == nil {
-		// If it's not an IP, resolve the DNS
-		IP, err = d.resolveDNS(address)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	if port != "" {
@@ -173,12 +162,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 		return nil, errors.New("no supported network type available")
 	}
 
-	address, port, err := net.SplitHostPort(address)
-	if err != nil {
-		return nil, err
-	}
-
-	IP, err := d.resolveDNS(address)
+	IP, port, err := d.resolveDNS(address)
 	if err != nil {
 		return nil, err
 	}
