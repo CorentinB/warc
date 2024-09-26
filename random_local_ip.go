@@ -125,16 +125,9 @@ func getNextIP(availableIPs *availableIPs) net.IP {
 }
 
 func getLocalAddr(network, IP string) any {
-	lastColon := strings.LastIndex(IP, ":")
-	if lastColon == -1 {
-		return nil
-	}
+	IP = strings.Trim(IP, "[]")
 
-	ip := IP[:lastColon]
-	ip = strings.TrimPrefix(ip, "[")
-	ip = strings.TrimSuffix(ip, "]")
-
-	destIP := net.ParseIP(ip)
+	destIP := net.ParseIP(IP)
 	if destIP == nil {
 		return nil
 	}
