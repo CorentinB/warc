@@ -126,9 +126,14 @@ func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err e
 		return nil, err
 	}
 
-	IP, err := d.resolveDNS(address)
-	if err != nil {
-		return nil, err
+	// Check if the address is already an IP
+	IP := net.ParseIP(address)
+	if IP == nil {
+		// If it's not an IP, resolve the DNS
+		IP, err = d.resolveDNS(address)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if port != "" {
