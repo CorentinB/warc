@@ -1,9 +1,10 @@
 package warc
 
 import (
+	"crypto/rand"
+	"fmt"
 	"net"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -14,16 +15,18 @@ var (
 )
 
 type availableIPs struct {
-	IPs []net.IP
-	sync.Mutex
-	Index uint32
+	IPs   atomic.Pointer[[]net.IPNet]
+	Index atomic.Uint64
+	AnyIP bool
 }
 
-func (c *CustomHTTPClient) getAvailableIPs() (IPs []net.IP, err error) {
+func (c *CustomHTTPClient) getAvailableIPs(IPv6AnyIP bool) (IPs []net.IP, err error) {
 	var first = true
 
 	if IPv6 == nil {
-		IPv6 = &availableIPs{}
+		IPv6 = &availableIPs{
+			AnyIP: IPv6AnyIP,
+		}
 	}
 
 	if IPv4 == nil {
@@ -43,8 +46,8 @@ func (c *CustomHTTPClient) getAvailableIPs() (IPs []net.IP, err error) {
 			}
 
 			// Iterate over the interfaces
-			var newIPv4 []net.IP
-			var newIPv6 []net.IP
+			newIPv4 := make([]net.IPNet, 0)
+			newIPv6 := make([]net.IPNet, 0)
 			for _, iface := range interfaces {
 				if strings.Contains(iface.Name, "docker") {
 					continue
@@ -53,34 +56,36 @@ func (c *CustomHTTPClient) getAvailableIPs() (IPs []net.IP, err error) {
 				// Get the addresses associated with the interface
 				addrs, err := iface.Addrs()
 				if err != nil {
+					time.Sleep(time.Second)
 					continue
 				}
 
 				// Iterate over the addresses
 				for _, addr := range addrs {
-					ipNet, ok := addr.(*net.IPNet)
-					if ok && !ipNet.IP.IsLoopback() {
-						// Add IPv6 addresses to the list
-						if ipNet.IP.IsGlobalUnicast() {
-							if ipNet.IP.To4() == nil && !strings.HasPrefix(ipNet.IP.String(), "fe80") {
-								newIPv6 = append(newIPv6, ipNet.IP)
-							} else if ipNet.IP.To4() != nil {
-								// Add IPv4 addresses to the list
-								newIPv4 = append(newIPv4, ipNet.IP)
-							}
+					if ipNet, ok := addr.(*net.IPNet); ok {
+						ip := ipNet.IP
+
+						if ip.IsLoopback() {
+							continue
+						}
+
+						// Process Global Unicast IPv6 addresses
+						if ip.IsGlobalUnicast() && ip.To16() != nil && ip.To4() == nil {
+							newIPv6 = append(newIPv6, *ipNet)
+						}
+
+						// Process Global Unicast IPv4 addresses
+						if ip.IsGlobalUnicast() && ip.To16() == nil && ip.To4() != nil {
+							// Add IPv4 addresses to the list
+							newIPv4 = append(newIPv4, *ipNet)
 						}
 					}
 				}
 			}
 
 			// Add the new addresses to the list
-			IPv6.Lock()
-			IPv6.IPs = newIPv6
-			IPv6.Unlock()
-
-			IPv4.Lock()
-			IPv4.IPs = newIPv4
-			IPv4.Unlock()
+			IPv6.IPs.Store(&newIPv6)
+			IPv4.IPs.Store(&newIPv4)
 
 			if first {
 				c.interfacesWatcherStarted <- true
@@ -94,21 +99,33 @@ func (c *CustomHTTPClient) getAvailableIPs() (IPs []net.IP, err error) {
 }
 
 func getNextIP(availableIPs *availableIPs) net.IP {
-	availableIPs.Lock()
-	defer availableIPs.Unlock()
-
-	if len(availableIPs.IPs) == 0 {
+	IPsPtr := availableIPs.IPs.Load()
+	if IPsPtr == nil {
 		return nil
 	}
 
-	currentIndex := atomic.AddUint32(&availableIPs.Index, 1) - 1
-	ip := availableIPs.IPs[int(currentIndex)%len(availableIPs.IPs)]
+	IPs := *IPsPtr
+	if len(IPs) == 0 {
+		return nil
+	}
 
-	return ip
+	currentIndex := availableIPs.Index.Add(1) - 1
+	ipNet := IPs[currentIndex%uint64(len(IPs))]
+
+	if availableIPs.AnyIP && ipNet.IP.To4() == nil && ipNet.IP.To16() != nil {
+		ip, err := generateRandomIPv6(ipNet)
+		if err == nil {
+			return ip
+		}
+	}
+
+	return ipNet.IP
 }
 
 func getLocalAddr(network, IP string) any {
-	destIP := net.ParseIP(strings.Trim(IP, "[]"))
+	IP = strings.Trim(IP, "[]")
+
+	destIP := net.ParseIP(IP)
 	if destIP == nil {
 		return nil
 	}
@@ -128,4 +145,43 @@ func getLocalAddr(network, IP string) any {
 		}
 		return nil
 	}
+}
+
+func generateRandomIPv6(baseIPv6Net net.IPNet) (net.IP, error) {
+	baseIP := baseIPv6Net.IP.To16()
+	if baseIP == nil || len(baseIPv6Net.Mask) != net.IPv6len {
+		return nil, fmt.Errorf("invalid base IPv6 address or mask")
+	}
+
+	ones, bits := baseIPv6Net.Mask.Size()
+	if bits != 128 || ones < 0 || ones > bits {
+		return nil, fmt.Errorf("invalid network mask length")
+	}
+
+	hostBits := bits - ones
+
+	// Generate random host bits
+	nBytes := (hostBits + 7) / 8 // Number of bytes needed for host bits
+	randomBytes := make([]byte, nBytes)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate random bits: %v", err)
+	}
+
+	// Mask the random bytes if hostBits is not a multiple of 8
+	if hostBits%8 != 0 {
+		extraBits := 8 - (hostBits % 8)
+		randomBytes[0] = randomBytes[0] & (0xFF >> extraBits)
+	}
+
+	// Construct the randomized IP address
+	randomizedIP := make(net.IP, net.IPv6len)
+	copy(randomizedIP, baseIP.Mask(baseIPv6Net.Mask)) // Copy the network prefix
+
+	// Apply the random host bits to the randomized IP
+	for i := 0; i < nBytes; i++ {
+		randomizedIP[16-nBytes+i] |= randomBytes[i]
+	}
+
+	return randomizedIP, nil
 }

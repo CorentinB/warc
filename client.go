@@ -34,6 +34,7 @@ type HTTPClientSettings struct {
 	RandomLocalIP         bool
 	DisableIPv4           bool
 	DisableIPv6           bool
+	IPv6AnyIP             bool
 }
 
 type CustomHTTPClient struct {
@@ -89,7 +90,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	if httpClient.randomLocalIP {
 		httpClient.interfacesWatcherStop = make(chan bool)
 		httpClient.interfacesWatcherStarted = make(chan bool)
-		go httpClient.getAvailableIPs()
+		go httpClient.getAvailableIPs(HTTPClientSettings.IPv6AnyIP)
 		<-httpClient.interfacesWatcherStarted
 	}
 
