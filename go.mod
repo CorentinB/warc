@@ -4,7 +4,6 @@ go 1.22.0
 
 require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
-	github.com/davecgh/go-spew v1.1.1
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.17.10
 	github.com/miekg/dns v1.1.62
