@@ -13,12 +13,24 @@ type cachedIP struct {
 	expiresAt time.Time
 }
 
-func (d *customDialer) resolveDNS(address string) (net.IP, error) {
+func (d *customDialer) resolveDNS(address string) (IP net.IP, port string, err error) {
+	// Get the address without the port if there is one
+	address, port, err = net.SplitHostPort(address)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Check if the address is already an IP
+	IP = net.ParseIP(address)
+	if IP != nil {
+		return IP, port, nil
+	}
+
 	// Check cache first
 	if cached, ok := d.DNSRecords.Load(address); ok {
 		cachedEntry := cached.(cachedIP)
 		if time.Now().Before(cachedEntry.expiresAt) {
-			return cachedEntry.ip, nil
+			return cachedEntry.ip, port, nil
 		}
 		// Cache entry expired, remove it
 		d.DNSRecords.Delete(address)
@@ -29,7 +41,7 @@ func (d *customDialer) resolveDNS(address string) (net.IP, error) {
 
 	r, _, err := d.DNSClient.Exchange(m, net.JoinHostPort(d.DNSConfig.Servers[0], d.DNSConfig.Port))
 	if err != nil {
-		return nil, err
+		return nil, port, err
 	}
 
 	// Record the DNS response
@@ -60,8 +72,8 @@ func (d *customDialer) resolveDNS(address string) (net.IP, error) {
 			ip:        resolvedIP,
 			expiresAt: time.Now().Add(d.DNSRecordsTTL),
 		})
-		return resolvedIP, nil
+		return resolvedIP, port, nil
 	}
 
-	return nil, fmt.Errorf("no suitable IP address found for %s", address)
+	return nil, port, fmt.Errorf("no suitable IP address found for %s", address)
 }
