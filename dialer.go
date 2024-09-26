@@ -23,11 +23,11 @@ import (
 )
 
 type customDialer struct {
-	proxyDialer   proxy.Dialer
-	client        *CustomHTTPClient
-	DNSConfig     *dns.ClientConfig
-	DNSClient     *dns.Client
-	DNSRecords    *sync.Map
+	proxyDialer proxy.Dialer
+	client      *CustomHTTPClient
+	DNSConfig   *dns.ClientConfig
+	DNSClient   *dns.Client
+	DNSRecords  *sync.Map
 	// This defines the TTL for DNS records in the cache
 	DNSRecordsTTL time.Duration
 	net.Dialer
@@ -44,7 +44,7 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout,
 	d.disableIPv4 = disableIPv4
 	d.disableIPv6 = disableIPv6
 
-	d.DNSRecordsTTL = 5 * time.Minute
+	d.DNSRecordsTTL = DNSRecordsTTL
 	d.DNSRecords = new(sync.Map)
 	d.DNSConfig, err = dns.ClientConfigFromFile("/etc/resolv.conf")
 	if err != nil {
