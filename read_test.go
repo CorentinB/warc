@@ -148,7 +148,7 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 	return -1
 }
 
-func testFileRevisitVailidity(t *testing.T, path string, originalTime string, originalDigest string) {
+func testFileRevisitVailidity(t *testing.T, path string, originalTime string, originalDigest string, shouldBeEmpty bool) {
 	var revisitRecordsFound = false
 	file, err := os.Open(path)
 	if err != nil {
@@ -169,6 +169,11 @@ func testFileRevisitVailidity(t *testing.T, path string, originalTime string, or
 			if revisitRecordsFound {
 				return
 			}
+			if shouldBeEmpty {
+				t.Logf("No revisit records found. That's expected for this test.")
+				break
+			}
+
 			t.Fatalf("No revisit records found.")
 			break
 		}
