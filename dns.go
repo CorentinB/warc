@@ -88,9 +88,9 @@ func (d *customDialer) lookupIP(address string, recordType uint16) (net.IP, erro
 	}
 
 	// Record the DNS response
-	recordTypeStr := "A"
+	recordTypeStr := "TYPE=A"
 	if recordType == dns.TypeAAAA {
-		recordTypeStr = "AAAA"
+		recordTypeStr = "TYPE=AAAA"
 	}
 
 	d.client.WriteRecord(fmt.Sprintf("dns:%s?%s", address, recordTypeStr), "resource", "text/dns", r.String())
