@@ -438,12 +438,12 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 2)
-		testFileRevisitVailidity(t, path, "", "")
+		testFileRevisitVailidity(t, path, "", "", false)
 	}
 
 	// verify that the local dedupe count is correct
 	if LocalDedupeTotal.Value() != 26872 {
-		t.Fatalf("remote dedupe total mismatch, expected: 26872 got: %d", LocalDedupeTotal.Value())
+		t.Fatalf("local dedupe total mismatch, expected: 26872 got: %d", LocalDedupeTotal.Value())
 	}
 }
 
@@ -534,12 +534,96 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 4)
-		testFileRevisitVailidity(t, path, "20220320002518", "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3")
+		testFileRevisitVailidity(t, path, "20220320002518", "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", false)
 	}
 
 	// verify that the remote dedupe count is correct
 	if RemoteDedupeTotal.Value() != 55896 {
 		t.Fatalf("remote dedupe total mismatch, expected: 55896 got: %d", RemoteDedupeTotal.Value())
+	}
+}
+
+func TestHTTPClientDedupeEmptyPayload(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
+	// Reset counter to 0?
+	LocalDedupeTotal.Reset()
+
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Empty. This is intentional to mirror 3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ.
+		fileBytes := []byte("")
+		w.WriteHeader(http.StatusOK)
+		w.Write(fileBytes)
+	}))
+	defer server.Close()
+
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "DEDUP3"
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
+		RotatorSettings: rotatorSettings,
+		DedupeOptions: DedupeOptions{
+			LocalDedupe:   true,
+			SizeThreshold: 1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for err := range httpClient.ErrChan {
+			t.Errorf("Error writing to WARC: %s", err.Err.Error())
+		}
+	}()
+
+	for i := 0; i < 2; i++ {
+		req, err := http.NewRequest("GET", server.URL, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		io.Copy(io.Discard, resp.Body)
+
+		time.Sleep(time.Second)
+	}
+
+	httpClient.Close()
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ", []string{"94", "94"}, 2)
+		testFileRevisitVailidity(t, path, "", "", true)
+	}
+
+	// verify that the local dedupe count is correct
+	if LocalDedupeTotal.Value() != 0 {
+		t.Fatalf("local dedupe total mismatch, expected: 0 got: %d", LocalDedupeTotal.Value())
 	}
 }
 
