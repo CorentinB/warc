@@ -98,9 +98,9 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 	httpClient.dedupeOptions = HTTPClientSettings.DedupeOptions
 	httpClient.dedupeHashTable = new(sync.Map)
 
-	// Set default deduplication threshold to 1024 bytes
+	// Set default deduplication threshold to 2048 bytes
 	if httpClient.dedupeOptions.SizeThreshold == 0 {
-		httpClient.dedupeOptions.SizeThreshold = 1024
+		httpClient.dedupeOptions.SizeThreshold = 2048
 	}
 
 	// Configure HTTP status code skipping (usually 429)
