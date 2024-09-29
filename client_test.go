@@ -1494,6 +1494,7 @@ func TestHTTPClientWithIPv6Disabled(t *testing.T) {
 	}
 }
 
+// MARK: Benchmarks
 func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	var (
 		rotatorSettings = NewRotatorSettings()
@@ -1563,6 +1564,76 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	httpClient.Close()
 }
 
+func BenchmarkConcurrentUnder2MBZStandard(b *testing.B) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
+		err             error
+	)
+
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write(fileBytes)
+	}))
+	defer server.Close()
+
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "BENCHUNDER2MBZSTD"
+	rotatorSettings.Compression = "ZSTD"
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
+	if err != nil {
+		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for err := range httpClient.ErrChan {
+			b.Errorf("Error writing to WARC: %s", err.Err.Error())
+		}
+	}()
+
+	wg.Add(b.N)
+	for n := 0; n < b.N; n++ {
+		go func() {
+			defer wg.Done()
+
+			req, err := http.NewRequest("GET", server.URL, nil)
+			if err != nil {
+				httpClient.ErrChan <- &Error{Err: err}
+				return
+			}
+
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				httpClient.ErrChan <- &Error{Err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			io.Copy(io.Discard, resp.Body)
+		}()
+	}
+
+	wg.Wait()
+	httpClient.Close()
+}
+
 func BenchmarkConcurrentOver2MB(b *testing.B) {
 	var (
 		rotatorSettings = NewRotatorSettings()
@@ -1591,6 +1662,76 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
 	rotatorSettings.Prefix = "BENCHOVER2MB"
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
+	if err != nil {
+		b.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for err := range httpClient.ErrChan {
+			b.Errorf("Error writing to WARC: %s", err.Err.Error())
+		}
+	}()
+
+	wg.Add(b.N)
+	for n := 0; n < b.N; n++ {
+		go func() {
+			defer wg.Done()
+
+			req, err := http.NewRequest("GET", server.URL, nil)
+			if err != nil {
+				httpClient.ErrChan <- &Error{Err: err}
+				return
+			}
+
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				httpClient.ErrChan <- &Error{Err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			io.Copy(io.Discard, resp.Body)
+		}()
+	}
+
+	wg.Wait()
+	httpClient.Close()
+}
+
+func BenchmarkConcurrentOver2MBZStandard(b *testing.B) {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		wg              sync.WaitGroup
+		errWg           sync.WaitGroup
+		err             error
+	)
+
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := os.ReadFile(path.Join("testdata", "2MB.jpg"))
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusOK)
+		w.Write(fileBytes)
+	}))
+	defer server.Close()
+
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "BENCHOVER2MBZSTD"
+	rotatorSettings.Compression = "ZSTD"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
