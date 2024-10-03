@@ -1494,6 +1494,96 @@ func TestHTTPClientWithIPv6Disabled(t *testing.T) {
 	}
 }
 
+func TestHTTPClientEndsBeforePayload(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
+		time.Sleep(2 * time.Second)
+		w.Write(fileBytes)
+	}))
+	defer server.CloseClientConnections()
+	defer server.Close()
+
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "TESTTIME"
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	httpClient.TempDir, err = os.MkdirTemp("", "warc-tests-temp-directory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(httpClient.TempDir)
+
+	// Ensure we are maximally using temp directory.
+	httpClient.FullOnDisk = true
+
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for err := range httpClient.ErrChan {
+			if !strings.Contains(err.Err.Error(), "unexpected EOF") {
+				t.Errorf("Error writing to WARC: %s", err.Err.Error())
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		if !strings.Contains(err.Error(), "context deadline exceeded") {
+			t.Fatal(err)
+		}
+	} else {
+		// If the context deadline wasn't exceeded, we should write to warc.
+		defer resp.Body.Close()
+		io.Copy(io.Discard, resp.Body)
+	}
+
+	httpClient.Close()
+
+	checkTempDir(t, httpClient.TempDir)
+
+	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range files {
+		testFileSingleHashCheck(t, path, "sha1:noresultsexpectedhere", []string{"0"}, 0)
+	}
+}
+
 // MARK: Benchmarks
 func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	var (
@@ -1516,11 +1606,11 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-und2m-")
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+	// defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
 	rotatorSettings.Prefix = "BENCHUNDER2MB"
 
@@ -1585,11 +1675,11 @@ func BenchmarkConcurrentUnder2MBZStandard(b *testing.B) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-und2zstd-")
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+	// defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
 	rotatorSettings.Prefix = "BENCHUNDER2MBZSTD"
 	rotatorSettings.Compression = "ZSTD"
@@ -1655,11 +1745,11 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-ov2m-")
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+	// defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
 	rotatorSettings.Prefix = "BENCHOVER2MB"
 
@@ -1724,11 +1814,11 @@ func BenchmarkConcurrentOver2MBZStandard(b *testing.B) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-ov2zstd-")
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+	// defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
 	rotatorSettings.Prefix = "BENCHOVER2MBZSTD"
 	rotatorSettings.Compression = "ZSTD"

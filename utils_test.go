@@ -2,6 +2,7 @@ package warc
 
 import (
 	"bytes"
+	"path/filepath"
 	"testing"
 
 	"go.uber.org/goleak"
@@ -42,5 +43,17 @@ func TestNewRotatorSettings(t *testing.T) {
 
 	if rotatorSettings.CompressionDictionary != "" {
 		t.Error("Failed to set WARC rotator's compression dictionary")
+	}
+}
+
+func checkTempDir(t *testing.T, tempDir string) {
+	temp_files, err := filepath.Glob(tempDir + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// If any temp files exist, they are unexpected and should be considered a error.
+	if len(temp_files) != 0 {
+		t.Fatal("Expected no files in temp directory, but got: ", temp_files)
 	}
 }
