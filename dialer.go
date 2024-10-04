@@ -269,7 +269,11 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 		// Make sure we close the WARC content buffers
 		for record := range recordChan {
-			record.Content.Close()
+			// CHeck if there's an error when closing the content and send to channel if so.
+			err := record.Content.Close()
+			if err != nil {
+				d.client.ErrChan <- &Error{Err: err}
+			}
 		}
 
 		return
@@ -287,7 +291,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 
 		// Make sure we close the WARC content buffers
 		for _, record := range batch.Records {
-			record.Content.Close()
+			err := record.Content.Close()
+			if err != nil {
+				d.client.ErrChan <- &Error{Err: err}
+			}
 		}
 
 		return
@@ -361,11 +368,13 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	// Read the response from the pipe
 	bytesCopied, err := io.Copy(responseRecord.Content, respPipe)
 	if err != nil {
+		responseRecord.Content.Close()
 		return err
 	}
 
 	resp, err := http.ReadResponse(bufio.NewReader(responseRecord.Content), nil)
 	if err != nil {
+		responseRecord.Content.Close()
 		return err
 	}
 
@@ -383,10 +392,14 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	// Calculate the WARC-Payload-Digest
 	payloadDigest := GetSHA1(resp.Body)
 	if strings.HasPrefix(payloadDigest, "ERROR: ") {
+		responseRecord.Content.Close()
 		// This should _never_ happen.
 		return fmt.Errorf("SHA1 ran into an unrecoverable error: %s url: %s", payloadDigest, warcTargetURI)
 	}
-	resp.Body.Close()
+	err = resp.Body.Close()
+	if err != nil {
+		return err
+	}
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
 	// Write revisit record if local or CDX dedupe is activated
@@ -503,7 +516,10 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		}
 
 		// Close old buffer
-		responseRecord.Content.Close()
+		err = responseRecord.Content.Close()
+		if err != nil {
+			return err
+		}
 		responseRecord.Content = tempBuffer
 	}
 
