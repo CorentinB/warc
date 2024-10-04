@@ -1034,8 +1034,14 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 
 	rotatorSettings.Prefix = "TESTONDISK"
 
+	httpTempDir, err := os.MkdirTemp("", "warc-tests-temp-directory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(httpTempDir)
+
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings, FullOnDisk: true})
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings, FullOnDisk: true, TempDir: httpTempDir})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
@@ -1063,6 +1069,8 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 	io.Copy(io.Discard, resp.Body)
 
 	httpClient.Close()
+
+	checkTempDir(t, httpTempDir)
 
 	files, err := filepath.Glob(rotatorSettings.OutputDirectory + "/*")
 	if err != nil {
@@ -1526,17 +1534,17 @@ func TestHTTPClientEndsBeforePayload(t *testing.T) {
 
 	rotatorSettings.Prefix = "TESTTIME"
 
-	// init the HTTP client responsible for recording HTTP(s) requests / responses
-	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
-	if err != nil {
-		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
-	}
-
-	httpClient.TempDir, err = os.MkdirTemp("", "warc-tests-temp-directory")
+	httpTempDir, err := os.MkdirTemp("", "warc-tests-temp-directory")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(httpClient.TempDir)
+	defer os.RemoveAll(httpTempDir)
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings, TempDir: httpTempDir, FullOnDisk: true})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
 
 	// Ensure we are maximally using temp directory.
 	httpClient.FullOnDisk = true
