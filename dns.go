@@ -14,6 +14,8 @@ type cachedIP struct {
 	ip        net.IP
 }
 
+const maxFallbackDNSServers = 3
+
 func (d *customDialer) archiveDNS(address string) (resolvedIP net.IP, err error) {
 	// Get the address without the port if there is one
 	address, _, err = net.SplitHostPort(address)
@@ -41,20 +43,34 @@ func (d *customDialer) archiveDNS(address string) (resolvedIP net.IP, err error)
 	var ipv4, ipv6 net.IP
 	var errA, errAAAA error
 
-	wg.Add(2)
+	if len(d.DNSConfig.Servers) == 0 {
+		return nil, fmt.Errorf("no DNS servers configured")
+	}
 
-	go func() {
-		defer wg.Done()
-		ipv4, errA = d.lookupIP(address, dns.TypeA)
-	}()
+	fallbackServers := min(maxFallbackDNSServers, len(d.DNSConfig.Servers)-1)
 
-	go func() {
-		defer wg.Done()
-		ipv6, errAAAA = d.lookupIP(address, dns.TypeAAAA)
-	}()
+	for DNSServer := 0; DNSServer <= fallbackServers; DNSServer++ {
+		if DNSServer > 0 {
+			// TODO: print warning if the default DNS server is not reachable
+		}
+		wg.Add(2)
 
-	wg.Wait()
+		go func() {
+			defer wg.Done()
+			ipv4, errA = d.lookupIP(address, dns.TypeA, DNSServer)
+		}()
 
+		go func() {
+			defer wg.Done()
+			ipv6, errAAAA = d.lookupIP(address, dns.TypeAAAA, DNSServer)
+		}()
+
+		wg.Wait()
+
+		if errA == nil || errAAAA == nil {
+			break
+		}
+	}
 	if errA != nil && errAAAA != nil {
 		return nil, fmt.Errorf("failed to resolve DNS: A error: %v, AAAA error: %v", errA, errAAAA)
 	}
@@ -78,11 +94,11 @@ func (d *customDialer) archiveDNS(address string) (resolvedIP net.IP, err error)
 	return nil, fmt.Errorf("no suitable IP address found for %s", address)
 }
 
-func (d *customDialer) lookupIP(address string, recordType uint16) (net.IP, error) {
+func (d *customDialer) lookupIP(address string, recordType uint16, DNSServer int) (net.IP, error) {
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(address), recordType)
 
-	r, _, err := d.DNSClient.Exchange(m, net.JoinHostPort(d.DNSConfig.Servers[0], d.DNSConfig.Port))
+	r, _, err := d.DNSClient.Exchange(m, net.JoinHostPort(d.DNSConfig.Servers[DNSServer], d.DNSConfig.Port))
 	if err != nil {
 		return nil, err
 	}
