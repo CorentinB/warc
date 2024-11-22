@@ -2,7 +2,6 @@ package warc
 
 import (
 	"fmt"
-	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -51,24 +50,27 @@ func (d *customDialer) archiveDNS(address string) (resolvedIP net.IP, err error)
 	fallbackServers := min(maxFallbackDNSServers, len(d.DNSConfig.Servers)-1)
 
 	for DNSServer := 0; DNSServer <= fallbackServers; DNSServer++ {
-		wg.Add(2)
+		if !d.disableIPv4 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ipv4, errA = d.lookupIP(address, dns.TypeA, DNSServer)
+			}()
+		}
 
-		go func() {
-			defer wg.Done()
-			ipv4, errA = d.lookupIP(address, dns.TypeA, DNSServer)
-		}()
-
-		go func() {
-			defer wg.Done()
-			ipv6, errAAAA = d.lookupIP(address, dns.TypeAAAA, DNSServer)
-		}()
+		if !d.disableIPv6 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ipv6, errAAAA = d.lookupIP(address, dns.TypeAAAA, DNSServer)
+			}()
+		}
 
 		wg.Wait()
 
 		if errA == nil || errAAAA == nil {
 			break
 		}
-		slog.Warn("Failed to resolve DNS", "DNS", d.DNSConfig.Servers[DNSServer], "address", address, "errA", errA, "errAAAA", errAAAA)
 	}
 	if errA != nil && errAAAA != nil {
 		return nil, fmt.Errorf("failed to resolve DNS: A error: %v, AAAA error: %v", errA, errAAAA)
