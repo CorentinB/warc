@@ -49,7 +49,7 @@ func (c *CustomHTTPClient) getAvailableIPs(IPv6AnyIP bool) (IPs []net.IP, err er
 			newIPv4 := make([]net.IPNet, 0)
 			newIPv6 := make([]net.IPNet, 0)
 			for _, iface := range interfaces {
-				if strings.Contains(iface.Name, "docker") {
+				if strings.Contains(iface.Name, "docker") || !strings.Contains(iface.Flags.String(), "broadcast") || !strings.Contains(iface.Flags.String(), "up") {
 					continue
 				}
 
