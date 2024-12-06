@@ -110,15 +110,15 @@ func TestGetNextIP(t *testing.T) {
 	availableIPs := &availableIPs{}
 	availableIPs.IPs.Store(&ipList)
 
-	ip := getNextIP(availableIPs)
+	ip := GetNextIP(availableIPs)
 	if !ip.Equal(ip1) {
 		t.Errorf("Expected %v, got %v", ip1, ip)
 	}
-	ip = getNextIP(availableIPs)
+	ip = GetNextIP(availableIPs)
 	if !ip.Equal(ip2) {
 		t.Errorf("Expected %v, got %v", ip2, ip)
 	}
-	ip = getNextIP(availableIPs)
+	ip = GetNextIP(availableIPs)
 	if !ip.Equal(ip1) {
 		t.Errorf("Expected %v, got %v", ip1, ip)
 	}
@@ -128,7 +128,7 @@ func TestGetNextIP(t *testing.T) {
 func TestGetNextIPEmptyIPs(t *testing.T) {
 	availableIPs := &availableIPs{}
 	availableIPs.IPs.Store(&[]net.IPNet{})
-	ip := getNextIP(availableIPs)
+	ip := GetNextIP(availableIPs)
 	if ip != nil {
 		t.Errorf("Expected nil, got %v", ip)
 	}
@@ -142,7 +142,7 @@ func TestGetNextIPAnyIP(t *testing.T) {
 	availableIPs := &availableIPs{AnyIP: true}
 	availableIPs.IPs.Store(&ipList)
 
-	ip := getNextIP(availableIPs)
+	ip := GetNextIP(availableIPs)
 	if ip == nil {
 		t.Error("Expected non-nil IP, got nil")
 	}
@@ -162,7 +162,7 @@ func TestGetNextIPAnyIPMultipleIPv6(t *testing.T) {
 	availableIPs.IPs.Store(&ipList)
 
 	for i := 0; i < 5; i++ {
-		ip := getNextIP(availableIPs)
+		ip := GetNextIP(availableIPs)
 		if ip == nil {
 			t.Error("Expected non-nil IP, got nil")
 		}
@@ -180,8 +180,8 @@ func TestTestGetNextIPAnyIPv6Randomness(t *testing.T) {
 	availableIPs := &availableIPs{AnyIP: true}
 	availableIPs.IPs.Store(&ipList)
 
-	ip1 := getNextIP(availableIPs)
-	ip2 := getNextIP(availableIPs)
+	ip1 := GetNextIP(availableIPs)
+	ip2 := GetNextIP(availableIPs)
 	if ip1.Equal(ip2) {
 		t.Errorf("Expected different IPs, got %v", ip1)
 	}
@@ -196,7 +196,7 @@ func TestGetNextIPHighIndex(t *testing.T) {
 	availableIPs.IPs.Store(&ipList)
 	availableIPs.Index.Store(9999999)
 
-	ip := getNextIP(availableIPs)
+	ip := GetNextIP(availableIPs)
 	if !ip.Equal(ip1) {
 		t.Errorf("Expected %v, got %v", ip1, ip)
 	}
@@ -361,8 +361,11 @@ func TestGetAvailableIPsAnyIP(t *testing.T) {
 	newIPv4 := make([]net.IPNet, 0)
 	newIPv6 := make([]net.IPNet, 0)
 	for _, iface := range interfaces {
-		if strings.Contains(iface.Name, "docker") {
+		if strings.Contains(iface.Name, "docker") || !strings.Contains(iface.Flags.String(), "broadcast") || !strings.Contains(iface.Flags.String(), "up") {
 			continue
+		} else {
+			t.Logf("Interface: %v", iface.Name)
+			t.Logf("Flags: %v", iface.Flags)
 		}
 
 		// Get the addresses associated with the interface
@@ -374,12 +377,13 @@ func TestGetAvailableIPsAnyIP(t *testing.T) {
 		// Iterate over the addresses
 		for _, addr := range addrs {
 			if ipNet, ok := addr.(*net.IPNet); ok {
-				t.Logf("IPNet: %v", ipNet)
 				ip := ipNet.IP
 
 				if ip.IsLoopback() {
 					continue
 				}
+
+				t.Logf("IPNet: %v", ipNet)
 
 				// Process Global Unicast IPv6 addresses
 				if ip.IsGlobalUnicast() && ip.To16() != nil && ip.To4() == nil && ip.IsGlobalUnicast() {

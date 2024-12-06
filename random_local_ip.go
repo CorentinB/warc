@@ -49,7 +49,7 @@ func (c *CustomHTTPClient) getAvailableIPs(IPv6AnyIP bool) (IPs []net.IP, err er
 			newIPv4 := make([]net.IPNet, 0)
 			newIPv6 := make([]net.IPNet, 0)
 			for _, iface := range interfaces {
-				if strings.Contains(iface.Name, "docker") || !strings.Contains(iface.Flags.String(), "broadcast") || !strings.Contains(iface.Flags.String(), "up") {
+				if strings.Contains(iface.Name, "docker") || strings.Contains(iface.Flags.String(), "pointopoint") || !strings.Contains(iface.Flags.String(), "up") {
 					continue
 				}
 
@@ -98,7 +98,7 @@ func (c *CustomHTTPClient) getAvailableIPs(IPv6AnyIP bool) (IPs []net.IP, err er
 	}
 }
 
-func getNextIP(availableIPs *availableIPs) net.IP {
+func GetNextIP(availableIPs *availableIPs) net.IP {
 	IPsPtr := availableIPs.IPs.Load()
 	if IPsPtr == nil {
 		return nil
@@ -132,16 +132,16 @@ func getLocalAddr(network, IP string) any {
 
 	if destIP.To4() != nil {
 		if strings.Contains(network, "tcp") {
-			return &net.TCPAddr{IP: getNextIP(IPv4)}
+			return &net.TCPAddr{IP: GetNextIP(IPv4)}
 		} else if strings.Contains(network, "udp") {
-			return &net.UDPAddr{IP: getNextIP(IPv4)}
+			return &net.UDPAddr{IP: GetNextIP(IPv4)}
 		}
 		return nil
 	} else {
 		if strings.Contains(network, "tcp") {
-			return &net.TCPAddr{IP: getNextIP(IPv6)}
+			return &net.TCPAddr{IP: GetNextIP(IPv6)}
 		} else if strings.Contains(network, "udp") {
-			return &net.UDPAddr{IP: getNextIP(IPv6)}
+			return &net.UDPAddr{IP: GetNextIP(IPv6)}
 		}
 		return nil
 	}
