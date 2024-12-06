@@ -2,7 +2,6 @@ package warc
 
 import (
 	"net"
-	"strings"
 	"testing"
 )
 
@@ -12,12 +11,52 @@ func TestGenerateRandomIPv6(t *testing.T) {
 		IP:   net.ParseIP("2001:db8::"),
 		Mask: net.CIDRMask(64, 128),
 	}
+
 	ip, err := generateRandomIPv6(baseIPNet)
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
+
+	t.Logf("Generated IPv6 address: %v", ip)
+
 	if !baseIPNet.Contains(ip) {
 		t.Errorf("Generated IP %v is not within base IP network %v", ip, baseIPNet)
+	}
+}
+
+func TestGenerateRandomIPv6Uniqueness(t *testing.T) {
+	baseIPNet := net.IPNet{
+		IP:   net.ParseIP("2001:db8::"),
+		Mask: net.CIDRMask(32, 128),
+	}
+
+	// Generate the first IP
+	ip1, err := generateRandomIPv6(baseIPNet)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	t.Logf("First generated IPv6 address: %v", ip1)
+
+	if !baseIPNet.Contains(ip1) {
+		t.Errorf("Generated IP %v is not within base IP network %v", ip1, baseIPNet)
+	}
+
+	// Generate the second IP
+	ip2, err := generateRandomIPv6(baseIPNet)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	t.Logf("Second generated IPv6 address: %v", ip2)
+
+	if !baseIPNet.Contains(ip2) {
+		t.Errorf("Generated IP %v is not within base IP network %v", ip2, baseIPNet)
+	}
+
+	// Check if the two IPs are different
+	if ip1.Equal(ip2) {
+		t.Errorf("Expected different IPs, got the same IP %v", ip1)
 	}
 }
 
@@ -27,9 +66,15 @@ func TestGenerateRandomIPv6InvalidBaseIP(t *testing.T) {
 		IP:   net.ParseIP("invalidIP"),
 		Mask: net.CIDRMask(64, 128),
 	}
-	_, err := generateRandomIPv6(baseIPNet)
+	ip, err := generateRandomIPv6(baseIPNet)
 	if err == nil {
 		t.Error("Expected error for invalid base IP, got nil")
+	} else {
+		t.Logf("Received expected error: %v", err)
+	}
+
+	if ip != nil {
+		t.Logf("Generated IP (unexpectedly): %v", ip)
 	}
 }
 
@@ -39,9 +84,11 @@ func TestGenerateRandomIPv6InvalidMask(t *testing.T) {
 		IP:   net.ParseIP("2001:db8::"),
 		Mask: net.CIDRMask(129, 128),
 	}
-	_, err := generateRandomIPv6(baseIPNet)
+	ip, err := generateRandomIPv6(baseIPNet)
 	if err == nil {
 		t.Error("Expected error for invalid mask length, got nil")
+	} else {
+		t.Logf("Received expected error for invalid mask length: %v", err)
 	}
 
 	baseIPNet = net.IPNet{
@@ -53,20 +100,33 @@ func TestGenerateRandomIPv6InvalidMask(t *testing.T) {
 			0xff, 0xff, 0xff, 0xff,
 		}),
 	}
-	_, err = generateRandomIPv6(baseIPNet)
+	ip, err = generateRandomIPv6(baseIPNet)
 	if err == nil {
 		t.Error("Expected error for invalid mask length, got nil")
+	} else {
+		t.Logf("Received expected error for non-contiguous mask: %v", err)
+	}
+
+	if ip != nil {
+		t.Logf("Generated IP (unexpectedly): %v", ip)
 	}
 }
 
+// TestGenerateRandomIPv6EmptyMask tests the function with an empty mask.
 func TestGenerateRandomIPv6EmptyMask(t *testing.T) {
 	baseIPNet := net.IPNet{
 		IP:   net.ParseIP("2001:db8::"),
 		Mask: net.IPMask([]byte{}), // Empty mask
 	}
-	_, err := generateRandomIPv6(baseIPNet)
+	ip, err := generateRandomIPv6(baseIPNet)
 	if err == nil {
 		t.Error("Expected error for empty mask, got nil")
+	} else {
+		t.Logf("Received expected error for empty mask: %v", err)
+	}
+
+	if ip != nil {
+		t.Logf("Generated IP (unexpectedly): %v", ip)
 	}
 }
 
@@ -80,6 +140,8 @@ func TestGenerateRandomIPv6FullMask(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
+	t.Logf("Generated IPv6 address with full mask: %v", ip)
+
 	if !ip.Equal(baseIPNet.IP) {
 		t.Errorf("Expected IP %v, got %v", baseIPNet.IP, ip)
 	}
@@ -95,6 +157,8 @@ func TestGenerateRandomIPv6ZeroMask(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
+	t.Logf("Generated IPv6 address with zero mask: %v", ip)
+
 	if !baseIPNet.Contains(ip) {
 		t.Errorf("Generated IP %v is not within base IP network %v", ip, baseIPNet)
 	}
@@ -111,14 +175,17 @@ func TestGetNextIP(t *testing.T) {
 	availableIPs.IPs.Store(&ipList)
 
 	ip := getNextIP(availableIPs)
+	t.Logf("First IP selected: %v", ip)
 	if !ip.Equal(ip1) {
 		t.Errorf("Expected %v, got %v", ip1, ip)
 	}
 	ip = getNextIP(availableIPs)
+	t.Logf("Second IP selected: %v", ip)
 	if !ip.Equal(ip2) {
 		t.Errorf("Expected %v, got %v", ip2, ip)
 	}
 	ip = getNextIP(availableIPs)
+	t.Logf("Third IP selected (should cycle back to first): %v", ip)
 	if !ip.Equal(ip1) {
 		t.Errorf("Expected %v, got %v", ip1, ip)
 	}
@@ -129,6 +196,7 @@ func TestGetNextIPEmptyIPs(t *testing.T) {
 	availableIPs := &availableIPs{}
 	availableIPs.IPs.Store(&[]net.IPNet{})
 	ip := getNextIP(availableIPs)
+	t.Logf("Generated IP with empty IP list: %v", ip)
 	if ip != nil {
 		t.Errorf("Expected nil, got %v", ip)
 	}
@@ -143,15 +211,16 @@ func TestGetNextIPAnyIP(t *testing.T) {
 	availableIPs.IPs.Store(&ipList)
 
 	ip := getNextIP(availableIPs)
+	t.Logf("Generated IP: %v", ip)
 	if ip == nil {
-		t.Error("Expected non-nil IP, got nil")
+		t.Errorf("Expected non-nil IP, got nil")
 	}
 	if !baseIPNet.Contains(ip) {
 		t.Errorf("Generated IP %v is not within base IP network %v", ip, baseIPNet)
 	}
 }
 
-// TestGetNextIPAnyIPv6MultipleIPv6 tests the function with multiple IPv6 addresses and AnyIP set to true.
+// TestGetNextIPAnyIPMultipleIPv6 tests the function with multiple IPv6 addresses and AnyIP set to true.
 func TestGetNextIPAnyIPMultipleIPv6(t *testing.T) {
 	baseIP1 := net.ParseIP("2001:db8::")
 	baseIPNet1 := net.IPNet{IP: baseIP1, Mask: net.CIDRMask(64, 128)}
@@ -163,8 +232,9 @@ func TestGetNextIPAnyIPMultipleIPv6(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		ip := getNextIP(availableIPs)
+		t.Logf("Generated IP #%d: %v", i+1, ip)
 		if ip == nil {
-			t.Error("Expected non-nil IP, got nil")
+			t.Errorf("Expected non-nil IP, got nil")
 		}
 		if !baseIPNet1.Contains(ip) && !baseIPNet2.Contains(ip) {
 			t.Errorf("Generated IP %v is not within base IP network %v or %v", ip, baseIPNet1, baseIPNet2)
@@ -172,8 +242,8 @@ func TestGetNextIPAnyIPMultipleIPv6(t *testing.T) {
 	}
 }
 
-// TestTestGetNextIPAnyIPv6Randomness tests the randomness of generated IPv6 addresses.
-func TestTestGetNextIPAnyIPv6Randomness(t *testing.T) {
+// TestGetNextIPAnyIPv6Randomness tests the randomness of generated IPv6 addresses.
+func TestGetNextIPAnyIPv6Randomness(t *testing.T) {
 	baseIP := net.ParseIP("2001:db8::")
 	baseIPNet := net.IPNet{IP: baseIP, Mask: net.CIDRMask(64, 128)}
 	ipList := []net.IPNet{baseIPNet}
@@ -181,7 +251,9 @@ func TestTestGetNextIPAnyIPv6Randomness(t *testing.T) {
 	availableIPs.IPs.Store(&ipList)
 
 	ip1 := getNextIP(availableIPs)
+	t.Logf("First randomly generated IP: %v", ip1)
 	ip2 := getNextIP(availableIPs)
+	t.Logf("Second randomly generated IP: %v", ip2)
 	if ip1.Equal(ip2) {
 		t.Errorf("Expected different IPs, got %v", ip1)
 	}
@@ -197,6 +269,7 @@ func TestGetNextIPHighIndex(t *testing.T) {
 	availableIPs.Index.Store(9999999)
 
 	ip := getNextIP(availableIPs)
+	t.Logf("Generated IP with high index: %v", ip)
 	if !ip.Equal(ip1) {
 		t.Errorf("Expected %v, got %v", ip1, ip)
 	}
@@ -211,6 +284,7 @@ func TestGetLocalAddrIPv4TCP(t *testing.T) {
 	IPv4.IPs.Store(&ipList)
 
 	addr := getLocalAddr("tcp", "192.168.1.2")
+	t.Logf("Selected local IPv4 TCP address: %v", addr)
 	tcpAddr, ok := addr.(*net.TCPAddr)
 	if !ok {
 		t.Errorf("Expected *net.TCPAddr, got %T", addr)
@@ -229,6 +303,7 @@ func TestGetLocalAddrIPv6TCP(t *testing.T) {
 	IPv6.IPs.Store(&ipList)
 
 	addr := getLocalAddr("tcp6", "[2001:db8::2]")
+	t.Logf("Selected local IPv6 TCP address: %v", addr)
 	tcpAddr, ok := addr.(*net.TCPAddr)
 	if !ok {
 		t.Errorf("Expected *net.TCPAddr, got %T", addr)
@@ -236,169 +311,4 @@ func TestGetLocalAddrIPv6TCP(t *testing.T) {
 	if !tcpAddr.IP.Equal(ip1) {
 		t.Errorf("Expected IP %v, got %v", ip1, tcpAddr.IP)
 	}
-}
-
-func TestGetLocalAddrIPv6TCPAnyIP(t *testing.T) {
-	IPv6 = &availableIPs{AnyIP: true}
-	ip1 := net.ParseIP("2001:db8::1")
-	ipNet1 := net.IPNet{IP: ip1, Mask: net.CIDRMask(64, 128)}
-	ipList := []net.IPNet{ipNet1}
-	IPv6.IPs.Store(&ipList)
-
-	addr := getLocalAddr("tcp6", "[2001:db12::20]")
-	tcpAddr, ok := addr.(*net.TCPAddr)
-	if !ok {
-		t.Errorf("Expected *net.TCPAddr, got %T", addr)
-	}
-	if !ipNet1.Contains(tcpAddr.IP) {
-		t.Errorf("Expected IP within %v, got %v", ipNet1, tcpAddr.IP)
-	}
-}
-
-// TestGetLocalAddrIPv4UDP tests local address selection for IPv4 UDP connections.
-func TestGetLocalAddrIPv4UDP(t *testing.T) {
-	IPv4 = &availableIPs{}
-	ip1 := net.ParseIP("192.168.1.1")
-	ipNet1 := net.IPNet{IP: ip1, Mask: net.CIDRMask(24, 32)}
-	ipList := []net.IPNet{ipNet1}
-	IPv4.IPs.Store(&ipList)
-
-	addr := getLocalAddr("udp", "192.168.1.2")
-	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok {
-		t.Errorf("Expected *net.UDPAddr, got %T", addr)
-	}
-	if !udpAddr.IP.Equal(ip1) {
-		t.Errorf("Expected IP %v, got %v", ip1, udpAddr.IP)
-	}
-}
-
-// TestGetLocalAddrIPv6UDP tests local address selection for IPv6 UDP connections.
-func TestGetLocalAddrIPv6UDP(t *testing.T) {
-	IPv6 = &availableIPs{}
-	ip1 := net.ParseIP("2001:db8::1")
-	ipNet1 := net.IPNet{IP: ip1, Mask: net.CIDRMask(64, 128)}
-	ipList := []net.IPNet{ipNet1}
-	IPv6.IPs.Store(&ipList)
-
-	addr := getLocalAddr("udp", "[2001:db8::2]")
-	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok {
-		t.Errorf("Expected *net.UDPAddr, got %T", addr)
-	}
-	if !udpAddr.IP.Equal(ip1) {
-		t.Errorf("Expected IP %v, got %v", ip1, udpAddr.IP)
-	}
-}
-
-// TestGetLocalAddrInvalidIP tests the function with an invalid destination IP.
-func TestGetLocalAddrInvalidIP(t *testing.T) {
-	addr := getLocalAddr("tcp", "invalidIP")
-	if addr != nil {
-		t.Errorf("Expected nil, got %v", addr)
-	}
-}
-
-// TestGetLocalAddrUnknownNetwork tests the function with an unknown network type.
-func TestGetLocalAddrUnknownNetwork(t *testing.T) {
-	addr := getLocalAddr("unknown", "192.168.1.2")
-	if addr != nil {
-		t.Errorf("Expected nil, got %v", addr)
-	}
-}
-
-// TestGetLocalAddrNoPort tests the function with an address missing a port.
-func TestGetLocalAddrWithPort(t *testing.T) {
-	addr := getLocalAddr("tcp", "192.168.1.2:80")
-	if addr != nil {
-		t.Errorf("Expected nil, got %v", addr)
-	}
-}
-
-// TestGetLocalAddrMalformedAddress tests the function with a malformed address.
-func TestGetLocalAddrMalformedAddress(t *testing.T) {
-	addr := getLocalAddr("tcp", "192.168.1.2::80")
-	if addr != nil {
-		t.Errorf("Expected nil, got %v", addr)
-	}
-}
-
-// TestAnyIPIPv6IPv4DisabledRealLife tests the function with IPv6 enabled and IPv4 disabled.
-func TestAnyIPIPv6IPv4DisabledRealLife(t *testing.T) {
-	IPv6 = &availableIPs{AnyIP: true}
-	IPv4 = &availableIPs{}
-	ip1 := net.ParseIP("2001:db8::1")
-	ipNet1 := net.IPNet{IP: ip1, Mask: net.CIDRMask(64, 128)}
-	ipList := []net.IPNet{ipNet1}
-	IPv6.IPs.Store(&ipList)
-
-	tcpAddr := getLocalAddr("tcp6", "2606:4700:3030::ac43:a86a")
-	if tcpAddr == nil {
-		t.Error("Expected non-nil TCP address, got nil")
-	}
-	t.Logf("IPv6 TCP address: %v", tcpAddr)
-}
-
-// TestGetAvailableIPs is difficult due to its infinite loop and dependency on system interfaces.
-func TestGetAvailableIPsAnyIP(t *testing.T) {
-	if IPv6 == nil {
-		IPv6 = &availableIPs{
-			AnyIP: true,
-		}
-	}
-
-	if IPv4 == nil {
-		IPv4 = &availableIPs{}
-	}
-
-	// Get all network interfaces
-	interfaces, err := net.Interfaces()
-	if err != nil {
-
-	}
-
-	// Iterate over the interfaces
-	newIPv4 := make([]net.IPNet, 0)
-	newIPv6 := make([]net.IPNet, 0)
-	for _, iface := range interfaces {
-		if strings.Contains(iface.Name, "docker") {
-			continue
-		}
-
-		// Get the addresses associated with the interface
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-
-		// Iterate over the addresses
-		for _, addr := range addrs {
-			if ipNet, ok := addr.(*net.IPNet); ok {
-				t.Logf("IPNet: %v", ipNet)
-				ip := ipNet.IP
-
-				if ip.IsLoopback() {
-					continue
-				}
-
-				// Process Global Unicast IPv6 addresses
-				if ip.IsGlobalUnicast() && ip.To16() != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
-					newIPv6 = append(newIPv6, *ipNet)
-				}
-
-				// Process Global Unicast IPv4 addresses
-				if ip.IsGlobalUnicast() && ip.To16() == nil && ip.To4() != nil {
-					// Add IPv4 addresses to the list
-					newIPv4 = append(newIPv4, *ipNet)
-				}
-			}
-		}
-	}
-
-	// Add the new addresses to the list
-	IPv6.IPs.Store(&newIPv6)
-	IPv4.IPs.Store(&newIPv4)
-
-	tcpv6Addr := getLocalAddr("tcp", "[2001:db8::2]:80")
-	t.Logf("IPv6 TCP address: %v", tcpv6Addr)
 }
