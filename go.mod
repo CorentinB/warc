@@ -27,3 +27,10 @@ require (
 	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/tools v0.25.0 // indirect
 )
+
+// Unsure exactly where these versions came from, but no longer exist. If we plan to publish under these versions, we need to remove them from this retract list. 
+retract (
+	v1.0.0
+	v1.1.0
+	v1.1.2
+)
