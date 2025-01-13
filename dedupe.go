@@ -58,6 +58,7 @@ func checkCDXRevisit(CDXURL string, digest string, targetURI string, cookie stri
 		return revisitRecord{}, err
 	}
 	defer resp.Body.Close()
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return revisitRecord{}, err

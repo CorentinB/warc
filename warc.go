@@ -127,18 +127,10 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 	// If compression is enabled, we close the record's GZIP chunk
 	if settings.Compression != "" {
-		if settings.Compression == "GZIP" {
-			warcWriter.CloseCompressedWriter()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "", false, dictionary)
-			if err != nil {
-				panic(err)
-			}
-		} else if settings.Compression == "ZSTD" {
-			warcWriter.CloseCompressedWriter()
-			warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "", false, dictionary)
-			if err != nil {
-				panic(err)
-			}
+		warcWriter.CloseCompressedWriter()
+		warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "", false, dictionary)
+		if err != nil {
+			panic(err)
 		}
 	}
 

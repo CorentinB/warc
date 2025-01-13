@@ -92,7 +92,7 @@ func (r *Reader) ReadRecord() (*Record, bool, error) {
 	}
 
 	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
-	buf := NewSpooledTempFile("warc", "", false)
+	buf := NewSpooledTempFile("warc", "", -1, false)
 	_, err = io.CopyN(buf, tempReader, length)
 	if err != nil {
 		return nil, false, fmt.Errorf("copying record content: %w", err)

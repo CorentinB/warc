@@ -193,7 +193,7 @@ func NewWriter(writer io.Writer, fileName string, compression string, contentLen
 func NewRecord(tempDir string, fullOnDisk bool) *Record {
 	return &Record{
 		Header:  NewHeader(),
-		Content: NewSpooledTempFile("warc", tempDir, fullOnDisk),
+		Content: NewSpooledTempFile("warc", tempDir, -1, fullOnDisk),
 	}
 }
 
