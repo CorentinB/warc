@@ -59,12 +59,17 @@ type ReadWriteSeekCloser interface {
 // with some important constraints:
 // you can Write into it, but whenever you call Read or Seek on it,
 // Write is forbidden, will return an error.
-func NewSpooledTempFile(filePrefix string, tempDir string, fullOnDisk bool) ReadWriteSeekCloser {
+// If threshold is -1, then the default MaxInMemorySize is used.
+func NewSpooledTempFile(filePrefix string, tempDir string, threshold int, fullOnDisk bool) ReadWriteSeekCloser {
+	if threshold < 0 {
+		threshold = MaxInMemorySize
+	}
+
 	return &spooledTempFile{
 		filePrefix:      filePrefix,
 		tempDir:         tempDir,
 		buf:             spooledPool.Get().(*bytes.Buffer),
-		maxInMemorySize: MaxInMemorySize,
+		maxInMemorySize: threshold,
 		fullOnDisk:      fullOnDisk,
 	}
 }
@@ -89,6 +94,18 @@ func (s *spooledTempFile) prepareRead() error {
 	s.mem = bytes.NewReader(s.buf.Bytes())
 
 	return nil
+}
+
+func (s *spooledTempFile) Len() int {
+	if s.file != nil {
+		fi, err := s.file.Stat()
+		if err != nil {
+			return -1
+		}
+		return int(fi.Size())
+	}
+
+	return s.buf.Len()
 }
 
 func (s *spooledTempFile) Read(p []byte) (n int, err error) {
