@@ -33,6 +33,7 @@ type ReadSeekCloser interface {
 	ReaderAt
 	io.Closer
 	FileName() string
+	Len() int
 }
 
 // spooledTempFile writes to memory (or to disk if
