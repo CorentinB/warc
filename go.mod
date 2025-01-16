@@ -13,7 +13,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/ulikunitz/xz v0.5.12
 	go.uber.org/goleak v1.3.0
-	golang.org/x/net v0.29.0
+	golang.org/x/net v0.33.0
 	golang.org/x/sync v0.8.0
 )
 
