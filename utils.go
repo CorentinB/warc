@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/CorentinB/warc/pkg/spooledtempfile"
 	gzip "github.com/klauspost/compress/gzip"
 
 	"github.com/klauspost/compress/zstd"
@@ -193,7 +194,7 @@ func NewWriter(writer io.Writer, fileName string, compression string, contentLen
 func NewRecord(tempDir string, fullOnDisk bool) *Record {
 	return &Record{
 		Header:  NewHeader(),
-		Content: NewSpooledTempFile("warc", tempDir, -1, fullOnDisk),
+		Content: spooledtempfile.NewSpooledTempFile("warc", tempDir, -1, fullOnDisk, -1),
 	}
 }
 
@@ -337,7 +338,7 @@ func GenerateWarcFileName(prefix string, compression string, atomicSerial *int64
 	return prefix + "-" + date + "-" + formattedSerial + "-" + hostName + ".warc.open"
 }
 
-func getContentLength(rwsc ReadWriteSeekCloser) int {
+func getContentLength(rwsc spooledtempfile.ReadWriteSeekCloser) int {
 	// If the FileName leads to no existing file, it means that the SpooledTempFile
 	// never had the chance to buffer to disk instead of memory, in which case we can
 	// just read the buffer (which should be <= 2MB) and return the length

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/CorentinB/warc/pkg/spooledtempfile"
 	"github.com/google/uuid"
 	"github.com/miekg/dns"
 	tls "github.com/refraction-networking/utls"
@@ -487,7 +488,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		}
 
 		// Write the data up until the end of the headers to a temporary buffer
-		tempBuffer := NewSpooledTempFile("warc", d.client.TempDir, -1, d.client.FullOnDisk)
+		tempBuffer := spooledtempfile.NewSpooledTempFile("warc", d.client.TempDir, -1, d.client.FullOnDisk, d.client.MaxRAMUsageFraction)
 		block = make([]byte, 1)
 		wrote := 0
 		responseRecord.Content.Seek(0, 0)
