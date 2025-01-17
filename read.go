@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+
+	"github.com/CorentinB/warc/pkg/spooledtempfile"
 )
 
 // Reader store the bufio.Reader and gzip.Reader for a WARC file
@@ -92,7 +94,7 @@ func (r *Reader) ReadRecord() (*Record, bool, error) {
 	}
 
 	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
-	buf := NewSpooledTempFile("warc", "", -1, false)
+	buf := spooledtempfile.NewSpooledTempFile("warc", "", -1, false, -1)
 	_, err = io.CopyN(buf, tempReader, length)
 	if err != nil {
 		return nil, false, fmt.Errorf("copying record content: %w", err)

@@ -1,4 +1,4 @@
-package warc
+package spooledtempfile
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 
 // TestInMemoryBasic writes data below threshold and verifies it remains in memory.
 func TestInMemoryBasic(t *testing.T) {
-	spool := NewSpooledTempFile("test", os.TempDir(), 100, false)
+	spool := NewSpooledTempFile("test", os.TempDir(), 100, false, -1)
 	defer spool.Close()
 
 	// Write data smaller than threshold
@@ -62,7 +62,7 @@ func TestInMemoryBasic(t *testing.T) {
 
 // TestThresholdCrossing writes enough data to switch from in-memory to disk.
 func TestThresholdCrossing(t *testing.T) {
-	spool := NewSpooledTempFile("test", os.TempDir(), 10, false)
+	spool := NewSpooledTempFile("test", os.TempDir(), 10, false, -1)
 	defer spool.Close()
 
 	data1 := []byte("12345")
@@ -105,7 +105,7 @@ func TestThresholdCrossing(t *testing.T) {
 
 // TestForceOnDisk checks the fullOnDisk parameter.
 func TestForceOnDisk(t *testing.T) {
-	spool := NewSpooledTempFile("test", os.TempDir(), 1000000, true)
+	spool := NewSpooledTempFile("test", os.TempDir(), 1000000, true, -1)
 	defer spool.Close()
 
 	input := []byte("force to disk")
@@ -129,7 +129,7 @@ func TestForceOnDisk(t *testing.T) {
 
 // TestReadAtAndSeekInMemory tests seeking and ReadAt on an in-memory spool.
 func TestReadAtAndSeekInMemory(t *testing.T) {
-	spool := NewSpooledTempFile("test", "", 100, false)
+	spool := NewSpooledTempFile("test", "", 100, false, -1)
 	defer spool.Close()
 
 	data := []byte("HelloWorld123")
@@ -173,7 +173,7 @@ func TestReadAtAndSeekInMemory(t *testing.T) {
 
 // TestReadAtAndSeekOnDisk tests seeking and ReadAt on a spool that has switched to disk.
 func TestReadAtAndSeekOnDisk(t *testing.T) {
-	spool := NewSpooledTempFile("test", "", 10, false)
+	spool := NewSpooledTempFile("test", "", 10, false, -1)
 	defer spool.Close()
 
 	data := []byte("HelloWorld123")
@@ -204,7 +204,7 @@ func TestReadAtAndSeekOnDisk(t *testing.T) {
 
 // TestWriteAfterReadPanic ensures writing after reading panics per your design.
 func TestWriteAfterReadPanic(t *testing.T) {
-	spool := NewSpooledTempFile("test", "", 100, false)
+	spool := NewSpooledTempFile("test", "", 100, false, -1)
 	defer spool.Close()
 
 	_, err := spool.Write([]byte("ABCDEFG"))
@@ -237,7 +237,7 @@ func TestWriteAfterReadPanic(t *testing.T) {
 
 // TestCloseInMemory checks closing while still in-memory.
 func TestCloseInMemory(t *testing.T) {
-	spool := NewSpooledTempFile("test", "", 100, false)
+	spool := NewSpooledTempFile("test", "", 100, false, -1)
 
 	_, err := spool.Write([]byte("Small data"))
 	if err != nil {
@@ -267,7 +267,7 @@ func TestCloseInMemory(t *testing.T) {
 
 // TestCloseOnDisk checks closing after spool has switched to disk.
 func TestCloseOnDisk(t *testing.T) {
-	spool := NewSpooledTempFile("test", "", 10, false)
+	spool := NewSpooledTempFile("test", "", 10, false, -1)
 
 	_, err := spool.Write([]byte("1234567890ABC"))
 	if err != nil {
@@ -305,7 +305,7 @@ func TestCloseOnDisk(t *testing.T) {
 
 // TestLen verifies Len() for both in-memory and on-disk states.
 func TestLen(t *testing.T) {
-	spool := NewSpooledTempFile("test", "", 5, false)
+	spool := NewSpooledTempFile("test", "", 5, false, -1)
 	defer spool.Close()
 
 	data := []byte("1234")
@@ -329,7 +329,7 @@ func TestLen(t *testing.T) {
 
 // TestFileName checks correctness of FileName in both modes.
 func TestFileName(t *testing.T) {
-	spool := NewSpooledTempFile("testprefix", os.TempDir(), 5, false)
+	spool := NewSpooledTempFile("testprefix", os.TempDir(), 5, false, -1)
 	defer spool.Close()
 
 	if spool.FileName() != "" {
@@ -351,5 +351,51 @@ func TestFileName(t *testing.T) {
 	base := filepath.Base(fn)
 	if !strings.HasPrefix(base, "testprefix") {
 		t.Errorf("Expected file name prefix 'testprefix', got %s", base)
+	}
+}
+
+// TestSkipInMemoryAboveRAMUsage verifies that if `isSystemMemoryUsageHigh()`
+// returns true, the spool goes directly to disk even for small writes.
+func TestSkipInMemoryAboveRAMUsage(t *testing.T) {
+	// Save the old function so we can restore it later
+	oldGetSystemMemoryUsedFraction := getSystemMemoryUsedFraction
+	// Force system memory usage to appear above 50%
+	getSystemMemoryUsedFraction = func() (float64, error) {
+		return 0.60, nil // 60% used => above the 50% threshold
+	}
+	// Restore after test
+	defer func() {
+		getSystemMemoryUsedFraction = oldGetSystemMemoryUsedFraction
+	}()
+
+	// Even though threshold is large (e.g. 1MB), because our mock usage is 60%,
+	// spool should skip memory and go straight to disk.
+	spool := NewSpooledTempFile("testram", os.TempDir(), 1024*1024, false, 0.50)
+	defer spool.Close()
+
+	// Write a small amount of data
+	data := []byte("This is a small test")
+	n, err := spool.Write(data)
+	if err != nil {
+		t.Fatalf("Write error: %v", err)
+	}
+	if n != len(data) {
+		t.Errorf("Write count mismatch: got %d, want %d", n, len(data))
+	}
+
+	// Because memory usage was deemed “too high” from the start,
+	// we should already be on disk
+	fn := spool.FileName()
+	if fn == "" {
+		t.Fatalf("Expected spool to be on disk, but FileName() was empty")
+	}
+
+	// Verify data can be read back
+	out, err := io.ReadAll(spool)
+	if err != nil {
+		t.Fatalf("ReadAll error: %v", err)
+	}
+	if string(out) != string(data) {
+		t.Errorf("Data mismatch. Got %q, want %q", out, data)
 	}
 }

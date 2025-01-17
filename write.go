@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CorentinB/warc/pkg/spooledtempfile"
 	"github.com/klauspost/compress/gzip"
 
 	"github.com/google/uuid"
@@ -36,7 +37,7 @@ type RecordBatch struct {
 // Record represents a WARC record.
 type Record struct {
 	Header  Header
-	Content ReadWriteSeekCloser
+	Content spooledtempfile.ReadWriteSeekCloser
 	Version string // WARC/1.0, WARC/1.1 ...
 }
 

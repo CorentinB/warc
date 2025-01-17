@@ -30,6 +30,7 @@ type HTTPClientSettings struct {
 	DecompressBody        bool
 	FollowRedirects       bool
 	FullOnDisk            bool
+	MaxRAMUsageFraction   float64
 	VerifyCerts           bool
 	RandomLocalIP         bool
 	DisableIPv4           bool
@@ -53,7 +54,10 @@ type CustomHTTPClient struct {
 	MaxReadBeforeTruncate  int
 	verifyCerts            bool
 	FullOnDisk             bool
-	randomLocalIP          bool
+	// MaxRAMUsageFraction is the fraction of system RAM above which we'll force spooling to disk. For example, 0.5 = 50%.
+	// If set to <= 0, the default value is DefaultMaxRAMUsageFraction.
+	MaxRAMUsageFraction float64
+	randomLocalIP       bool
 }
 
 func (c *CustomHTTPClient) Close() error {
@@ -124,6 +128,9 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 
 	// Configure if we are only storing responses only on disk or in memory and on disk.
 	httpClient.FullOnDisk = HTTPClientSettings.FullOnDisk
+
+	// Configure the maximum RAM usage fraction
+	httpClient.MaxRAMUsageFraction = HTTPClientSettings.MaxRAMUsageFraction
 
 	// Configure our max read before we start truncating records
 	if HTTPClientSettings.MaxReadBeforeTruncate == 0 {
