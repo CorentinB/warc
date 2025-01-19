@@ -316,8 +316,6 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		if d.proxyDialer == nil {
 			switch addr := conn.RemoteAddr().(type) {
 			case *net.UDPAddr:
-				IP := addr.IP.String()
-				r.Header.Set("WARC-IP-Address", IP)
 			case *net.TCPAddr:
 				IP := addr.IP.String()
 				r.Header.Set("WARC-IP-Address", IP)
@@ -601,8 +599,7 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 		if strings.HasPrefix(target, scheme+"://"+host) {
 			warcTargetURI = target
 		} else {
-			warcTargetURI += host
-			warcTargetURI += target
+			warcTargetURI += host + target
 		}
 	} else {
 		return errors.New("unable to parse data necessary for WARC-Target-URI")
