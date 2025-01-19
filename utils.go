@@ -327,15 +327,15 @@ func GenerateWarcFileName(prefix string, compression string, atomicSerial *int64
 	now := time.Now().UTC()
 	date := now.Format("20060102150405") + strconv.Itoa(now.Nanosecond())[:3]
 
-	if compression != "" {
-		if compression == "GZIP" {
-			return prefix + "-" + date + "-" + formattedSerial + "-" + hostName + ".warc.gz.open"
-		}
-		if compression == "ZSTD" {
-			return prefix + "-" + date + "-" + formattedSerial + "-" + hostName + ".warc.zst.open"
-		}
+	var fileExt string
+	if compression == "GZIP" {
+		fileExt = ".warc.gz.open"
+	} else if compression == "ZSTD" {
+		fileExt = ".warc.zst.open"
+	} else {
+		fileExt = ".warc.open"
 	}
-	return prefix + "-" + date + "-" + formattedSerial + "-" + hostName + ".warc.open"
+	return prefix + "-" + date + "-" + formattedSerial + "-" + hostName + fileExt
 }
 
 func getContentLength(rwsc spooledtempfile.ReadWriteSeekCloser) int {
