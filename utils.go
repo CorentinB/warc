@@ -99,19 +99,19 @@ func splitKeyValue(line string) (string, string) {
 }
 
 func isHTTPRequest(line string) bool {
-    httpMethods := []string{"GET ", "HEAD ", "POST ", "PUT ", "DELETE ", "CONNECT ", "OPTIONS ", "TRACE ", "PATCH "}
-    protocols := []string{"HTTP/1.0\r", "HTTP/1.1\r"}
+	httpMethods := []string{"GET ", "HEAD ", "POST ", "PUT ", "DELETE ", "CONNECT ", "OPTIONS ", "TRACE ", "PATCH "}
+	protocols := []string{"HTTP/1.0\r", "HTTP/1.1\r"}
 
-    for _, method := range httpMethods {
-        if strings.HasPrefix(line, method) {
-            for _, protocol := range protocols {
-                if strings.HasSuffix(line, protocol) {
-                    return true
-                }
-            }
-        }
-    }
-    return false
+	for _, method := range httpMethods {
+		if strings.HasPrefix(line, method) {
+			for _, protocol := range protocols {
+				if strings.HasSuffix(line, protocol) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // NewWriter creates a new WARC writer.

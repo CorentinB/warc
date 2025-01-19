@@ -49,18 +49,18 @@ func TestNewRotatorSettings(t *testing.T) {
 func TestIsHTTPRequest(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-    goodHTTPRequestHeaders := []string{
-        "GET /index.html HTTP/1.1\r",
-        "POST /api/login HTTP/1.1\r",
-        "DELETE /api/products/456 HTTP/1.1\r",
-        "HEAD /about HTTP/1.0\r",
-        "OPTIONS / HTTP/1.1\r",
-        "PATCH /api/item/789 HTTP/1.1\r",
-        "GET /images/logo.png HTTP/1.1\r",
-    }
-    for _, header := range goodHTTPRequestHeaders {
-        if !isHTTPRequest(header) {
-            t.Error("Invalid HTTP Method parsing:", header)
-        }
-    }
+	goodHTTPRequestHeaders := []string{
+		"GET /index.html HTTP/1.1\r",
+		"POST /api/login HTTP/1.1\r",
+		"DELETE /api/products/456 HTTP/1.1\r",
+		"HEAD /about HTTP/1.0\r",
+		"OPTIONS / HTTP/1.1\r",
+		"PATCH /api/item/789 HTTP/1.1\r",
+		"GET /images/logo.png HTTP/1.1\r",
+	}
+	for _, header := range goodHTTPRequestHeaders {
+		if !isHTTPRequest(header) {
+			t.Error("Invalid HTTP Method parsing:", header)
+		}
+	}
 }
