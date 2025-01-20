@@ -176,7 +176,7 @@ func (s *spooledTempFile) Write(p []byte) (n int, err error) {
 	// Otherwise, check if system memory usage is above threshold
 	// or if we've exceeded our own in-memory limit, or if user forced on-disk.
 	aboveRAMThreshold := s.isSystemMemoryUsageHigh()
-	if aboveRAMThreshold || s.fullOnDisk || (s.buf.Len()+len(p) > s.maxInMemorySize) {
+	if aboveRAMThreshold || s.fullOnDisk || (s.buf.Len()+len(p) > s.maxInMemorySize) || (s.buf.Cap() > s.maxInMemorySize) {
 		// Switch to file if we haven't already
 		s.file, err = os.CreateTemp(s.tempDir, s.filePrefix+"-")
 		if err != nil {
@@ -191,10 +191,15 @@ func (s *spooledTempFile) Write(p []byte) (n int, err error) {
 			return 0, err
 		}
 
-		// Release the buffer
-		s.buf.Reset()
-		spooledPool.Put(s.buf)
-		s.buf = nil
+		// If we're above the RAM threshold, we don't want to keep the buffer around.
+		if s.buf.Cap() > s.maxInMemorySize {
+			s.buf = nil
+		} else {
+			// Release the buffer
+			s.buf.Reset()
+			spooledPool.Put(s.buf)
+			s.buf = nil
+		}
 
 		// Write incoming bytes directly to file
 		n, err = s.file.Write(p)
@@ -214,7 +219,11 @@ func (s *spooledTempFile) Close() error {
 	s.closed = true
 	s.mem = nil
 
-	if s.buf != nil {
+	// If we're above the RAM threshold, we don't want to keep the buffer around.
+	if s.buf != nil && s.buf.Cap() > s.maxInMemorySize {
+		s.buf = nil
+	} else {
+		// Release the buffer
 		s.buf.Reset()
 		spooledPool.Put(s.buf)
 		s.buf = nil
