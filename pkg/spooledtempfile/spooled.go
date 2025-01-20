@@ -233,7 +233,11 @@ func (s *spooledTempFile) Close() error {
 	s.closed = true
 	s.mem = nil
 
-	if s.buf != nil {
+	// If we're above the RAM threshold, we don't want to keep the buffer around.
+	if s.buf != nil && s.buf.Cap() > s.maxInMemorySize {
+		s.buf = nil
+	} else {
+		// Release the buffer
 		s.buf.Reset()
 		spooledPool.Put(s.buf)
 		s.buf = nil
