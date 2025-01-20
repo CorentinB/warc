@@ -176,7 +176,7 @@ func (s *spooledTempFile) Write(p []byte) (n int, err error) {
 	// Otherwise, check if system memory usage is above threshold
 	// or if we've exceeded our own in-memory limit, or if user forced on-disk.
 	aboveRAMThreshold := s.isSystemMemoryUsageHigh()
-	if aboveRAMThreshold || s.fullOnDisk || (s.buf.Len()+len(p) > s.maxInMemorySize) {
+	if aboveRAMThreshold || s.fullOnDisk || (s.buf.Cap()+len(p) > s.maxInMemorySize) {
 		// Switch to file if we haven't already
 		s.file, err = os.CreateTemp(s.tempDir, s.filePrefix+"-")
 		if err != nil {
