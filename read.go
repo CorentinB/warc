@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 
 	"github.com/CorentinB/warc/pkg/spooledtempfile"
@@ -14,6 +15,7 @@ import (
 type Reader struct {
 	bufReader *bufio.Reader
 	record    *Record
+	threshold int
 }
 
 type reader interface {
@@ -27,9 +29,18 @@ func NewReader(reader io.ReadCloser) (*Reader, error) {
 		return nil, err
 	}
 	bufioReader := bufio.NewReader(decReader)
+	thresholdString := os.Getenv("WARCMaxInMemorySize")
+	threshold := -1
+	if thresholdString != "" {
+		threshold, err = strconv.Atoi(thresholdString)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return &Reader{
 		bufReader: bufioReader,
+		threshold: threshold,
 	}, nil
 }
 
@@ -94,7 +105,7 @@ func (r *Reader) ReadRecord() (*Record, bool, error) {
 	}
 
 	// reading doesn't really need to be in TempDir, nor can we access it as it's on the client.
-	buf := spooledtempfile.NewSpooledTempFile("warc", "", -1, false, -1)
+	buf := spooledtempfile.NewSpooledTempFile("warc", "", r.threshold, false, -1)
 	_, err = io.CopyN(buf, tempReader, length)
 	if err != nil {
 		return nil, false, fmt.Errorf("copying record content: %w", err)
