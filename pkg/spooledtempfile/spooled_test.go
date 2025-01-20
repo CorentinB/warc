@@ -62,11 +62,11 @@ func TestInMemoryBasic(t *testing.T) {
 
 // TestThresholdCrossing writes enough data to switch from in-memory to disk.
 func TestThresholdCrossing(t *testing.T) {
-	spool := NewSpooledTempFile("test", os.TempDir(), 10, false, -1)
+	spool := NewSpooledTempFile("test", os.TempDir(), 16, false, -1)
 	defer spool.Close()
 
 	data1 := []byte("12345")
-	data2 := []byte("67890ABCD") // total length > 10
+	data2 := []byte("67890ABCDEFGHIJKLM") // total length > 16
 
 	_, err := spool.Write(data1)
 	if err != nil {
