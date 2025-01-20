@@ -191,10 +191,15 @@ func (s *spooledTempFile) Write(p []byte) (n int, err error) {
 			return 0, err
 		}
 
-		// Release the buffer
-		s.buf.Reset()
-		spooledPool.Put(s.buf)
-		s.buf = nil
+		// If we're above the RAM threshold, we don't want to keep the buffer around.
+		if s.buf.Cap() > s.maxInMemorySize {
+			s.buf = nil
+		} else {
+			// Release the buffer
+			s.buf.Reset()
+			spooledPool.Put(s.buf)
+			s.buf = nil
+		}
 
 		// Write incoming bytes directly to file
 		n, err = s.file.Write(p)
