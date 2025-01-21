@@ -283,13 +283,13 @@ func getCachedMemoryUsage() (float64, error) {
 		memoryUsageCache = &globalMemoryCache{}
 	}
 
+	memoryUsageCache.Lock()
+	defer memoryUsageCache.Unlock()
+
 	// 1) If it's still fresh, just return the cached value.
 	if time.Since(memoryUsageCache.lastChecked) < memoryCheckInterval {
 		return memoryUsageCache.lastFraction, nil
 	}
-
-	memoryUsageCache.Lock()
-	defer memoryUsageCache.Unlock()
 
 	// 2) Otherwise, do a fresh read (expensive).
 	fraction, err := getSystemMemoryUsedFraction()
