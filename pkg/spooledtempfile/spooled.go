@@ -85,6 +85,8 @@ type ReadWriteSeekCloser interface {
 //
 // If the system memory usage is above maxRAMUsageFraction, we skip writing
 // to memory and spool directly on disk to avoid OOM scenarios in high concurrency.
+//
+// From our tests, we've seen that a bytes.Buffer minimum allocated size is 64 bytes, any threshold below that will cause the first write to be spooled on disk.
 func NewSpooledTempFile(
 	filePrefix string,
 	tempDir string,
