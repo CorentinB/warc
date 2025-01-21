@@ -32,7 +32,7 @@ type globalMemoryCache struct {
 }
 
 // memoryUsageCache is an atomic pointer to memoryUsageData.
-var memoryUsageCache *globalMemoryCache
+var memoryUsageCache = &globalMemoryCache{}
 
 var spooledPool = sync.Pool{
 	New: func() interface{} {
@@ -279,10 +279,6 @@ func (s *spooledTempFile) isSystemMemoryUsageHigh() bool {
 }
 
 func getCachedMemoryUsage() (float64, error) {
-	if memoryUsageCache == nil {
-		memoryUsageCache = &globalMemoryCache{}
-	}
-
 	memoryUsageCache.Lock()
 	defer memoryUsageCache.Unlock()
 
