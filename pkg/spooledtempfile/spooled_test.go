@@ -11,6 +11,10 @@ import (
 	"testing"
 )
 
+func generateTestDataInKB(size int) []byte {
+	return bytes.Repeat([]byte("A"), size*1024)
+}
+
 // TestInMemoryBasic writes data below threshold and verifies it remains in memory.
 func TestInMemoryBasic(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
@@ -64,22 +68,18 @@ func TestInMemoryBasic(t *testing.T) {
 // TestThresholdCrossing writes enough data to switch from in-memory to disk.
 func TestThresholdCrossing(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
-	spool := NewSpooledTempFile("test", os.TempDir(), 64, false, -1)
-	spoolFile := spool.(*spooledTempFile)
+	spool := NewSpooledTempFile("test", os.TempDir(), 64*1024, false, -1)
 	defer spool.Close()
 
-	data1 := []byte("12345")
-	// Generate 64 random bytes in data2
-	data2 := make([]byte, 64)
-	_, _ = io.ReadFull(bytes.NewReader([]byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")), data2)
-
-	if spoolFile.buf.Cap() > 64 {
-		t.Errorf("Expected buffer capacity to be 64 or less, got %d", spoolFile.buf.Cap())
-	}
+	data1 := generateTestDataInKB(63)
+	data2 := generateTestDataInKB(10)
 
 	_, err := spool.Write(data1)
 	if err != nil {
 		t.Fatalf("First Write error: %v", err)
+	}
+	if spool.Len() != 63*1024 {
+		t.Errorf("Len() mismatch: got %d, want %d", spool.Len(), 63*1024)
 	}
 	if spool.FileName() != "" {
 		t.Errorf("Expected to still be in memory, but file exists: %s", spool.FileName())
@@ -88,6 +88,9 @@ func TestThresholdCrossing(t *testing.T) {
 	_, err = spool.Write(data2)
 	if err != nil {
 		t.Fatalf("Second Write error: %v", err)
+	}
+	if spool.Len() != 73*1024 {
+		t.Errorf("Len() mismatch: got %d, want %d", spool.Len(), 63*1024)
 	}
 
 	// Now spool should be on disk
@@ -115,13 +118,16 @@ func TestThresholdCrossing(t *testing.T) {
 // TestForceOnDisk checks the fullOnDisk parameter.
 func TestForceOnDisk(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
-	spool := NewSpooledTempFile("test", os.TempDir(), 1000000, true, -1)
+	spool := NewSpooledTempFile("test", os.TempDir(), 64*1024, true, -1)
 	defer spool.Close()
 
 	input := []byte("force to disk")
 	_, err := spool.Write(input)
 	if err != nil {
 		t.Fatalf("Write error: %v", err)
+	}
+	if spool.Len() != len(input) {
+		t.Errorf("Len() mismatch: got %d, want %d", spool.Len(), len(input))
 	}
 
 	if spool.FileName() == "" {
@@ -140,7 +146,7 @@ func TestForceOnDisk(t *testing.T) {
 // TestReadAtAndSeekInMemory tests seeking and ReadAt on an in-memory spool.
 func TestReadAtAndSeekInMemory(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
-	spool := NewSpooledTempFile("test", "", 100, false, -1)
+	spool := NewSpooledTempFile("test", os.TempDir(), 64*1024, false, -1)
 	defer spool.Close()
 
 	data := []byte("HelloWorld123")
@@ -185,13 +191,18 @@ func TestReadAtAndSeekInMemory(t *testing.T) {
 // TestReadAtAndSeekOnDisk tests seeking and ReadAt on a spool that has switched to disk.
 func TestReadAtAndSeekOnDisk(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
-	spool := NewSpooledTempFile("test", "", 10, false, -1)
+	spool := NewSpooledTempFile("test", os.TempDir(), 64*1024, false, -1)
 	defer spool.Close()
 
-	data := []byte("HelloWorld123")
+	data1 := []byte("HelloWorld123")
+	data2 := generateTestDataInKB(65)
+	data := append(data2, data1...)
 	_, err := spool.Write(data)
 	if err != nil {
 		t.Fatalf("Write error: %v", err)
+	}
+	if spool.Len() != len(data) {
+		t.Errorf("Len() mismatch: got %d, want %d", spool.Len(), len(data))
 	}
 
 	// We crossed threshold at 10 bytes => spool on disk
@@ -205,7 +216,7 @@ func TestReadAtAndSeekOnDisk(t *testing.T) {
 	}
 
 	p := make([]byte, 5)
-	_, err = spool.ReadAt(p, 5)
+	_, err = spool.ReadAt(p, (65*1024)+5)
 	if err != nil {
 		t.Fatalf("ReadAt error: %v", err)
 	}
@@ -217,7 +228,7 @@ func TestReadAtAndSeekOnDisk(t *testing.T) {
 // TestWriteAfterReadPanic ensures writing after reading panics per your design.
 func TestWriteAfterReadPanic(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
-	spool := NewSpooledTempFile("test", "", 100, false, -1)
+	spool := NewSpooledTempFile("test", os.TempDir(), 64*1024, false, -1)
 	defer spool.Close()
 
 	_, err := spool.Write([]byte("ABCDEFG"))
@@ -251,7 +262,7 @@ func TestWriteAfterReadPanic(t *testing.T) {
 // TestCloseInMemory checks closing while still in-memory.
 func TestCloseInMemory(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
-	spool := NewSpooledTempFile("test", "", 100, false, -1)
+	spool := NewSpooledTempFile("test", os.TempDir(), 64*1024, false, -1)
 
 	_, err := spool.Write([]byte("Small data"))
 	if err != nil {
@@ -282,11 +293,15 @@ func TestCloseInMemory(t *testing.T) {
 // TestCloseOnDisk checks closing after spool has switched to disk.
 func TestCloseOnDisk(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
-	spool := NewSpooledTempFile("test", "", 10, false, -1)
+	spool := NewSpooledTempFile("test", os.TempDir(), 64*1024, false, -1)
 
-	_, err := spool.Write([]byte("1234567890ABC"))
+	data := generateTestDataInKB(65)
+	_, err := spool.Write(data)
 	if err != nil {
 		t.Fatalf("Write error: %v", err)
+	}
+	if spool.Len() != len(data) {
+		t.Errorf("Len() mismatch: got %d, want %d", spool.Len(), len(data))
 	}
 
 	fn := spool.FileName()
@@ -321,7 +336,7 @@ func TestCloseOnDisk(t *testing.T) {
 // TestLen verifies Len() for both in-memory and on-disk states.
 func TestLen(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
-	spool := NewSpooledTempFile("test", "", 5, false, -1)
+	spool := NewSpooledTempFile("test", os.TempDir(), 64*1024, false, -1)
 	defer spool.Close()
 
 	data := []byte("1234")
@@ -346,7 +361,7 @@ func TestLen(t *testing.T) {
 // TestFileName checks correctness of FileName in both modes.
 func TestFileName(t *testing.T) {
 	memoryUsageCache = &globalMemoryCache{}
-	spool := NewSpooledTempFile("testprefix", os.TempDir(), 5, false, -1)
+	spool := NewSpooledTempFile("testprefix", os.TempDir(), 64*1024, false, -1)
 	defer spool.Close()
 
 	if spool.FileName() != "" {
@@ -354,9 +369,13 @@ func TestFileName(t *testing.T) {
 	}
 
 	// Cross threshold
-	_, err := spool.Write([]byte("hellooooooo"))
+	data := generateTestDataInKB(65)
+	_, err := spool.Write(data)
 	if err != nil {
 		t.Fatalf("Write error crossing threshold: %v", err)
+	}
+	if spool.Len() != len(data) {
+		t.Errorf("Len() mismatch on-disk: got %d, want %d", spool.Len(), len(data))
 	}
 
 	fn := spool.FileName()
@@ -415,5 +434,148 @@ func TestSkipInMemoryAboveRAMUsage(t *testing.T) {
 	}
 	if string(out) != string(data) {
 		t.Errorf("Data mismatch. Got %q, want %q", out, data)
+	}
+}
+
+// TestBufferGrowthWithinLimits verifies that the buffer grows dynamically but never exceeds MaxInMemorySize.
+func TestBufferGrowthWithinLimits(t *testing.T) {
+	memoryUsageCache = &globalMemoryCache{}
+	spool := NewSpooledTempFile("test", os.TempDir(), 128*1024, false, -1)
+	defer spool.Close()
+
+	// Write data that will cause the buffer to grow but stay within MaxInMemorySize
+	data1 := generateTestDataInKB(30)
+	data2 := generateTestDataInKB(35)
+
+	_, err := spool.Write(data1)
+	if err != nil {
+		t.Fatalf("Write error: %v", err)
+	}
+	if spool.Len() != len(data1) {
+		t.Errorf("Len() mismatch: got %d, want %d", spool.Len(), len(data1))
+	}
+
+	// Check that the buffer is still in memory
+	if spool.FileName() != "" {
+		t.Errorf("Expected buffer to still be in memory, but file exists: %s", spool.FileName())
+	}
+
+	// Write more data to trigger buffer growth
+	_, err = spool.Write(data2)
+	if err != nil {
+		t.Fatalf("Write error: %v", err)
+	}
+	if spool.Len() != len(data1)+len(data2) {
+		t.Errorf("Len() mismatch: got %d, want %d", spool.Len(), len(data1)+len(data2))
+	}
+
+	// Check that the buffer grew
+	spoolBuffer := spool.(*spooledTempFile)
+	if cap(spoolBuffer.buf) <= InitialBufferSize {
+		t.Fatalf("Expected buffer capacity > %d, got %d", InitialBufferSize, cap(spoolBuffer.buf))
+	}
+
+	// Check that the buffer is still in memory and has grown
+	if spool.FileName() != "" {
+		t.Errorf("Expected buffer to still be in memory, but file exists: %s", spool.FileName())
+	}
+}
+
+// TestPoolBehavior verifies that buffers exceeding InitialBufferSize are not returned to the pool.
+func TestPoolBehavior(t *testing.T) {
+	memoryUsageCache = &globalMemoryCache{}
+	spool := NewSpooledTempFile("test", os.TempDir(), 150*1024, false, -1)
+	defer spool.Close()
+
+	// Write data to grow the buffer beyond InitialBufferSize
+	data := make([]byte, 100*1024)
+	n := copy(data, bytes.Repeat([]byte("A"), 100*1024))
+	if n != 100*1024 {
+		t.Fatalf("Data copy mismatch: got %d, want %d", n, 100*1024)
+	}
+	if len(data) != 100*1024 {
+		t.Fatalf("Data length mismatch: got %d, want %d", len(data), 100*1024)
+	}
+	_, err := spool.Write(data)
+	if err != nil {
+		t.Fatalf("Write error: %v", err)
+	}
+
+	// Ensure the buffer has grown beyond InitialBufferSize
+	spoolTempFile := spool.(*spooledTempFile)
+	if cap(spoolTempFile.buf) <= InitialBufferSize {
+		t.Fatalf("Expected buffer capacity > %d, got %d", InitialBufferSize, cap(spoolTempFile.buf))
+	}
+
+	// Close the spool to release the buffer
+	err = spool.Close()
+	if err != nil {
+		t.Fatalf("Close error: %v", err)
+	}
+
+	// Retrieve a buffer from the pool
+	buf := spooledPool.Get().([]byte)
+
+	// Verify that the retrieved buffer has the expected initial capacity
+	if cap(buf) != InitialBufferSize {
+		t.Errorf("Expected buffer in pool to have capacity %d, got %d", InitialBufferSize, cap(buf))
+	}
+
+	// Verify that the buffer is empty (reset)
+	if len(buf) != 0 {
+		t.Errorf("Expected buffer length to be 0, got %d", len(buf))
+	}
+}
+
+func TestBufferGrowthBeyondNewCap(t *testing.T) {
+	memoryUsageCache = &globalMemoryCache{}
+	spool := NewSpooledTempFile("test", os.TempDir(), 100*1024, false, -1)
+	defer spool.Close()
+
+	// Write data to grow the buffer close to MaxInMemorySize
+	data1 := generateTestDataInKB(50)
+	_, err := spool.Write(data1)
+	if err != nil {
+		t.Fatalf("Write error: %v", err)
+	}
+
+	if spool.Len() != 50*1024 {
+		t.Fatalf("Data length mismatch: got %d, want %d", spool.Len(), 50*1024)
+	}
+
+	// Write more data to trigger buffer growth beyond MaxInMemorySize
+	data2 := generateTestDataInKB(51)
+	_, err = spool.Write(data2)
+	if err != nil {
+		t.Fatalf("Write error: %v", err)
+	}
+
+	if spool.Len() != 101*1024 {
+		t.Fatalf("Data length mismatch: got %d, want %d", spool.Len(), 101*1024)
+	}
+
+	// Check that the buffer has been spooled to disk
+	if spool.FileName() == "" {
+		t.Error("Expected buffer to be spooled to disk, but no file exists")
+	}
+
+	// Verify the data was written correctly
+	expected := append(data1, data2...)
+	out := make([]byte, len(expected))
+	_, err = spool.ReadAt(out, 0)
+	if err != nil && err != io.EOF {
+		t.Fatalf("ReadAt error: %v", err)
+	}
+	if !bytes.Equal(out, expected) {
+		t.Errorf("Data mismatch. Got %q, want %q", out, expected)
+	}
+
+	// Verify that the buffer was released to the pool (if it meets the criteria)
+	buf := spooledPool.Get().([]byte)
+	if cap(buf) != InitialBufferSize {
+		t.Errorf("Expected buffer in pool to have capacity %d, got %d", InitialBufferSize, cap(buf))
+	}
+	if len(buf) != 0 {
+		t.Errorf("Expected buffer length to be 0, got %d", len(buf))
 	}
 }

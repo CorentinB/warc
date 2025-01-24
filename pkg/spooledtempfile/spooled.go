@@ -230,34 +230,6 @@ func (s *spooledTempFile) Write(p []byte) (n int, err error) {
 		if newCap > s.maxInMemorySize {
 			newCap = s.maxInMemorySize
 		}
-		if len(s.buf)+len(p) > newCap {
-			// If even the new capacity isn't enough, spool to disk
-			s.file, err = os.CreateTemp(s.tempDir, s.filePrefix+"-")
-			if err != nil {
-				return 0, err
-			}
-
-			_, err = s.file.Write(s.buf)
-			if err != nil {
-				s.file.Close()
-				s.file = nil
-				return 0, err
-			}
-
-			if s.buf != nil && cap(s.buf) <= InitialBufferSize && cap(s.buf) > 0 {
-				spooledPool.Put(s.buf[:0]) // Reset the buffer before returning it to the pool
-			}
-			s.buf = nil
-			s.mem = nil // Discard the bytes.Reader
-
-			n, err = s.file.Write(p)
-			if err != nil {
-				s.file.Close()
-				s.file = nil
-				return n, err
-			}
-			return n, nil
-		}
 
 		// Allocate a new buffer with the increased capacity
 		newBuf := make([]byte, len(s.buf), newCap)
