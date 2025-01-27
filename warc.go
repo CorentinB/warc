@@ -75,12 +75,14 @@ func (s *RotatorSettings) NewWARCRotator() (recordWriterChan chan *RecordBatch, 
 	return recordWriterChan, doneChannels, nil
 }
 
-func (w *Writer) CloseCompressedWriter() {
+func (w *Writer) CloseCompressedWriter() (err error) {
 	if w.GZIPWriter != nil {
-		w.GZIPWriter.Close()
+		err = w.GZIPWriter.Close()
 	} else if w.ZSTDWriter != nil {
-		w.ZSTDWriter.Close()
+		err = w.ZSTDWriter.Close()
 	}
+
+	return err
 }
 
 func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool, atomicSerial *int64) {
@@ -127,7 +129,11 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 	// If compression is enabled, we close the record's GZIP chunk
 	if settings.Compression != "" {
-		warcWriter.CloseCompressedWriter()
+		err = warcWriter.CloseCompressedWriter()
+		if err != nil {
+			panic(err)
+		}
+
 		warcWriter, err = NewWriter(warcFile, currentFileName, settings.Compression, "", false, dictionary)
 		if err != nil {
 			panic(err)
@@ -148,9 +154,16 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				// We flush the data and close the file
 				warcWriter.FileWriter.Flush()
 				if settings.Compression != "" {
-					warcWriter.CloseCompressedWriter()
+					err = warcWriter.CloseCompressedWriter()
+					if err != nil {
+						panic(err)
+					}
 				}
-				warcFile.Close()
+
+				err = warcFile.Close()
+				if err != nil {
+					panic(err)
+				}
 
 				// Create the new file and automatically increment the serial inside of GenerateWarcFileName
 				currentFileName = GenerateWarcFileName(settings.Prefix, settings.Compression, atomicSerial)
@@ -174,7 +187,10 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 				// If compression is enabled, we close the record's GZIP chunk
 				if settings.Compression != "" {
-					warcWriter.CloseCompressedWriter()
+					err = warcWriter.CloseCompressedWriter()
+					if err != nil {
+						panic(err)
+					}
 				}
 			}
 
@@ -195,11 +211,17 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 
 				// If compression is enabled, we close the record's GZIP chunk
 				if settings.Compression != "" {
-					warcWriter.CloseCompressedWriter()
+					err = warcWriter.CloseCompressedWriter()
+					if err != nil {
+						panic(err)
+					}
 				}
 			}
 
-			warcWriter.FileWriter.Flush()
+			err = warcWriter.FileWriter.Flush()
+			if err != nil {
+				panic(err)
+			}
 
 			if recordBatch.Done != nil {
 				recordBatch.Done <- true
@@ -209,9 +231,16 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 			// We flush the data, close the file, and rename it
 			warcWriter.FileWriter.Flush()
 			if settings.Compression != "" {
-				warcWriter.CloseCompressedWriter()
+				err = warcWriter.CloseCompressedWriter()
+				if err != nil {
+					panic(err)
+				}
 			}
-			warcFile.Close()
+
+			err = warcFile.Close()
+			if err != nil {
+				panic(err)
+			}
 
 			// The WARC file is renamed to remove the .open suffix
 			err := os.Rename(settings.OutputDirectory+currentFileName, strings.TrimSuffix(settings.OutputDirectory+currentFileName, ".open"))

@@ -58,6 +58,7 @@ func TestIsHTTPRequest(t *testing.T) {
 		"PATCH /api/item/789 HTTP/1.1\r",
 		"GET /images/logo.png HTTP/1.1\r",
 	}
+
 	for _, header := range goodHTTPRequestHeaders {
 		if !isHTTPRequest(header) {
 			t.Error("Invalid HTTP Method parsing:", header)

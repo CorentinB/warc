@@ -671,7 +671,7 @@ func TestHTTPClientDisallow429(t *testing.T) {
 		defer errWg.Done()
 		for err := range httpClient.ErrChan {
 			// validate 429 filtering as well as error reporting by url
-			if err.Err.Error() != "response code was blocked by config url: '"+server.URL+"/'" {
+			if err.Err.Error() != "readResponse: response code was blocked by config url: '"+server.URL+"/'" {
 				t.Errorf("Error writing to WARC: %s", err.Err.Error())
 			}
 		}
