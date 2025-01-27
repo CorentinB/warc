@@ -92,7 +92,10 @@ func (cc *customConnection) Write(b []byte) (int, error) {
 
 func (cc *customConnection) Close() error {
 	for _, c := range cc.closers {
-		c.Close()
+		err := c.Close()
+		if err != nil {
+			return err
+		}
 	}
 
 	return cc.Conn.Close()
@@ -206,7 +209,11 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 		errc <- err
 	}()
 	if err := <-errc; err != nil {
-		plainConn.Close()
+		closeErr := plainConn.Close()
+		if closeErr != nil {
+			return nil, fmt.Errorf("CustomDialTLS: TLS handshake failed and closing plain connection failed: %s", closeErr.Error())
+		}
+
 		return nil, err
 	}
 
@@ -273,7 +280,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 			// CHeck if there's an error when closing the content and send to channel if so.
 			err := record.Content.Close()
 			if err != nil {
-				d.client.ErrChan <- &Error{Err: err}
+				d.client.ErrChan <- &Error{
+					Err:  err,
+					Func: "writeWARCFromConnection",
+				}
 			}
 		}
 
@@ -294,7 +304,10 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		for _, record := range batch.Records {
 			err := record.Content.Close()
 			if err != nil {
-				d.client.ErrChan <- &Error{Err: err}
+				d.client.ErrChan <- &Error{
+					Err:  err,
+					Func: "writeWARCFromConnection",
+				}
 			}
 		}
 
@@ -339,7 +352,14 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		// advantage of the parallelization context in which this function is called.
 		// That way, we reduce I/O bottleneck later when the record is at the "writing" step,
 		// because the actual WARC writing sequential, not parallel.
-		r.Content.Seek(0, 0)
+		_, seekError := r.Content.Seek(0, 0)
+		if seekError != nil {
+			d.client.ErrChan <- &Error{
+				Err:  seekError,
+				Func: "writeWARCFromConnection",
+			}
+		}
+
 		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content))
 		r.Header.Set("Content-Length", strconv.Itoa(getContentLength(r.Content)))
 
@@ -367,13 +387,21 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	// Read the response from the pipe
 	bytesCopied, err := io.Copy(responseRecord.Content, respPipe)
 	if err != nil {
-		responseRecord.Content.Close()
-		return err
+		closeErr := responseRecord.Content.Close()
+		if closeErr != nil {
+			return fmt.Errorf("readResponse: io.Copy failed and closing content failed: %s", closeErr.Error())
+		}
+
+		return fmt.Errorf("readResponse: io.Copy failed: %s", err.Error())
 	}
 
 	resp, err := http.ReadResponse(bufio.NewReader(responseRecord.Content), nil)
 	if err != nil {
-		responseRecord.Content.Close()
+		closeErr := responseRecord.Content.Close()
+		if closeErr != nil {
+			return fmt.Errorf("readResponse: http.ReadResponse failed and closing content failed: %s", closeErr.Error())
+		}
+
 		return err
 	}
 
@@ -384,21 +412,37 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	// If the HTTP status code is to be excluded as per client's settings, we stop here
 	for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
 		if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
-			return fmt.Errorf("response code was blocked by config url: '%s'", warcTargetURI)
+			err = resp.Body.Close()
+			if err != nil {
+				return fmt.Errorf("readResponse: response code was blocked by config url and closing body failed: %s", err.Error())
+			}
+
+			err = responseRecord.Content.Close()
+			if err != nil {
+				return fmt.Errorf("readResponse: response code was blocked by config url and closing content failed: %s", err.Error())
+			}
+
+			return fmt.Errorf("readResponse: response code was blocked by config url: '%s'", warcTargetURI)
 		}
 	}
 
 	// Calculate the WARC-Payload-Digest
 	payloadDigest := GetSHA1(resp.Body)
 	if strings.HasPrefix(payloadDigest, "ERROR: ") {
-		responseRecord.Content.Close()
+		closeErr := responseRecord.Content.Close()
+		if closeErr != nil {
+			return fmt.Errorf("readResponse: SHA1 calculation failed and closing content failed: %s", closeErr.Error())
+		}
+
 		// This should _never_ happen.
-		return fmt.Errorf("SHA1 ran into an unrecoverable error: %s url: %s", payloadDigest, warcTargetURI)
+		return fmt.Errorf("readResponse: SHA1 ran into an unrecoverable error: %s url: %s", payloadDigest, warcTargetURI)
 	}
+
 	err = resp.Body.Close()
 	if err != nil {
-		return err
+		return fmt.Errorf("readResponse: closing body after SHA1 calculation failed: %s", err.Error())
 	}
+
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
 
 	// Write revisit record if local or CDX dedupe is activated
@@ -430,7 +474,11 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		responseRecord.Header.Set("WARC-Truncated", "length")
 
 		// Find the position of the end of the headers
-		responseRecord.Content.Seek(0, 0)
+		_, err := responseRecord.Content.Seek(0, 0)
+		if err != nil {
+			return fmt.Errorf("readResponse: could not seek to the beginning of the content: %s", err.Error())
+		}
+
 		found := false
 		bigBlock := make([]byte, 0, 4)
 		block := make([]byte, 1)
@@ -482,7 +530,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 
 		// This should really never happen! This could be the result of a malfunctioning HTTP server or something currently unknown!
 		if endOfHeadersOffset == -1 {
-			return errors.New("CRLF not found on response content")
+			return errors.New("readResponse: could not find the end of the headers")
 		}
 
 		// Write the data up until the end of the headers to a temporary buffer
@@ -495,7 +543,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 			if n > 0 {
 				_, err = tempBuffer.Write(block)
 				if err != nil {
-					return err
+					return fmt.Errorf("readResponse: could not write to temporary buffer: %s", err.Error())
 				}
 			}
 
@@ -504,7 +552,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 			}
 
 			if err != nil {
-				return err
+				return fmt.Errorf("readResponse: could not read from response content: %s", err.Error())
 			}
 
 			wrote++
@@ -517,7 +565,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		// Close old buffer
 		err = responseRecord.Content.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("readResponse: could not close old content buffer: %s", err.Error())
 		}
 		responseRecord.Content = tempBuffer
 	}
@@ -540,7 +588,7 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 	// Copy the content from the pipe
 	_, err := io.Copy(requestRecord.Content, reqPipe)
 	if err != nil {
-		return err
+		return fmt.Errorf("readRequest: io.Copy failed: %s", err.Error())
 	}
 
 	// Parse data for WARC-Target-URI
@@ -589,7 +637,7 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 		}
 
 		if err != nil {
-			return err
+			return fmt.Errorf("readRequest: could not read from request content: %s", err.Error())
 		}
 	}
 

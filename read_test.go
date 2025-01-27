@@ -37,10 +37,16 @@ func testFileHash(t *testing.T, path string) {
 
 		hash := fmt.Sprintf("sha1:%s", GetSHA1(record.Content))
 		if hash != record.Header["WARC-Block-Digest"] {
-			record.Content.Close()
+			err = record.Content.Close()
+			if err != nil {
+				t.Fatalf("failed to close record content: %v", err)
+			}
 			t.Fatalf("expected %s, got %s", record.Header.Get("WARC-Block-Digest"), hash)
 		}
-		record.Content.Close()
+		err = record.Content.Close()
+		if err != nil {
+			t.Fatalf("failed to close record content: %v", err)
+		}
 	}
 }
 
@@ -111,19 +117,28 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 		}
 
 		if err != nil {
-			record.Content.Close()
+			err = record.Content.Close()
+			if err != nil {
+				t.Fatalf("failed to close record content: %v", err)
+			}
 			t.Fatalf("warc.ReadRecord failed: %v", err)
 			break
 		}
 
 		if record.Header.Get("WARC-Type") != "response" && record.Header.Get("WARC-Type") != "revisit" {
 			// We're not currently interesting in anything but response and revisit records at the moment.
-			record.Content.Close()
+			err = record.Content.Close()
+			if err != nil {
+				t.Fatalf("failed to close record content: %v", err)
+			}
 			continue
 		}
 
 		if record.Header.Get("WARC-Payload-Digest") != hash {
-			record.Content.Close()
+			err = record.Content.Close()
+			if err != nil {
+				t.Fatalf("failed to close record content: %v", err)
+			}
 			t.Fatalf("WARC-Payload-Digest doesn't match intended result %s != %s", record.Header.Get("WARC-Payload-Digest"), hash)
 		}
 
@@ -138,11 +153,17 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 		}
 
 		if badContentLength {
-			record.Content.Close()
+			err = record.Content.Close()
+			if err != nil {
+				t.Fatalf("failed to close record content: %v", err)
+			}
 			t.Fatalf("Content-Length doesn't match intended result %s != %s", record.Header.Get("Content-Length"), expectedContentLength)
 		}
 
-		record.Content.Close()
+		err = record.Content.Close()
+		if err != nil {
+			t.Fatalf("failed to close record content: %v", err)
+		}
 		totalRead++
 	}
 	return -1
@@ -179,31 +200,46 @@ func testFileRevisitVailidity(t *testing.T, path string, originalTime string, or
 		}
 
 		if err != nil {
-			record.Content.Close()
+			err = record.Content.Close()
+			if err != nil {
+				t.Fatalf("failed to close record content: %v", err)
+			}
 			t.Fatalf("warc.ReadRecord failed: %v", err)
 			break
 		}
 
 		if record.Header.Get("WARC-Type") != "response" && record.Header.Get("WARC-Type") != "revisit" {
 			// We're not currently interesting in anything but response and revisit records at the moment.
-			record.Content.Close()
+			err = record.Content.Close()
+			if err != nil {
+				t.Fatalf("failed to close record content: %v", err)
+			}
 			continue
 		}
 
 		if record.Header.Get("WARC-Type") == "response" {
 			originalDigest = record.Header.Get("WARC-Payload-Digest")
 			originalTime = record.Header.Get("WARC-Date")
-			record.Content.Close()
+			err = record.Content.Close()
+			if err != nil {
+				t.Fatalf("failed to close record content: %v", err)
+			}
 			continue
 		}
 
 		if record.Header.Get("WARC-Type") == "revisit" {
 			revisitRecordsFound = true
 			if record.Header.Get("WARC-Payload-Digest") == originalDigest && record.Header.Get("WARC-Refers-To-Date") == originalTime {
-				record.Content.Close()
+				err = record.Content.Close()
+				if err != nil {
+					t.Fatalf("failed to close record content: %v", err)
+				}
 				continue
 			} else {
-				record.Content.Close()
+				err = record.Content.Close()
+				if err != nil {
+					t.Fatalf("failed to close record content: %v", err)
+				}
 				t.Fatalf("Revisit digest or date does not match doesn't match intended result %s != %s (or %s != %s)", record.Header.Get("WARC-Payload-Digest"), originalDigest, record.Header.Get("WARC-Refers-To-Date"), originalTime)
 			}
 		}
@@ -295,10 +331,16 @@ func BenchmarkBasicRead(b *testing.B) {
 
 			hash := fmt.Sprintf("sha1:%s", GetSHA1(record.Content))
 			if hash != record.Header["WARC-Block-Digest"] {
-				record.Content.Close()
+				err = record.Content.Close()
+				if err != nil {
+					b.Fatalf("failed to close record content: %v", err)
+				}
 				b.Fatalf("expected %s, got %s", record.Header.Get("WARC-Block-Digest"), hash)
 			}
-			record.Content.Close()
+			err = record.Content.Close()
+			if err != nil {
+				b.Fatalf("failed to close record content: %v", err)
+			}
 		}
 	}
 }

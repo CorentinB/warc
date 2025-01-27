@@ -58,7 +58,10 @@ func setup(t *testing.T) (*customDialer, *CustomHTTPClient, func()) {
 	d.DNSRecordsTTL = time.Second
 
 	cleanup := func() {
-		httpClient.Close()
+		err = httpClient.Close()
+		if err != nil {
+			panic(err)
+		}
 		os.RemoveAll(rotatorSettings.OutputDirectory)
 	}
 
