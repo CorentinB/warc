@@ -15,7 +15,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -91,62 +90,6 @@ func TestHTTPClient(t *testing.T) {
 
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
-	}
-}
-
-// generateTLSConfig creates a self-signed certificate for testing.
-func generateTLSConfig() *tls.Config {
-	// 1) Generate a private key.
-	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		panic(err)
-	}
-
-	// 2) Create a certificate template.
-	now := time.Now()
-	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName:   "Test Self-Signed Cert",
-			Organization: []string{"Local Testing"},
-		},
-		NotBefore: now,
-		NotAfter:  now.Add(time.Hour), // valid for 1 hour
-
-		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-
-		IsCA:                  true, // so we can sign ourselves
-		BasicConstraintsValid: true,
-	}
-
-	// 3) Self-sign the certificate using our private key.
-	derBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &privKey.PublicKey, privKey)
-	if err != nil {
-		panic(err)
-	}
-
-	// 4) Parse the DER-encoded certificate.
-	cert, err := x509.ParseCertificate(derBytes)
-	if err != nil {
-		panic(err)
-	}
-
-	// 5) Create a tls.Certificate that our server can use.
-	keyPair := tls.Certificate{
-		Certificate: [][]byte{derBytes},
-		PrivateKey:  privKey,
-		Leaf:        cert,
-	}
-
-	// Return a TLS config that uses our self-signed cert.
-	return &tls.Config{
-		Certificates: []tls.Certificate{keyPair},
-
-		// NOTE: If you want the server to present this certificate for any
-		// named host (SNI), you might also need to set other fields or
-		// an option like InsecureSkipVerify on the client side if you don't
-		// plan to trust this certificate chain.
 	}
 }
 
@@ -1157,7 +1100,7 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	}
 
 	if totalRead != concurrency {
-		t.Fatalf("warc: unexpected number of records read. read: " + strconv.Itoa(totalRead) + " expected: " + strconv.Itoa(concurrency))
+		t.Fatalf("warc: unexpected number of records read. read: %d expected: %d", totalRead, concurrency)
 	}
 }
 
@@ -2070,4 +2013,60 @@ func BenchmarkConcurrentOver2MBZStandard(b *testing.B) {
 
 	wg.Wait()
 	httpClient.Close()
+}
+
+// generateTLSConfig creates a self-signed certificate for testing.
+func generateTLSConfig() *tls.Config {
+	// 1) Generate a private key.
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+
+	// 2) Create a certificate template.
+	now := time.Now()
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:   "Test Self-Signed Cert",
+			Organization: []string{"Local Testing"},
+		},
+		NotBefore: now,
+		NotAfter:  now.Add(time.Hour), // valid for 1 hour
+
+		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+
+		IsCA:                  true, // so we can sign ourselves
+		BasicConstraintsValid: true,
+	}
+
+	// 3) Self-sign the certificate using our private key.
+	derBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &privKey.PublicKey, privKey)
+	if err != nil {
+		panic(err)
+	}
+
+	// 4) Parse the DER-encoded certificate.
+	cert, err := x509.ParseCertificate(derBytes)
+	if err != nil {
+		panic(err)
+	}
+
+	// 5) Create a tls.Certificate that our server can use.
+	keyPair := tls.Certificate{
+		Certificate: [][]byte{derBytes},
+		PrivateKey:  privKey,
+		Leaf:        cert,
+	}
+
+	// Return a TLS config that uses our self-signed cert.
+	return &tls.Config{
+		Certificates: []tls.Certificate{keyPair},
+
+		// NOTE: If you want the server to present this certificate for any
+		// named host (SNI), you might also need to set other fields or
+		// an option like InsecureSkipVerify on the client side if you don't
+		// plan to trust this certificate chain.
+	}
 }
