@@ -260,11 +260,11 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	)
 
 	errs.Go(func() error {
-		return d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan, err)
+		return d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
 	})
 
 	errs.Go(func() error {
-		return d.readResponse(respPipe, warcTargetURIChannel, recordChan, err)
+		return d.readResponse(respPipe, warcTargetURIChannel, recordChan)
 	})
 
 	readErr := errs.Wait()
@@ -378,7 +378,7 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	d.client.WARCWriter <- batch
 }
 
-func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record, upstreamErr *Error) error {
+func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	// Initialize the response record
 	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
 	responseRecord.Header.Set("WARC-Type", "response")
@@ -575,7 +575,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	return nil
 }
 
-func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record, upstreamErr *Error) error {
+func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	var (
 		warcTargetURI = scheme + "://"
 		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)

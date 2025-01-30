@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/paulbellamy/ratecounter"
 )
@@ -56,8 +57,9 @@ func init() {
 // recordWriter function running in a goroutine
 func (s *RotatorSettings) NewWARCRotator() (recordWriterChan chan *RecordBatch, doneChannels []chan bool, err error) {
 	recordWriterChan = make(chan *RecordBatch, 1)
+
 	// Create global atomicSerial number for numbering WARC files.
-	var atomicSerial int64
+	var serial = new(atomic.Uint64)
 
 	// Check the rotator settings and set default values
 	err = checkRotatorSettings(s)
@@ -69,7 +71,7 @@ func (s *RotatorSettings) NewWARCRotator() (recordWriterChan chan *RecordBatch, 
 		doneChan := make(chan bool)
 		doneChannels = append(doneChannels, doneChan)
 
-		go recordWriter(s, recordWriterChan, doneChan, &atomicSerial)
+		go recordWriter(s, recordWriterChan, doneChan, serial)
 	}
 
 	return recordWriterChan, doneChannels, nil
@@ -85,9 +87,9 @@ func (w *Writer) CloseCompressedWriter() (err error) {
 	return err
 }
 
-func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool, atomicSerial *int64) {
+func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done chan bool, serial *atomic.Uint64) {
 	var (
-		currentFileName         = GenerateWarcFileName(settings.Prefix, settings.Compression, atomicSerial)
+		currentFileName         = generateWarcFileName(settings.Prefix, settings.Compression, serial)
 		currentWarcinfoRecordID string
 	)
 
@@ -95,7 +97,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	fileMutex.Lock()
 	_, err := os.Stat(settings.OutputDirectory + currentFileName)
 	for !errors.Is(err, os.ErrNotExist) {
-		currentFileName = GenerateWarcFileName(settings.Prefix, settings.Compression, atomicSerial)
+		currentFileName = generateWarcFileName(settings.Prefix, settings.Compression, serial)
 		_, err = os.Stat(settings.OutputDirectory + currentFileName)
 	}
 
@@ -143,7 +145,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 	for {
 		recordBatch, more := <-records
 		if more {
-			if isFileSizeExceeded(settings.OutputDirectory+currentFileName, settings.WarcSize) {
+			if isFileSizeExceeded(warcFile, settings.WarcSize) {
 				// WARC file size exceeded settings.WarcSize
 				// The WARC file is renamed to remove the .open suffix
 				err := os.Rename(path.Join(settings.OutputDirectory, currentFileName), strings.TrimSuffix(path.Join(settings.OutputDirectory, currentFileName), ".open"))
@@ -166,7 +168,7 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				}
 
 				// Create the new file and automatically increment the serial inside of GenerateWarcFileName
-				currentFileName = GenerateWarcFileName(settings.Prefix, settings.Compression, atomicSerial)
+				currentFileName = generateWarcFileName(settings.Prefix, settings.Compression, serial)
 				warcFile, err = os.Create(settings.OutputDirectory + currentFileName)
 				if err != nil {
 					panic(err)
