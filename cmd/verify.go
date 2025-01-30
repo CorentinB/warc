@@ -69,6 +69,7 @@ func verify(cmd *cobra.Command, files []string) {
 				defer processWg.Done()
 				for record := range recordChan {
 					processVerifyRecord(record, filepath, results)
+					record.Content.Close()
 				}
 			}()
 		}
