@@ -179,11 +179,10 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				}
 
 				// Write the info record
-				currentWarcinfoRecordID, err := warcWriter.WriteInfoRecord(settings.WarcinfoContent)
+				currentWarcinfoRecordID, err = warcWriter.WriteInfoRecord(settings.WarcinfoContent)
 				if err != nil {
 					panic(err)
 				}
-				_ = currentWarcinfoRecordID
 
 				// If compression is enabled, we close the record's GZIP chunk
 				if settings.Compression != "" {
