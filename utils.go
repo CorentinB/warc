@@ -9,12 +9,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/CorentinB/warc/pkg/spooledtempfile"
@@ -273,69 +270,6 @@ func checkRotatorSettings(settings *RotatorSettings) (err error) {
 	settings.WarcinfoContent.Set("conformsTo", "http://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/")
 
 	return nil
-}
-
-// isFielSizeExceeded compare the size of a file (filePath) with
-// a max size (maxSize), if the size of filePath exceed maxSize,
-// it returns true, else, it returns false
-func isFileSizeExceeded(filePath string, maxSize float64) bool {
-	// Open the file
-	file, err := os.Open(filePath)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	// Get actual file size
-	stat, err := file.Stat()
-	if err != nil {
-		panic(err)
-	}
-	fileSize := (float64)((stat.Size() / 1024) / 1024)
-
-	// If fileSize exceed maxSize, return true
-	return fileSize >= maxSize
-}
-
-// formatSerial add the correct padding to the serial
-// E.g. with serial = 23 and format = 5:
-// formatSerial return 00023
-func formatSerial(atomicSerial *int64, format string) string {
-	return fmt.Sprintf("%0"+format+"d", atomic.LoadInt64(atomicSerial))
-}
-
-// GenerateWarcFileName generate a WARC file name following recommendations
-// of the specs:
-// Prefix-Timestamp-Serial-Crawlhost.warc.gz
-func GenerateWarcFileName(prefix string, compression string, atomicSerial *int64) (fileName string) {
-	// Get host name as reported by the kernel
-	hostName, err := os.Hostname()
-	if err != nil {
-		panic(err)
-	}
-
-	// Don't let atomicSerial overflow past 99999, the current maximum with 5 serial digits.
-	if atomic.LoadInt64(atomicSerial) >= 99999 {
-		atomic.StoreInt64(atomicSerial, 0)
-	}
-
-	// Atomically increase the global serial number
-	atomic.AddInt64(atomicSerial, 1)
-
-	formattedSerial := formatSerial(atomicSerial, "5")
-
-	now := time.Now().UTC()
-	date := now.Format("20060102150405") + strconv.Itoa(now.Nanosecond())[:3]
-
-	var fileExt string
-	if compression == "GZIP" {
-		fileExt = ".warc.gz.open"
-	} else if compression == "ZSTD" {
-		fileExt = ".warc.zst.open"
-	} else {
-		fileExt = ".warc.open"
-	}
-	return prefix + "-" + date + "-" + formattedSerial + "-" + hostName + fileExt
 }
 
 func getContentLength(rwsc spooledtempfile.ReadWriteSeekCloser) int {
