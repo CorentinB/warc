@@ -2,7 +2,13 @@ package warc
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -86,6 +92,156 @@ func TestHTTPClient(t *testing.T) {
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
 	}
+}
+
+// generateTLSConfig creates a self-signed certificate for testing.
+func generateTLSConfig() *tls.Config {
+	// 1) Generate a private key.
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+
+	// 2) Create a certificate template.
+	now := time.Now()
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:   "Test Self-Signed Cert",
+			Organization: []string{"Local Testing"},
+		},
+		NotBefore: now,
+		NotAfter:  now.Add(time.Hour), // valid for 1 hour
+
+		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+
+		IsCA:                  true, // so we can sign ourselves
+		BasicConstraintsValid: true,
+	}
+
+	// 3) Self-sign the certificate using our private key.
+	derBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &privKey.PublicKey, privKey)
+	if err != nil {
+		panic(err)
+	}
+
+	// 4) Parse the DER-encoded certificate.
+	cert, err := x509.ParseCertificate(derBytes)
+	if err != nil {
+		panic(err)
+	}
+
+	// 5) Create a tls.Certificate that our server can use.
+	keyPair := tls.Certificate{
+		Certificate: [][]byte{derBytes},
+		PrivateKey:  privKey,
+		Leaf:        cert,
+	}
+
+	// Return a TLS config that uses our self-signed cert.
+	return &tls.Config{
+		Certificates: []tls.Certificate{keyPair},
+
+		// NOTE: If you want the server to present this certificate for any
+		// named host (SNI), you might also need to set other fields or
+		// an option like InsecureSkipVerify on the client side if you don't
+		// plan to trust this certificate chain.
+	}
+}
+
+func TestHTTPClientTLSHandshakeTimeout(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+		doneChan        = make(chan bool, 1)
+	)
+
+	// 1) Set up a TCP listener
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen on TCP: %v", err)
+	}
+	defer ln.Close()
+
+	// 2) Prepare a minimal self-signed certificate & TLS config
+	tlsConfig := generateTLSConfig()
+
+	// 3) Accept connections but deliberately SLEEP before doing TLS handshake
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				// Listener closed or error – exit the goroutine
+				return
+			}
+			go func(c net.Conn) {
+				// Wrap with TLS but never actually respond in time
+				tlsConn := tls.Server(c, tlsConfig)
+				// Force a long sleep so the handshake never completes
+				time.Sleep(5 * time.Second)
+				tlsConn.Close()
+				doneChan <- true
+			}(conn)
+		}
+	}()
+
+	serverURL := "https://" + ln.Addr().String()
+
+	// 4) Prepare a temp output directory for your WARC rotator
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "TLSHANDSHAKETIMEOUT"
+
+	// 5) Create the WARC-writing HTTP client
+	//    The critical part here is enforcing the handshake timeout.
+	//    (Exact field names may differ based on your library.)
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
+		RotatorSettings:     rotatorSettings,
+		TLSHandshakeTimeout: 1 * time.Second, // <--- The key line
+		VerifyCerts:         true,            // or "VerifyCerts: false" depending on your lib
+	})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %v", err)
+	}
+
+	// Start reading from ErrChan in a background goroutine
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for e := range httpClient.ErrChan {
+			t.Errorf("Error writing to WARC: %s", e.Err.Error())
+		}
+	}()
+
+	// 6) Attempt the GET, which should fail due to TLS handshake delay
+	req, err := http.NewRequest("GET", serverURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err == nil {
+		// If no error, handshake timeout didn't work
+		if resp != nil {
+			resp.Body.Close()
+		}
+		t.Fatal("Expected TLS handshake timeout error, got none")
+	} else {
+		t.Logf("Got expected error: %v", err)
+	}
+
+	httpClient.Close()
+	errWg.Wait()
+
+	<-doneChan // Wait for the server goroutine to exit
 }
 
 func TestHTTPClientServerClosingConnection(t *testing.T) {
