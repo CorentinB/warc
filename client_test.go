@@ -93,6 +93,98 @@ func TestHTTPClient(t *testing.T) {
 	}
 }
 
+func TestHTTPClientContextCancellation(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
+	// 1) Set up a test server that sends its response slowly, in chunks
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+
+		// Write chunks of data with delays in between, simulating a slow response
+		for i := 0; i < 10; i++ {
+			_, writeErr := w.Write([]byte("CHUNK-DATA-"))
+			if writeErr != nil {
+				return
+			}
+			w.(http.Flusher).Flush() // force chunk to send
+			time.Sleep(300 * time.Millisecond)
+		}
+	}))
+	defer server.Close()
+
+	// 2) Prepare the rotator settings and create the WARC client
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+	rotatorSettings.Prefix = "CTXCANCEL"
+
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
+		RotatorSettings: rotatorSettings,
+	})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	// Read any WARC-writing errors
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for _ = range httpClient.ErrChan {
+			// t.Errorf("Error writing to WARC: %s", e.Err.Error())
+		}
+	}()
+
+	// 3) Create a request with a cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 4) Perform the request
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected error on Do: %v", err)
+	}
+
+	// We’ll read some data, then cancel the context mid-read
+	buf := make([]byte, 32)
+
+	// Read a bit
+	n, readErr := resp.Body.Read(buf)
+	if readErr != nil {
+		t.Fatalf("unexpected error on Read: %v", readErr)
+	}
+
+	t.Logf("Read %d bytes before cancel: %q", n, buf[:n])
+
+	// 5) Cancel now. This should cause subsequent reads to fail promptly.
+	cancel()
+
+	// Attempt to read the rest
+	_, readErr = resp.Body.Read(buf)
+	if readErr == nil {
+		t.Fatal("expected error after context cancellation, got none")
+	}
+	t.Logf("Got expected read error after cancel: %v", readErr)
+
+	_ = resp.Body.Close()
+
+	httpClient.Close()
+	errWg.Wait()
+}
+
 func TestHTTPClientTLSHandshakeTimeout(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
