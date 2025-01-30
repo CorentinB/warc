@@ -88,6 +88,149 @@ func TestHTTPClient(t *testing.T) {
 	}
 }
 
+func TestHTTPClientServerClosingConnection(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Send normal HTTP headers
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
+
+		// Write only a few bytes of the file, then forcibly close the connection
+		partialData := fileBytes[:10]
+		if _, err := w.Write(partialData); err != nil {
+			t.Fatalf("unable to write partial data: %v", err)
+		}
+
+		// Hijack the connection and close it immediately
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("ResponseWriter does not support hijacking")
+		}
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Fatalf("failed to hijack connection: %v", err)
+		}
+		conn.Close()
+	}))
+	defer server.Close()
+
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "TEST"
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for _ = range httpClient.ErrChan {
+			// We expect an error here, so we don't need to log it
+		}
+	}()
+
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		// This would be an error that happened during the handshake/headers
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Force the read to detect the unexpected connection close
+	_, readErr := io.Copy(io.Discard, resp.Body)
+	if readErr == nil {
+		t.Fatal("Expected network error when reading body, got none")
+	} else if strings.Contains(readErr.Error(), "unexpected EOF") {
+		t.Logf("Expected network error: %v", readErr)
+	} else {
+		t.Fatalf("Unexpected error: %v", readErr)
+	}
+
+	_ = resp.Body.Close()
+
+	httpClient.Close()
+}
+
+func TestHTTPClientDNSFailure(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	var (
+		rotatorSettings = NewRotatorSettings()
+		errWg           sync.WaitGroup
+		err             error
+	)
+
+	// Prepare output directory
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	rotatorSettings.Prefix = "DNSFAIL"
+
+	// Initialize the WARC-writing HTTP client
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
+		RotatorSettings: rotatorSettings,
+	})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	// Goroutine to read errors from ErrChan
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for e := range httpClient.ErrChan {
+			t.Errorf("Error writing to WARC: %s", e.Err.Error())
+		}
+	}()
+
+	// Use a guaranteed-nonresolvable domain
+	req, err := http.NewRequest("GET", "http://should-not-resolve.example.invalid", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We expect this to fail with a DNS resolution error
+	resp, err := httpClient.Do(req)
+	if err == nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		t.Fatal("Expected DNS resolution error, but got none")
+	} else {
+		t.Logf("Got expected DNS error: %v", err)
+	}
+
+	httpClient.Close()
+	errWg.Wait()
+}
+
 func TestHTTPClientWithProxy(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
