@@ -267,9 +267,8 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 		target               string
 		host                 string
 		err                  = new(Error)
+		errs                 = errgroup.Group{}
 	)
-
-	errs, ctx := errgroup.WithContext(ctx)
 
 	// Run request and response readers in parallel, respecting context
 	errs.Go(func() error {
@@ -283,11 +282,6 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 	// Wait for both goroutines to finish
 	readErr := errs.Wait()
 	close(recordChan)
-
-	// Handle context cancellation
-	if ctx.Err() != nil {
-		return
-	}
 
 	if readErr != nil {
 		err.Err = readErr
@@ -396,99 +390,6 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 	}
 }
 
-func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
-	var (
-		warcTargetURI = scheme + "://"
-		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
-	)
-
-	// Initialize the request record
-	requestRecord.Header.Set("WARC-Type", "request")
-	requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
-
-	// Copy the content from the pipe
-	_, err := io.Copy(requestRecord.Content, reqPipe)
-	if err != nil {
-		return fmt.Errorf("readRequest: io.Copy failed: %s", err.Error())
-	}
-
-	// Parse data for WARC-Target-URI
-	var (
-		block = make([]byte, 1)
-		line  string
-	)
-
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			n, err := requestRecord.Content.Read(block)
-			if n > 0 {
-				if string(block) == "\n" {
-					if isHTTPRequest(line) {
-						target = strings.Split(line, " ")[1]
-
-						if host != "" && target != "" {
-							break loop
-						} else {
-							line = ""
-							continue
-						}
-					}
-
-					if strings.HasPrefix(line, "Host: ") {
-						host = strings.TrimPrefix(line, "Host: ")
-						host = strings.TrimSuffix(host, "\r")
-
-						if host != "" && target != "" {
-							break loop
-						} else {
-							line = ""
-							continue
-						}
-					}
-
-					line = ""
-				} else {
-					line += string(block)
-				}
-			} else {
-				break
-			}
-
-			if err == io.EOF {
-				break
-			}
-
-			if err != nil {
-				return fmt.Errorf("readRequest: could not read from request content: %s", err.Error())
-			}
-		}
-	}
-
-	// Check that we achieved to parse all the necessary data
-	if host != "" && target != "" {
-		// HTTP's request first line can include a complete path, we check that
-		if strings.HasPrefix(target, scheme+"://"+host) {
-			warcTargetURI = target
-		} else {
-			warcTargetURI += host + target
-		}
-	} else {
-		return errors.New("unable to parse data necessary for WARC-Target-URI")
-	}
-
-	// Send the WARC-Target-URI to a channel so that it can be picked-up
-	// by the goroutine responsible for writing the response
-	warcTargetURIChannel <- warcTargetURI
-
-	recordChan <- requestRecord
-
-	return nil
-}
-
 func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	// Initialize the response record
 	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
@@ -504,6 +405,12 @@ func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader
 		}
 
 		return fmt.Errorf("readResponse: io.Copy failed: %s", err.Error())
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
 	}
 
 	resp, err := http.ReadResponse(bufio.NewReader(responseRecord.Content), nil)
@@ -649,34 +556,27 @@ func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader
 		block = make([]byte, 1)
 		wrote := 0
 		responseRecord.Content.Seek(0, 0)
-
-	loop:
 		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				n, err := responseRecord.Content.Read(block)
-				if n > 0 {
-					_, err = tempBuffer.Write(block)
-					if err != nil {
-						return fmt.Errorf("readResponse: could not write to temporary buffer: %s", err.Error())
-					}
-				}
-
-				if err == io.EOF {
-					break
-				}
-
+			n, err := responseRecord.Content.Read(block)
+			if n > 0 {
+				_, err = tempBuffer.Write(block)
 				if err != nil {
-					return fmt.Errorf("readResponse: could not read from response content: %s", err.Error())
+					return fmt.Errorf("readResponse: could not write to temporary buffer: %s", err.Error())
 				}
+			}
 
-				wrote++
+			if err == io.EOF {
+				break
+			}
 
-				if wrote == endOfHeadersOffset {
-					break loop
-				}
+			if err != nil {
+				return fmt.Errorf("readResponse: could not read from response content: %s", err.Error())
+			}
+
+			wrote++
+
+			if wrote == endOfHeadersOffset {
+				break
 			}
 		}
 
@@ -689,6 +589,107 @@ func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader
 	}
 
 	recordChan <- responseRecord
+
+	return nil
+}
+
+func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
+	var (
+		warcTargetURI = scheme + "://"
+		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
+	)
+
+	// Initialize the request record
+	requestRecord.Header.Set("WARC-Type", "request")
+	requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
+
+	// Copy the content from the pipe
+	_, err := io.Copy(requestRecord.Content, reqPipe)
+	if err != nil {
+		return fmt.Errorf("readRequest: io.Copy failed: %s", err.Error())
+	}
+
+	// Parse data for WARC-Target-URI
+	var (
+		block = make([]byte, 1)
+		line  string
+	)
+
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			n, err := requestRecord.Content.Read(block)
+			if n > 0 {
+				if string(block) == "\n" {
+					if isHTTPRequest(line) {
+						target = strings.Split(line, " ")[1]
+
+						if host != "" && target != "" {
+							break loop
+						} else {
+							line = ""
+							continue
+						}
+					}
+
+					if strings.HasPrefix(line, "Host: ") {
+						host = strings.TrimPrefix(line, "Host: ")
+						host = strings.TrimSuffix(host, "\r")
+
+						if host != "" && target != "" {
+							break loop
+						} else {
+							line = ""
+							continue
+						}
+					}
+
+					line = ""
+				} else {
+					line += string(block)
+				}
+			} else {
+				break
+			}
+
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				return fmt.Errorf("readRequest: could not read from request content: %s", err.Error())
+			}
+		}
+	}
+
+	// Check that we achieved to parse all the necessary data
+	if host != "" && target != "" {
+		// HTTP's request first line can include a complete path, we check that
+		if strings.HasPrefix(target, scheme+"://"+host) {
+			warcTargetURI = target
+		} else {
+			warcTargetURI += host + target
+		}
+	} else {
+		return errors.New("unable to parse data necessary for WARC-Target-URI")
+	}
+
+	// Send the WARC-Target-URI to a channel so that it can be picked-up
+	// by the goroutine responsible for writing the response
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case warcTargetURIChannel <- warcTargetURI:
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case recordChan <- requestRecord:
+	}
 
 	return nil
 }
