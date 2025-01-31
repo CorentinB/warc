@@ -284,8 +284,10 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 	close(recordChan)
 
 	if readErr != nil {
-		err.Err = readErr
-		d.client.ErrChan <- err
+		d.client.ErrChan <- &Error{
+			Err:  readErr,
+			Func: "writeWARCFromConnection",
+		}
 
 		for record := range recordChan {
 			if closeErr := record.Content.Close(); closeErr != nil {
