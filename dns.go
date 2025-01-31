@@ -1,6 +1,7 @@
 package warc
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -16,7 +17,7 @@ type cachedIP struct {
 
 const maxFallbackDNSServers = 3
 
-func (d *customDialer) archiveDNS(address string) (resolvedIP net.IP, err error) {
+func (d *customDialer) archiveDNS(ctx context.Context, address string) (resolvedIP net.IP, err error) {
 	// Get the address without the port if there is one
 	address, _, err = net.SplitHostPort(address)
 	if err != nil {
@@ -54,7 +55,7 @@ func (d *customDialer) archiveDNS(address string) (resolvedIP net.IP, err error)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				ipv4, errA = d.lookupIP(address, dns.TypeA, DNSServer)
+				ipv4, errA = d.lookupIP(ctx, address, dns.TypeA, DNSServer)
 			}()
 		}
 
@@ -62,7 +63,7 @@ func (d *customDialer) archiveDNS(address string) (resolvedIP net.IP, err error)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				ipv6, errAAAA = d.lookupIP(address, dns.TypeAAAA, DNSServer)
+				ipv6, errAAAA = d.lookupIP(ctx, address, dns.TypeAAAA, DNSServer)
 			}()
 		}
 
@@ -95,11 +96,11 @@ func (d *customDialer) archiveDNS(address string) (resolvedIP net.IP, err error)
 	return nil, fmt.Errorf("no suitable IP address found for %s", address)
 }
 
-func (d *customDialer) lookupIP(address string, recordType uint16, DNSServer int) (net.IP, error) {
+func (d *customDialer) lookupIP(ctx context.Context, address string, recordType uint16, DNSServer int) (net.IP, error) {
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(address), recordType)
 
-	r, _, err := d.DNSClient.Exchange(m, net.JoinHostPort(d.DNSConfig.Servers[DNSServer], d.DNSConfig.Port))
+	r, _, err := d.DNSClient.ExchangeContext(ctx, m, net.JoinHostPort(d.DNSConfig.Servers[DNSServer], d.DNSConfig.Port))
 	if err != nil {
 		return nil, err
 	}

@@ -24,7 +24,7 @@ import (
 )
 
 type customDialer struct {
-	proxyDialer proxy.Dialer
+	proxyDialer proxy.ContextDialer
 	client      *CustomHTTPClient
 	DNSConfig   *dns.ClientConfig
 	DNSClient   *dns.Client
@@ -66,9 +66,12 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout,
 			return nil, err
 		}
 
-		if d.proxyDialer, err = proxy.FromURL(u, d); err != nil {
+		var proxyDialer proxy.Dialer
+		if proxyDialer, err = proxy.FromURL(u, d); err != nil {
 			return nil, err
 		}
+
+		d.proxyDialer = proxyDialer.(proxy.ContextDialer)
 	}
 
 	return d, nil
@@ -101,12 +104,12 @@ func (cc *customConnection) Close() error {
 	return cc.Conn.Close()
 }
 
-func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
+func (d *customDialer) wrapConnection(ctx context.Context, c net.Conn, scheme string) net.Conn {
 	reqReader, reqWriter := io.Pipe()
 	respReader, respWriter := io.Pipe()
 
 	d.client.WaitGroup.Add(1)
-	go d.writeWARCFromConnection(reqReader, respReader, scheme, c)
+	go d.writeWARCFromConnection(ctx, reqReader, respReader, scheme, c)
 
 	return &customConnection{
 		Conn:    c,
@@ -116,20 +119,20 @@ func (d *customDialer) wrapConnection(c net.Conn, scheme string) net.Conn {
 	}
 }
 
-func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err error) {
+func (d *customDialer) CustomDialContext(ctx context.Context, network, address string) (conn net.Conn, err error) {
 	// Determine the network based on IPv4/IPv6 settings
 	network = d.getNetworkType(network)
 	if network == "" {
 		return nil, errors.New("no supported network type available")
 	}
 
-	IP, err := d.archiveDNS(address)
+	IP, err := d.archiveDNS(ctx, address)
 	if err != nil {
 		return nil, err
 	}
 
 	if d.proxyDialer != nil {
-		conn, err = d.proxyDialer.Dial(network, address)
+		conn, err = d.proxyDialer.DialContext(ctx, network, address)
 	} else {
 		if d.client.randomLocalIP {
 			localAddr := getLocalAddr(network, IP.String())
@@ -142,24 +145,28 @@ func (d *customDialer) CustomDial(network, address string) (conn net.Conn, err e
 			}
 		}
 
-		conn, err = d.DialContext(context.Background(), network, address)
+		conn, err = d.DialContext(ctx, network, address)
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	return d.wrapConnection(conn, "http"), nil
+	return d.wrapConnection(ctx, conn, "http"), nil
 }
 
-func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
+func (d *customDialer) CustomDial(network, address string) (net.Conn, error) {
+	return d.CustomDialContext(context.Background(), network, address)
+}
+
+func (d *customDialer) CustomDialTLSContext(ctx context.Context, network, address string) (net.Conn, error) {
 	// Determine the network based on IPv4/IPv6 settings
 	network = d.getNetworkType(network)
 	if network == "" {
 		return nil, errors.New("no supported network type available")
 	}
 
-	IP, err := d.archiveDNS(address)
+	IP, err := d.archiveDNS(ctx, address)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +174,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	var plainConn net.Conn
 
 	if d.proxyDialer != nil {
-		plainConn, err = d.proxyDialer.Dial(network, address)
+		plainConn, err = d.proxyDialer.DialContext(ctx, network, address)
 	} else {
 		if d.client.randomLocalIP {
 			localAddr := getLocalAddr(network, IP.String())
@@ -180,7 +187,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 			}
 		}
 
-		plainConn, err = d.Dial(network, address)
+		plainConn, err = d.DialContext(ctx, network, address)
 	}
 
 	if err != nil {
@@ -204,7 +211,7 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 	})
 
 	go func() {
-		err := tlsConn.Handshake()
+		err := tlsConn.HandshakeContext(ctx)
 		timer.Stop()
 		errc <- err
 	}()
@@ -217,7 +224,11 @@ func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) 
 		return nil, err
 	}
 
-	return d.wrapConnection(tlsConn, "https"), nil
+	return d.wrapConnection(ctx, tlsConn, "https"), nil
+}
+
+func (d *customDialer) CustomDialTLS(network, address string) (net.Conn, error) {
+	return d.CustomDialTLSContext(context.Background(), network, address)
 }
 
 func (d *customDialer) getNetworkType(network string) string {
@@ -245,7 +256,7 @@ func (d *customDialer) getNetworkType(network string) string {
 	}
 }
 
-func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader, scheme string, conn net.Conn) {
+func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, respPipe *io.PipeReader, scheme string, conn net.Conn) {
 	defer d.client.WaitGroup.Done()
 
 	var (
@@ -255,33 +266,33 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		recordIDs            []string
 		target               string
 		host                 string
-		errs, _              = errgroup.WithContext(context.Background())
 		err                  = new(Error)
+		errs                 = errgroup.Group{}
 	)
 
+	// Run request and response readers in parallel, respecting context
 	errs.Go(func() error {
-		return d.readRequest(scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
+		return d.readRequest(ctx, scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
 	})
 
 	errs.Go(func() error {
-		return d.readResponse(respPipe, warcTargetURIChannel, recordChan)
+		return d.readResponse(ctx, respPipe, warcTargetURIChannel, recordChan)
 	})
 
+	// Wait for both goroutines to finish
 	readErr := errs.Wait()
 	close(recordChan)
+
 	if readErr != nil {
-		// Add the error to the err structure
-		err.Err = readErr
+		d.client.ErrChan <- &Error{
+			Err:  readErr,
+			Func: "writeWARCFromConnection",
+		}
 
-		d.client.ErrChan <- err
-
-		// Make sure we close the WARC content buffers
 		for record := range recordChan {
-			// CHeck if there's an error when closing the content and send to channel if so.
-			err := record.Content.Close()
-			if err != nil {
+			if closeErr := record.Content.Close(); closeErr != nil {
 				d.client.ErrChan <- &Error{
-					Err:  err,
+					Err:  closeErr,
 					Func: "writeWARCFromConnection",
 				}
 			}
@@ -291,21 +302,23 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 	}
 
 	for record := range recordChan {
-		recordIDs = append(recordIDs, uuid.NewString())
-		batch.Records = append(batch.Records, record)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			recordIDs = append(recordIDs, uuid.NewString())
+			batch.Records = append(batch.Records, record)
+		}
 	}
 
 	if len(batch.Records) != 2 {
 		err.Err = errors.New("warc: there was an unspecified problem creating one of the WARC records")
-
 		d.client.ErrChan <- err
 
-		// Make sure we close the WARC content buffers
 		for _, record := range batch.Records {
-			err := record.Content.Close()
-			if err != nil {
+			if closeErr := record.Content.Close(); closeErr != nil {
 				d.client.ErrChan <- &Error{
-					Err:  err,
+					Err:  closeErr,
 					Func: "writeWARCFromConnection",
 				}
 			}
@@ -314,71 +327,72 @@ func (d *customDialer) writeWARCFromConnection(reqPipe, respPipe *io.PipeReader,
 		return
 	}
 
-	// Most Internet Archive tools expect requests to be AFTER responses
-	// in the WARC file. So we make sure that's the case.
 	if batch.Records[0].Header.Get("WARC-Type") != "response" {
 		slices.Reverse(batch.Records)
 	}
 
-	// Get the WARC-Target-URI value
-	var warcTargetURI = <-warcTargetURIChannel
+	var warcTargetURI string
+	select {
+	case warcTargetURI = <-warcTargetURIChannel:
+	case <-ctx.Done():
+		return
+	}
 
-	// Add headers
 	for i, r := range batch.Records {
-		// Generate WARC-IP-Address if we aren't using a proxy. If we are using a proxy, the real host IP cannot be determined.
-		if d.proxyDialer == nil {
-			switch addr := conn.RemoteAddr().(type) {
-			case *net.UDPAddr:
-			case *net.TCPAddr:
-				IP := addr.IP.String()
-				r.Header.Set("WARC-IP-Address", IP)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if d.proxyDialer == nil {
+				switch addr := conn.RemoteAddr().(type) {
+				case *net.TCPAddr:
+					IP := addr.IP.String()
+					r.Header.Set("WARC-IP-Address", IP)
+				}
 			}
-		}
 
-		// Set WARC-Record-ID and WARC-Concurrent-To
-		r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordIDs[i]+">")
+			r.Header.Set("WARC-Record-ID", "<urn:uuid:"+recordIDs[i]+">")
 
-		if i == len(recordIDs)-1 {
-			r.Header.Set("WARC-Concurrent-To", "<urn:uuid:"+recordIDs[0]+">")
-		} else {
-			r.Header.Set("WARC-Concurrent-To", "<urn:uuid:"+recordIDs[1]+">")
-		}
-
-		// Add WARC-Target-URI
-		r.Header.Set("WARC-Target-URI", warcTargetURI)
-
-		// Calculate WARC-Block-Digest and Content-Length
-		// Those 2 steps are done at this stage of the process ON PURPOSE, to take
-		// advantage of the parallelization context in which this function is called.
-		// That way, we reduce I/O bottleneck later when the record is at the "writing" step,
-		// because the actual WARC writing sequential, not parallel.
-		_, seekError := r.Content.Seek(0, 0)
-		if seekError != nil {
-			d.client.ErrChan <- &Error{
-				Err:  seekError,
-				Func: "writeWARCFromConnection",
+			if i == len(recordIDs)-1 {
+				r.Header.Set("WARC-Concurrent-To", "<urn:uuid:"+recordIDs[0]+">")
+			} else {
+				r.Header.Set("WARC-Concurrent-To", "<urn:uuid:"+recordIDs[1]+">")
 			}
-		}
 
-		r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content))
-		r.Header.Set("Content-Length", strconv.Itoa(getContentLength(r.Content)))
+			r.Header.Set("WARC-Target-URI", warcTargetURI)
 
-		if d.client.dedupeOptions.LocalDedupe {
-			if r.Header.Get("WARC-Type") == "response" && r.Header.Get("WARC-Payload-Digest")[5:] != "3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ" {
-				d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
-					responseUUID: recordIDs[i],
-					size:         getContentLength(r.Content),
-					targetURI:    warcTargetURI,
-					date:         batch.CaptureTime,
-				})
+			if _, seekErr := r.Content.Seek(0, 0); seekErr != nil {
+				d.client.ErrChan <- &Error{
+					Err:  seekErr,
+					Func: "writeWARCFromConnection",
+				}
+				return
+			}
+
+			r.Header.Set("WARC-Block-Digest", "sha1:"+GetSHA1(r.Content))
+			r.Header.Set("Content-Length", strconv.Itoa(getContentLength(r.Content)))
+
+			if d.client.dedupeOptions.LocalDedupe {
+				if r.Header.Get("WARC-Type") == "response" && r.Header.Get("WARC-Payload-Digest")[5:] != "3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ" {
+					d.client.dedupeHashTable.Store(r.Header.Get("WARC-Payload-Digest")[5:], revisitRecord{
+						responseUUID: recordIDs[i],
+						size:         getContentLength(r.Content),
+						targetURI:    warcTargetURI,
+						date:         batch.CaptureTime,
+					})
+				}
 			}
 		}
 	}
 
-	d.client.WARCWriter <- batch
+	select {
+	case d.client.WARCWriter <- batch:
+	case <-ctx.Done():
+		return
+	}
 }
 
-func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	// Initialize the response record
 	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
 	responseRecord.Header.Set("WARC-Type", "response")
@@ -393,6 +407,12 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 		}
 
 		return fmt.Errorf("readResponse: io.Copy failed: %s", err.Error())
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
 	}
 
 	resp, err := http.ReadResponse(bufio.NewReader(responseRecord.Content), nil)
@@ -575,7 +595,7 @@ func (d *customDialer) readResponse(respPipe *io.PipeReader, warcTargetURIChanne
 	return nil
 }
 
-func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	var (
 		warcTargetURI = scheme + "://"
 		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
@@ -597,47 +617,53 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 		line  string
 	)
 
+loop:
 	for {
-		n, err := requestRecord.Content.Read(block)
-		if n > 0 {
-			if string(block) == "\n" {
-				if isHTTPRequest(line) {
-					target = strings.Split(line, " ")[1]
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			n, err := requestRecord.Content.Read(block)
+			if n > 0 {
+				if string(block) == "\n" {
+					if isHTTPRequest(line) {
+						target = strings.Split(line, " ")[1]
 
-					if host != "" && target != "" {
-						break
-					} else {
-						line = ""
-						continue
+						if host != "" && target != "" {
+							break loop
+						} else {
+							line = ""
+							continue
+						}
 					}
-				}
 
-				if strings.HasPrefix(line, "Host: ") {
-					host = strings.TrimPrefix(line, "Host: ")
-					host = strings.TrimSuffix(host, "\r")
+					if strings.HasPrefix(line, "Host: ") {
+						host = strings.TrimPrefix(line, "Host: ")
+						host = strings.TrimSuffix(host, "\r")
 
-					if host != "" && target != "" {
-						break
-					} else {
-						line = ""
-						continue
+						if host != "" && target != "" {
+							break loop
+						} else {
+							line = ""
+							continue
+						}
 					}
-				}
 
-				line = ""
+					line = ""
+				} else {
+					line += string(block)
+				}
 			} else {
-				line += string(block)
+				break
 			}
-		} else {
-			break
-		}
 
-		if err == io.EOF {
-			break
-		}
+			if err == io.EOF {
+				break
+			}
 
-		if err != nil {
-			return fmt.Errorf("readRequest: could not read from request content: %s", err.Error())
+			if err != nil {
+				return fmt.Errorf("readRequest: could not read from request content: %s", err.Error())
+			}
 		}
 	}
 
@@ -655,9 +681,17 @@ func (d *customDialer) readRequest(scheme string, reqPipe *io.PipeReader, target
 
 	// Send the WARC-Target-URI to a channel so that it can be picked-up
 	// by the goroutine responsible for writing the response
-	warcTargetURIChannel <- warcTargetURI
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case warcTargetURIChannel <- warcTargetURI:
+	}
 
-	recordChan <- requestRecord
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case recordChan <- requestRecord:
+	}
 
 	return nil
 }

@@ -1,6 +1,7 @@
 package warc
 
 import (
+	"context"
 	"errors"
 	"os"
 	"sync"
@@ -76,7 +77,7 @@ func TestNoDNSServersConfigured(t *testing.T) {
 
 	wantErr := errors.New("no DNS servers configured")
 	d.DNSConfig.Servers = []string{}
-	_, err := d.archiveDNS(target)
+	_, err := d.archiveDNS(context.Background(), target)
 	if err.Error() != wantErr.Error() {
 		t.Errorf("Want error %s, got %s", wantErr, err)
 	}
@@ -89,7 +90,7 @@ func TestNormalDNSResolution(t *testing.T) {
 	defer cleanup()
 
 	d.DNSConfig.Servers = []string{publicDNS}
-	IP, err := d.archiveDNS(target)
+	IP, err := d.archiveDNS(context.Background(), target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +115,7 @@ func TestIPv6Only(t *testing.T) {
 	d.disableIPv6 = false
 
 	d.DNSConfig.Servers = []string{publicDNS}
-	IP, err := d.archiveDNS(target)
+	IP, err := d.archiveDNS(context.Background(), target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +128,7 @@ func TestNXDOMAIN(t *testing.T) {
 	d, _, cleanup := setup(t)
 	defer cleanup()
 
-	IP, err := d.archiveDNS(nxdomain)
+	IP, err := d.archiveDNS(context.Background(), nxdomain)
 	if err == nil {
 		t.Error("Want failure,", "got resolved IP", IP)
 	}
@@ -141,7 +142,7 @@ func TestDNSFallback(t *testing.T) {
 
 	d.DNSRecords.Delete(targetHost)
 	d.DNSConfig.Servers = []string{invalidDNS, publicDNS}
-	IP, err := d.archiveDNS(target)
+	IP, err := d.archiveDNS(context.Background(), target)
 	if err != nil {
 		t.Fatal(err)
 	}
