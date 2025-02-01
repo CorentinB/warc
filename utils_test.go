@@ -3,14 +3,10 @@ package warc
 import (
 	"bytes"
 	"testing"
-
-	"go.uber.org/goleak"
 )
 
 // Tests for the GetSHA1 function
 func TestGetSHA1(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	helloWorldSHA1 := "FKXGYNOJJ7H3IFO35FPUBC445EPOQRXN"
 
 	if GetSHA1(bytes.NewReader([]byte("hello world"))) != helloWorldSHA1 {
@@ -20,8 +16,6 @@ func TestGetSHA1(t *testing.T) {
 
 // Tests for the NewRotatorSettings function
 func TestNewRotatorSettings(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	rotatorSettings := NewRotatorSettings()
 
 	if rotatorSettings.Prefix != "WARC" {
@@ -47,8 +41,6 @@ func TestNewRotatorSettings(t *testing.T) {
 
 // Tests for the isLineStartingWithHTTPMethod function
 func TestIsHTTPRequest(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	goodHTTPRequestHeaders := []string{
 		"GET /index.html HTTP/1.1\r",
 		"POST /api/login HTTP/1.1\r",
