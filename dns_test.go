@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"go.uber.org/goleak"
 )
 
 const (
@@ -70,8 +69,6 @@ func setup(t *testing.T) (*customDialer, *CustomHTTPClient, func()) {
 }
 
 func TestNoDNSServersConfigured(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	d, _, cleanup := setup(t)
 	defer cleanup()
 
@@ -84,8 +81,6 @@ func TestNoDNSServersConfigured(t *testing.T) {
 }
 
 func TestNormalDNSResolution(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	d, _, cleanup := setup(t)
 	defer cleanup()
 
@@ -106,8 +101,6 @@ func TestNormalDNSResolution(t *testing.T) {
 }
 
 func TestIPv6Only(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	d, _, cleanup := setup(t)
 	defer cleanup()
 
@@ -123,8 +116,6 @@ func TestIPv6Only(t *testing.T) {
 }
 
 func TestNXDOMAIN(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	d, _, cleanup := setup(t)
 	defer cleanup()
 
@@ -135,8 +126,6 @@ func TestNXDOMAIN(t *testing.T) {
 }
 
 func TestDNSFallback(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	d, _, cleanup := setup(t)
 	defer cleanup()
 

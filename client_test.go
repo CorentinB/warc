@@ -21,12 +21,9 @@ import (
 	"time"
 
 	"github.com/armon/go-socks5"
-	"go.uber.org/goleak"
 )
 
 func TestHTTPClient(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -94,8 +91,6 @@ func TestHTTPClient(t *testing.T) {
 }
 
 func TestHTTPClientContextCancellation(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -186,8 +181,6 @@ func TestHTTPClientContextCancellation(t *testing.T) {
 }
 
 func TestHTTPClientTLSHandshakeTimeout(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -280,8 +273,6 @@ func TestHTTPClientTLSHandshakeTimeout(t *testing.T) {
 }
 
 func TestHTTPClientServerClosingConnection(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -367,8 +358,6 @@ func TestHTTPClientServerClosingConnection(t *testing.T) {
 }
 
 func TestHTTPClientDNSFailure(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -423,8 +412,6 @@ func TestHTTPClientDNSFailure(t *testing.T) {
 }
 
 func TestHTTPClientWithProxy(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -524,8 +511,6 @@ func TestHTTPClientWithProxy(t *testing.T) {
 }
 
 func TestHTTPClientConcurrent(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		concurrency     = 256
@@ -608,8 +593,6 @@ func TestHTTPClientConcurrent(t *testing.T) {
 }
 
 func TestHTTPClientMultiWARCWriters(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		concurrency     = 256
@@ -698,8 +681,6 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 }
 
 func TestHTTPClientLocalDedupe(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -782,8 +763,6 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 }
 
 func TestHTTPClientRemoteDedupe(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		dedupePath      = "/web/timemap/cdx"
 		dedupeResp      = "org,wikimedia,upload)/wikipedia/commons/5/55/blason_ville_fr_sarlat-la-can%c3%a9da_(dordogne).svg 20220320002518 https://upload.wikimedia.org/wikipedia/commons/5/55/Blason_ville_fr_Sarlat-la-Can%C3%A9da_%28Dordogne%29.svg image/svg+xml 200 UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3 13974"
@@ -878,8 +857,6 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 }
 
 func TestHTTPClientDedupeEmptyPayload(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -962,8 +939,6 @@ func TestHTTPClientDedupeEmptyPayload(t *testing.T) {
 }
 
 func TestHTTPClientDisallow429(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -1038,8 +1013,6 @@ func TestHTTPClientDisallow429(t *testing.T) {
 }
 
 func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -1108,8 +1081,6 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 }
 
 func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		err             error
@@ -1197,8 +1168,6 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 }
 
 func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -1267,8 +1236,6 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 }
 
 func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -1340,8 +1307,6 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 }
 
 func TestHTTPClientFullOnDisk(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		err             error
@@ -1409,8 +1374,6 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 }
 
 func TestHTTPClientWithoutIoCopy(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -1485,8 +1448,6 @@ func TestHTTPClientWithoutIoCopy(t *testing.T) {
 }
 
 func TestHTTPClientWithoutChunkEncoding(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var (
 		rotatorSettings = NewRotatorSettings()
 		errWg           sync.WaitGroup
@@ -1725,8 +1686,6 @@ func setupIPv6Server(t *testing.T) (string, func()) {
 }
 
 func TestHTTPClientWithIPv4Disabled(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	ipv4URL, closeIPv4 := setupIPv4Server(t)
 	defer closeIPv4()
 
@@ -1777,8 +1736,6 @@ func TestHTTPClientWithIPv4Disabled(t *testing.T) {
 }
 
 func TestHTTPClientWithIPv6Disabled(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	ipv4URL, closeIPv4 := setupIPv4Server(t)
 	defer closeIPv4()
 

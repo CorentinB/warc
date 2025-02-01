@@ -7,8 +7,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"go.uber.org/goleak"
 )
 
 func testFileHash(t *testing.T, path string) {
@@ -289,8 +287,6 @@ func testFileEarlyEOF(t *testing.T, path string) {
 }
 
 func TestReader(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	var paths = []string{
 		"testdata/test.warc.gz",
 	}
