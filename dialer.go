@@ -430,20 +430,18 @@ func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader
 	warcTargetURIChannel <- warcTargetURI
 
 	// If the HTTP status code is to be excluded as per client's settings, we stop here
-	for i := 0; i < len(d.client.skipHTTPStatusCodes); i++ {
-		if d.client.skipHTTPStatusCodes[i] == resp.StatusCode {
-			err = resp.Body.Close()
-			if err != nil {
-				return fmt.Errorf("readResponse: response code was blocked by config url and closing body failed: %s", err.Error())
-			}
-
-			err = responseRecord.Content.Close()
-			if err != nil {
-				return fmt.Errorf("readResponse: response code was blocked by config url and closing content failed: %s", err.Error())
-			}
-
-			return fmt.Errorf("readResponse: response code was blocked by config url: '%s'", warcTargetURI)
+	if len(d.client.skipHTTPStatusCodes) > 0 && slices.Contains(d.client.skipHTTPStatusCodes, resp.StatusCode) {
+		err = resp.Body.Close()
+		if err != nil {
+			return fmt.Errorf("readResponse: response code was blocked by config url and closing body failed: %s", err.Error())
 		}
+
+		err = responseRecord.Content.Close()
+		if err != nil {
+			return fmt.Errorf("readResponse: response code was blocked by config url and closing content failed: %s", err.Error())
+		}
+
+		return fmt.Errorf("readResponse: response code was blocked by config url: '%s'", warcTargetURI)
 	}
 
 	// Calculate the WARC-Payload-Digest
