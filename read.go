@@ -19,7 +19,7 @@ type Reader struct {
 }
 
 type reader interface {
-	ReadString(delim byte) (line string, err error)
+	ReadBytes(delim byte) (line []byte, err error)
 }
 
 // NewReader returns a new WARC reader
@@ -46,14 +46,13 @@ func NewReader(reader io.ReadCloser) (*Reader, error) {
 
 func readUntilDelim(r reader, delim []byte) (line []byte, err error) {
 	for {
-		s := ""
-		s, err = r.ReadString(delim[len(delim)-1])
+		var s []byte
+		s, err = r.ReadBytes(delim[len(delim)-1])
+		line = append(line, s...)
 		if err != nil {
-			line = append(line, []byte(s)...)
 			return line, err
 		}
 
-		line = append(line, []byte(s)...)
 		if bytes.HasSuffix(line, delim) {
 			return line[:len(line)-len(delim)], nil
 		}
