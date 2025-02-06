@@ -36,6 +36,7 @@ type HTTPClientSettings struct {
 	DisableIPv4           bool
 	DisableIPv6           bool
 	IPv6AnyIP             bool
+	KeepAliveMaxIdleConns int
 }
 
 type CustomHTTPClient struct {
@@ -180,6 +181,10 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		HTTPClientSettings.DNSRecordsTTL = 5 * time.Minute
 	}
 
+	if HTTPClientSettings.KeepAliveMaxIdleConns == 0 {
+		HTTPClientSettings.KeepAliveMaxIdleConns = 1000
+	}
+
 	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
@@ -188,7 +193,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		return nil, err
 	}
 
-	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.DecompressBody, HTTPClientSettings.TLSHandshakeTimeout)
+	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.DecompressBody, HTTPClientSettings.TLSHandshakeTimeout, HTTPClientSettings.KeepAliveMaxIdleConns)
 	if err != nil {
 		return nil, err
 	}
