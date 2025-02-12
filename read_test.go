@@ -140,12 +140,10 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 			t.Fatalf("WARC-Payload-Digest doesn't match intended result %s != %s", record.Header.Get("WARC-Payload-Digest"), hash)
 		}
 
-		badContentLength := false
-		for i := 0; i < len(expectedContentLength); i++ {
-			if record.Header.Get("Content-Length") != expectedContentLength[i] {
+		var badContentLength bool
+		for _, length := range expectedContentLength {
+			if record.Header.Get("Content-Length") != length {
 				badContentLength = true
-			} else {
-				badContentLength = false
 				break
 			}
 		}
@@ -155,7 +153,8 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 			if err != nil {
 				t.Fatalf("failed to close record content: %v", err)
 			}
-			t.Fatalf("Content-Length doesn't match intended result %s != %s", record.Header.Get("Content-Length"), expectedContentLength)
+
+			t.Fatalf("Content-Length doesn't match intended result, got %s expected %s", record.Header.Get("Content-Length"), expectedContentLength)
 		}
 
 		err = record.Content.Close()
