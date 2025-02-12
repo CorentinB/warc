@@ -201,7 +201,7 @@ func (d *customDialer) CustomDialTLSContext(ctx context.Context, network, addres
 
 	tlsConn := tls.UClient(plainConn, cfg, tls.HelloCustom)
 
-	if err := tlsConn.ApplyPreset(getCustomTLSSpec()); err != nil {
+	if err := tlsConn.ApplyPreset(customTLSSpec); err != nil {
 		return nil, err
 	}
 
