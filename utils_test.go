@@ -14,6 +14,23 @@ func TestGetSHA1(t *testing.T) {
 	}
 }
 
+// Tests for the GetSHA256 function
+func TestGetSHA256(t *testing.T) {
+	helloWorldSHA256 := "XFGSPOMTJU7ARJJOKLL5U7NL7LCIJ37DPJJYB3UQRD32ZYXPZXUQ===="
+
+	if GetSHA256(bytes.NewReader([]byte("hello world"))) != helloWorldSHA256 {
+		t.Error("Failed to generate SHA256 with GetSHA256")
+	}
+}
+
+func TestGetSHA256Base16(t *testing.T) {
+	helloWorldSHA256Base16 := "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+
+	if GetSHA256Base16(bytes.NewReader([]byte("hello world"))) != helloWorldSHA256Base16 {
+		t.Error("Failed to generate SHA256Base16 with GetSHA256Base16")
+	}
+}
+
 // Tests for the NewRotatorSettings function
 func TestNewRotatorSettings(t *testing.T) {
 	rotatorSettings := NewRotatorSettings()
