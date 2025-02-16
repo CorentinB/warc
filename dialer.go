@@ -44,6 +44,11 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout,
 	d.disableIPv4 = disableIPv4
 	d.disableIPv6 = disableIPv6
 
+	d.KeepAliveConfig.Enable = true
+	d.KeepAliveConfig.Idle = 30 * time.Second
+	d.KeepAliveConfig.Interval = 30 * time.Second
+	d.KeepAliveConfig.Count = 3
+
 	d.DNSRecordsTTL = DNSRecordsTTL
 	d.DNSRecords = new(sync.Map)
 	d.DNSConfig, err = dns.ClientConfigFromFile("/etc/resolv.conf")
