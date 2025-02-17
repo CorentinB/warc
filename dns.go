@@ -5,15 +5,9 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/miekg/dns"
 )
-
-type cachedIP struct {
-	expiresAt time.Time
-	ip        net.IP
-}
 
 const maxFallbackDNSServers = 3
 
@@ -31,13 +25,8 @@ func (d *customDialer) archiveDNS(ctx context.Context, address string) (resolved
 	}
 
 	// Check cache first
-	if cached, ok := d.DNSRecords.Load(address); ok {
-		cachedEntry := cached.(cachedIP)
-		if time.Now().Before(cachedEntry.expiresAt) {
-			return cachedEntry.ip, nil
-		}
-		// Cache entry expired, remove it
-		d.DNSRecords.Delete(address)
+	if cachedIP, ok := d.DNSRecords.Get(address); ok {
+		return cachedIP, nil
 	}
 
 	var wg sync.WaitGroup
@@ -86,10 +75,7 @@ func (d *customDialer) archiveDNS(ctx context.Context, address string) (resolved
 
 	if resolvedIP != nil {
 		// Cache the result
-		d.DNSRecords.Store(address, cachedIP{
-			ip:        resolvedIP,
-			expiresAt: time.Now().Add(d.DNSRecordsTTL),
-		})
+		d.DNSRecords.Set(address, resolvedIP)
 		return resolvedIP, nil
 	}
 

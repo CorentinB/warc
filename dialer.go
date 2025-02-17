@@ -17,6 +17,7 @@ import (
 
 	"github.com/CorentinB/warc/pkg/spooledtempfile"
 	"github.com/google/uuid"
+	"github.com/maypok86/otter"
 	"github.com/miekg/dns"
 	tls "github.com/refraction-networking/utls"
 	"golang.org/x/net/proxy"
@@ -28,15 +29,14 @@ type customDialer struct {
 	client      *CustomHTTPClient
 	DNSConfig   *dns.ClientConfig
 	DNSClient   *dns.Client
-	DNSRecords  *sync.Map
+	DNSRecords  otter.Cache[string, net.IP]
 	net.Dialer
-	DNSServer     string
-	DNSRecordsTTL time.Duration
-	disableIPv4   bool
-	disableIPv6   bool
+	DNSServer   string
+	disableIPv4 bool
+	disableIPv6 bool
 }
 
-func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout, DNSRecordsTTL, DNSResolutionTimeout time.Duration, DNSServers []string, disableIPv4, disableIPv6 bool) (d *customDialer, err error) {
+func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout, DNSRecordsTTL, DNSResolutionTimeout time.Duration, DNSCacheSize int, DNSServers []string, disableIPv4, disableIPv6 bool) (d *customDialer, err error) {
 	d = new(customDialer)
 
 	d.Timeout = DialTimeout
@@ -44,8 +44,14 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout,
 	d.disableIPv4 = disableIPv4
 	d.disableIPv6 = disableIPv6
 
-	d.DNSRecordsTTL = DNSRecordsTTL
-	d.DNSRecords = new(sync.Map)
+	d.DNSRecords, err = otter.MustBuilder[string, net.IP](DNSCacheSize).
+		// CollectStats(). // Uncomment this line to enable stats collection, can be useful later on
+		WithTTL(DNSRecordsTTL).
+		Build()
+	if err != nil {
+		panic(err)
+	}
+
 	d.DNSConfig, err = dns.ClientConfigFromFile("/etc/resolv.conf")
 	if err != nil {
 		return nil, err

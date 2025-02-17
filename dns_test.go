@@ -3,11 +3,12 @@ package warc
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/maypok86/otter"
 	"github.com/miekg/dns"
 )
 
@@ -23,7 +24,13 @@ const (
 func newTestCustomDialer() (d *customDialer) {
 	d = new(customDialer)
 
-	d.DNSRecords = new(sync.Map)
+	var err error
+	d.DNSRecords, err = otter.MustBuilder[string, net.IP](1000).
+		WithTTL(1 * time.Hour).
+		Build()
+	if err != nil {
+		panic(err)
+	}
 	d.DNSConfig = &dns.ClientConfig{
 		Port: "53",
 	}
@@ -55,7 +62,6 @@ func setup(t *testing.T) (*customDialer, *CustomHTTPClient, func()) {
 
 	d := newTestCustomDialer()
 	d.client = httpClient
-	d.DNSRecordsTTL = time.Second
 
 	cleanup := func() {
 		err = httpClient.Close()
@@ -90,12 +96,11 @@ func TestNormalDNSResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loaded, ok := d.DNSRecords.Load(targetHost)
+	cachedIP, ok := d.DNSRecords.Get(targetHost)
 	if !ok {
 		t.Error("Cache not working")
 	}
-	cached := loaded.(cachedIP)
-	if cached.ip.String() != IP.String() {
+	if cachedIP.String() != IP.String() {
 		t.Error("Cached IP not matching resolved IP")
 	}
 }
@@ -136,4 +141,15 @@ func TestDNSFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("Resolved IP: %s", IP)
+}
+
+func TestOtterCacheLeak(t *testing.T) {
+	cache, err := otter.MustBuilder[string, net.IP](1000).
+		WithTTL(1 * time.Hour).
+		Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cache.Close()
 }
