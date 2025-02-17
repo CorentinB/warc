@@ -1,9 +1,11 @@
 package warc
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -138,6 +140,30 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 				t.Fatalf("failed to close record content: %v", err)
 			}
 			t.Fatalf("WARC-Payload-Digest doesn't match intended result %s != %s", record.Header.Get("WARC-Payload-Digest"), hash)
+		}
+
+		// We can't check the validity of a body that does not exist (revisit records)
+		if record.Header.Get("WARC-Type") == "response" {
+			_, err = record.Content.Seek(0, 0)
+			if err != nil {
+				t.Fatal("failed to seek record content", "recordID", record.Header.Get("WARC-Record-ID"), "err", err.Error())
+			}
+
+			resp, err := http.ReadResponse(bufio.NewReader(record.Content), nil)
+			if err != nil {
+				t.Fatal("failed to seek record content", "recordID", record.Header.Get("WARC-Record-ID"), "err", err.Error())
+			}
+			defer resp.Body.Close()
+			defer record.Content.Seek(0, 0)
+
+			calculatedRecordHash := fmt.Sprintf("sha1:%s", GetSHA1(resp.Body))
+			if record.Header.Get("WARC-Payload-Digest") != calculatedRecordHash {
+				err = record.Content.Close()
+				if err != nil {
+					t.Fatalf("failed to close record content: %v", err)
+				}
+				t.Fatalf("calculated WARC-Payload-Digest doesn't match intended result %s != %s", record.Header.Get("WARC-Payload-Digest"), calculatedRecordHash)
+			}
 		}
 
 		badContentLength := false
