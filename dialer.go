@@ -264,15 +264,13 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 		recordChan           = make(chan *Record, 2)
 		warcTargetURIChannel = make(chan string, 1)
 		recordIDs            []string
-		target               string
-		host                 string
 		err                  = new(Error)
 		errs                 = errgroup.Group{}
 	)
 
 	// Run request and response readers in parallel, respecting context
 	errs.Go(func() error {
-		return d.readRequest(ctx, scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
+		return d.readRequest(ctx, scheme, reqPipe, warcTargetURIChannel, recordChan)
 	})
 
 	errs.Go(func() error {
@@ -593,7 +591,7 @@ func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader
 	return nil
 }
 
-func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	var (
 		warcTargetURI = scheme + "://"
 		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
@@ -615,16 +613,67 @@ func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *
 	}
 
 	// Use a buffered reader for efficient parsing
-	reader := bufio.NewReader(requestRecord.Content)
-	req, err := http.ReadRequest(reader)
-	if err != nil {
-		return fmt.Errorf("readRequest: failed to parse request: %v", err)
-	}
-	defer req.Body.Close()
+	reader := bufio.NewReaderSize(requestRecord.Content, 4096) // 4KB buffer
 
-	// Extract target and host from the parsed request
-	target = req.URL.String()
-	host = req.Host
+	// State machine to parse the request
+	const (
+		stateRequestLine = iota
+		stateHeaders
+	)
+
+	var (
+		target      string
+		host        string
+		state       = stateRequestLine
+		foundHost   = false
+		foundTarget = false
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("readRequest: failed to read line: %v", err)
+		}
+
+		line = strings.TrimSpace(line)
+
+		switch state {
+		case stateRequestLine:
+			// Parse the request line (e.g., "GET /path HTTP/1.1")
+			if isHTTPRequest(line) {
+				parts := strings.Split(line, " ")
+				if len(parts) >= 2 {
+					target = parts[1] // Extract the target (path)
+					foundTarget = true
+				}
+				state = stateHeaders
+			}
+		case stateHeaders:
+			// Parse headers (e.g., "Host: example.com")
+			if line == "" {
+				break // End of headers
+			}
+
+			if strings.HasPrefix(line, "Host: ") {
+				host = strings.TrimPrefix(line, "Host: ")
+				foundHost = true
+			}
+		}
+
+		// If we've found both the target and host, we can stop parsing
+		if foundHost && foundTarget {
+			break
+		}
+	}
 
 	// Check that we successfully parsed all necessary data
 	if host != "" && target != "" {
