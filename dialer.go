@@ -609,63 +609,24 @@ func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *
 		return fmt.Errorf("readRequest: io.Copy failed: %s", err.Error())
 	}
 
-	// Parse data for WARC-Target-URI
-	var (
-		block = make([]byte, 1)
-		line  string
-	)
-
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			n, err := requestRecord.Content.Read(block)
-			if n > 0 {
-				if string(block) == "\n" {
-					if isHTTPRequest(line) {
-						target = strings.Split(line, " ")[1]
-
-						if host != "" && target != "" {
-							break loop
-						} else {
-							line = ""
-							continue
-						}
-					}
-
-					if strings.HasPrefix(line, "Host: ") {
-						host = strings.TrimPrefix(line, "Host: ")
-						host = strings.TrimSuffix(host, "\r")
-
-						if host != "" && target != "" {
-							break loop
-						} else {
-							line = ""
-							continue
-						}
-					}
-
-					line = ""
-				} else {
-					line += string(block)
-				}
-			} else {
-				break
-			}
-
-			if err == io.EOF {
-				break
-			}
-
-			if err != nil {
-				return fmt.Errorf("readRequest: could not read from request content: %s", err.Error())
-			}
-		}
+	// Seek to the beginning of the content to allow reading
+	if _, err := requestRecord.Content.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("readRequest: seek failed: %s", err.Error())
 	}
 
-	// Check that we achieved to parse all the necessary data
+	// Use a buffered reader for efficient parsing
+	reader := bufio.NewReader(requestRecord.Content)
+	req, err := http.ReadRequest(reader)
+	if err != nil {
+		return fmt.Errorf("readRequest: failed to parse request: %v", err)
+	}
+	defer req.Body.Close()
+
+	// Extract target and host from the parsed request
+	target = req.URL.String()
+	host = req.Host
+
+	// Check that we successfully parsed all necessary data
 	if host != "" && target != "" {
 		// HTTP's request first line can include a complete path, we check that
 		if strings.HasPrefix(target, scheme+"://"+host) {
@@ -677,7 +638,7 @@ loop:
 		return errors.New("unable to parse data necessary for WARC-Target-URI")
 	}
 
-	// Send the WARC-Target-URI to a channel so that it can be picked-up
+	// Send the WARC-Target-URI to a channel so that it can be picked up
 	// by the goroutine responsible for writing the response
 	select {
 	case <-ctx.Done():
@@ -685,6 +646,7 @@ loop:
 	case warcTargetURIChannel <- warcTargetURI:
 	}
 
+	// Send the request record to the channel for further processing
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
