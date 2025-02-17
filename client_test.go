@@ -86,7 +86,7 @@ func TestHTTPClient(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1, server.URL+"/")
 	}
 }
 
@@ -506,7 +506,7 @@ func TestHTTPClientWithProxy(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1, server.URL+"/")
 	}
 }
 
@@ -588,7 +588,7 @@ func TestHTTPClientConcurrent(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 256)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 256, server.URL+"/")
 	}
 }
 
@@ -672,7 +672,7 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 
 	totalRead := 0
 	for _, path := range files {
-		totalRead += testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, -1)
+		totalRead += testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, -1, server.URL+"/")
 	}
 
 	if totalRead != concurrency {
@@ -752,7 +752,7 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 2)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 2, server.URL+"/")
 		testFileRevisitVailidity(t, path, "", "", false)
 	}
 
@@ -846,7 +846,7 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 4)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872", "132"}, 4, server.URL+"/")
 		testFileRevisitVailidity(t, path, "20220320002518", "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", false)
 	}
 
@@ -928,7 +928,7 @@ func TestHTTPClientDedupeEmptyPayload(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ", []string{"94", "94"}, 2)
+		testFileSingleHashCheck(t, path, "sha1:3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ", []string{"94", "94"}, 2, server.URL+"/")
 		testFileRevisitVailidity(t, path, "", "", true)
 	}
 
@@ -1008,7 +1008,7 @@ func TestHTTPClientDisallow429(t *testing.T) {
 
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if 429s aren't being filtered correctly!
-		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0)
+		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0, server.URL+"/")
 	}
 }
 
@@ -1075,7 +1075,7 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", []string{"3096070"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", []string{"3096070"}, 1, server.URL+"/")
 		os.Remove(path)
 	}
 }
@@ -1159,7 +1159,7 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 
 	totalRead := 0
 	for _, path := range files {
-		totalRead = testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", []string{"3096070"}, -1) + totalRead
+		totalRead = testFileSingleHashCheck(t, path, "sha1:2WGRFHHSLP26L36FH4ZYQQ5C6WSQAGT7", []string{"3096070"}, -1, server.URL+"/") + totalRead
 	}
 
 	if totalRead != concurrency {
@@ -1230,7 +1230,7 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1, server.URL+"/")
 		os.Remove(path)
 	}
 }
@@ -1302,7 +1302,7 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 
 	for _, path := range files {
 		// note: we are actually expecting nothing here, as such, 0 for expected total. This may error if certificates aren't being verified correctly.
-		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0)
+		testFileSingleHashCheck(t, path, "n/a", []string{"0"}, 0, server.URL+"/")
 	}
 }
 
@@ -1369,7 +1369,7 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1, server.URL+"/")
 	}
 }
 
@@ -1443,7 +1443,7 @@ func TestHTTPClientWithoutIoCopy(t *testing.T) {
 
 	for _, path := range files {
 		// Check for an empty file. This is fine and expected! If we aren't copying to io.Discard correctly, it should run into an error above.
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{""}, 0)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{""}, 0, server.URL+"/")
 	}
 }
 
@@ -1504,7 +1504,7 @@ func TestHTTPClientWithoutChunkEncoding(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:3TOI6NZK7GYJSFYGATOMMNM2C5VPT3ZD", []string{"180"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:3TOI6NZK7GYJSFYGATOMMNM2C5VPT3ZD", []string{"180"}, 1, server.URL+"/")
 	}
 }
 
@@ -1572,7 +1572,7 @@ func TestHTTPClientWithZStandard(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1, server.URL+"/")
 	}
 }
 
@@ -1643,7 +1643,7 @@ func TestHTTPClientWithZStandardDictionary(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1, server.URL+"/")
 	}
 }
 
@@ -1731,7 +1731,7 @@ func TestHTTPClientWithIPv4Disabled(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:RTK62UJNR5UCIPX2J64LMV7J4JJ6EXCJ", []string{"147"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:RTK62UJNR5UCIPX2J64LMV7J4JJ6EXCJ", []string{"147"}, 1, ipv6URL+"/")
 	}
 }
 
@@ -1781,7 +1781,7 @@ func TestHTTPClientWithIPv6Disabled(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:JZIRQ2YRCQ55F6SSNPTXHKMDSKJV6QFM", []string{"147"}, 1)
+		testFileSingleHashCheck(t, path, "sha1:JZIRQ2YRCQ55F6SSNPTXHKMDSKJV6QFM", []string{"147"}, 1, ipv4URL+"/")
 	}
 }
 

@@ -78,7 +78,7 @@ func testFileScan(t *testing.T, path string) {
 	}
 }
 
-func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedContentLength []string, expectedTotal int) int {
+func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedContentLength []string, expectedTotal int, expectedURL string) int {
 	// The below function validates the Block-Digest per record while the function we are in checks for a specific Payload-Digest in records :)
 	testFileHash(t, path)
 
@@ -88,7 +88,7 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 	}
 	defer file.Close()
 
-	t.Logf("checking 'WARC-Payload-Digest' on %q", path)
+	t.Logf("checking 'WARC-Payload-Digest', 'Content-Length', and 'WARC-Target-URI' on %q", path)
 
 	reader, err := NewReader(file)
 	if err != nil {
@@ -156,6 +156,14 @@ func testFileSingleHashCheck(t *testing.T, path string, hash string, expectedCon
 				t.Fatalf("failed to close record content: %v", err)
 			}
 			t.Fatalf("Content-Length doesn't match intended result %s != %s", record.Header.Get("Content-Length"), expectedContentLength)
+		}
+
+		if record.Header.Get("WARC-Target-URI") != expectedURL {
+			err = record.Content.Close()
+			if err != nil {
+				t.Fatalf("failed to close record content: %v", err)
+			}
+			t.Fatalf("WARC-Target-URI doesn't match intended result %s != %s", record.Header.Get("WARC-Target-URI"), expectedURL)
 		}
 
 		err = record.Content.Close()
