@@ -58,7 +58,7 @@ func splitKeyValue(line string) (string, string) {
 
 func isHTTPRequest(line string) bool {
 	httpMethods := []string{"GET ", "HEAD ", "POST ", "PUT ", "DELETE ", "CONNECT ", "OPTIONS ", "TRACE ", "PATCH "}
-	protocols := []string{"HTTP/1.0\r", "HTTP/1.1\r"}
+	protocols := []string{"HTTP/1.0", "HTTP/1.1"}
 
 	for _, method := range httpMethods {
 		if strings.HasPrefix(line, method) {

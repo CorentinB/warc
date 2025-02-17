@@ -59,13 +59,13 @@ func TestNewRotatorSettings(t *testing.T) {
 // Tests for the isLineStartingWithHTTPMethod function
 func TestIsHTTPRequest(t *testing.T) {
 	goodHTTPRequestHeaders := []string{
-		"GET /index.html HTTP/1.1\r",
-		"POST /api/login HTTP/1.1\r",
-		"DELETE /api/products/456 HTTP/1.1\r",
-		"HEAD /about HTTP/1.0\r",
-		"OPTIONS / HTTP/1.1\r",
-		"PATCH /api/item/789 HTTP/1.1\r",
-		"GET /images/logo.png HTTP/1.1\r",
+		"GET /index.html HTTP/1.1",
+		"POST /api/login HTTP/1.1",
+		"DELETE /api/products/456 HTTP/1.1",
+		"HEAD /about HTTP/1.0",
+		"OPTIONS / HTTP/1.1",
+		"PATCH /api/item/789 HTTP/1.1",
+		"GET /images/logo.png HTTP/1.1",
 	}
 
 	for _, header := range goodHTTPRequestHeaders {
