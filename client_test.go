@@ -65,7 +65,7 @@ func TestHTTPClient(t *testing.T) {
 		}
 	}()
 
-	req, err := http.NewRequest("GET", server.URL, nil)
+	req, err := http.NewRequest("GET", server.URL+"/testdata/image.svg", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestHTTPClient(t *testing.T) {
 	}
 
 	for _, path := range files {
-		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1, server.URL+"/")
+		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1, server.URL+"/testdata/image.svg")
 	}
 }
 
