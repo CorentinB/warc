@@ -29,7 +29,7 @@ type customDialer struct {
 	client      *CustomHTTPClient
 	DNSConfig   *dns.ClientConfig
 	DNSClient   *dns.Client
-	DNSRecords  otter.Cache[string, net.IP]
+	DNSRecords  *otter.Cache[string, net.IP]
 	net.Dialer
 	DNSServer   string
 	disableIPv4 bool
@@ -44,13 +44,15 @@ func newCustomDialer(httpClient *CustomHTTPClient, proxyURL string, DialTimeout,
 	d.disableIPv4 = disableIPv4
 	d.disableIPv6 = disableIPv6
 
-	d.DNSRecords, err = otter.MustBuilder[string, net.IP](DNSCacheSize).
+	DNScache, err := otter.MustBuilder[string, net.IP](DNSCacheSize).
 		// CollectStats(). // Uncomment this line to enable stats collection, can be useful later on
 		WithTTL(DNSRecordsTTL).
 		Build()
 	if err != nil {
 		panic(err)
 	}
+
+	d.DNSRecords = &DNScache
 
 	d.DNSConfig, err = dns.ClientConfigFromFile("/etc/resolv.conf")
 	if err != nil {
