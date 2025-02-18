@@ -135,7 +135,7 @@ func (d *customDialer) CustomDialContext(ctx context.Context, network, address s
 		conn, err = d.proxyDialer.DialContext(ctx, network, address)
 	} else {
 		if d.client.randomLocalIP {
-			localAddr := getLocalAddr(network, IP.String())
+			localAddr := getLocalAddr(network, IP)
 			if localAddr != nil {
 				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)
@@ -177,7 +177,7 @@ func (d *customDialer) CustomDialTLSContext(ctx context.Context, network, addres
 		plainConn, err = d.proxyDialer.DialContext(ctx, network, address)
 	} else {
 		if d.client.randomLocalIP {
-			localAddr := getLocalAddr(network, IP.String())
+			localAddr := getLocalAddr(network, IP)
 			if localAddr != nil {
 				if network == "tcp" || network == "tcp4" || network == "tcp6" {
 					d.LocalAddr = localAddr.(*net.TCPAddr)
