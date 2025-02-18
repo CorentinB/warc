@@ -198,6 +198,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 
 	httpClient.closeDNSCache = func() {
 		customDialer.DNSRecords.Close()
+		time.Sleep(1 * time.Second)
 	}
 
 	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.DecompressBody, HTTPClientSettings.TLSHandshakeTimeout)
