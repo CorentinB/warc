@@ -23,9 +23,42 @@ import (
 	"github.com/armon/go-socks5"
 )
 
-func TestHTTPClient(t *testing.T) {
+// Utility function used in all tests.
+func defaultRotatorSettings(t *testing.T) *RotatorSettings {
 	var (
 		rotatorSettings = NewRotatorSettings()
+		err error
+	)
+
+	rotatorSettings.Prefix = "TEST"
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	return rotatorSettings
+}
+
+func defaultBenchmarkRotatorSettings(t *testing.B) *RotatorSettings {
+	var (
+		rotatorSettings = NewRotatorSettings()
+		err error
+	)
+
+	rotatorSettings.Prefix = "TEST"
+	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(rotatorSettings.OutputDirectory)
+
+	return rotatorSettings
+}
+
+func TestHTTPClient(t *testing.T) {
+	var (
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -42,14 +75,6 @@ func TestHTTPClient(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -92,7 +117,7 @@ func TestHTTPClient(t *testing.T) {
 
 func TestHTTPClientContextCancellation(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -113,14 +138,6 @@ func TestHTTPClientContextCancellation(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-
-	// 2) Prepare the rotator settings and create the WARC client
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-	rotatorSettings.Prefix = "CTXCANCEL"
 
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
 		RotatorSettings: rotatorSettings,
@@ -182,7 +199,7 @@ func TestHTTPClientContextCancellation(t *testing.T) {
 
 func TestHTTPClientTLSHandshakeTimeout(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 		doneChan        = make(chan bool, 1)
@@ -218,15 +235,6 @@ func TestHTTPClientTLSHandshakeTimeout(t *testing.T) {
 	}()
 
 	serverURL := "https://" + ln.Addr().String()
-
-	// 4) Prepare a temp output directory for your WARC rotator
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TLSHANDSHAKETIMEOUT"
 
 	// 5) Create the WARC-writing HTTP client
 	//    The critical part here is enforcing the handshake timeout.
@@ -274,7 +282,7 @@ func TestHTTPClientTLSHandshakeTimeout(t *testing.T) {
 
 func TestHTTPClientServerClosingConnection(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -308,14 +316,6 @@ func TestHTTPClientServerClosingConnection(t *testing.T) {
 		conn.Close()
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -359,19 +359,10 @@ func TestHTTPClientServerClosingConnection(t *testing.T) {
 
 func TestHTTPClientDNSFailure(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
-
-	// Prepare output directory
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "DNSFAIL"
 
 	// Initialize the WARC-writing HTTP client
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
@@ -413,7 +404,7 @@ func TestHTTPClientDNSFailure(t *testing.T) {
 
 func TestHTTPClientWithProxy(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -461,14 +452,6 @@ func TestHTTPClientWithProxy(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "PROXY"
-
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
 		RotatorSettings: rotatorSettings,
@@ -512,7 +495,7 @@ func TestHTTPClientWithProxy(t *testing.T) {
 
 func TestHTTPClientConcurrent(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		concurrency     = 256
 		wg              sync.WaitGroup
 		errWg           sync.WaitGroup
@@ -530,15 +513,6 @@ func TestHTTPClientConcurrent(t *testing.T) {
 		_, _ = w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	// init WARC rotator settings
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "CONC"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -594,11 +568,12 @@ func TestHTTPClientConcurrent(t *testing.T) {
 
 func TestHTTPClientMultiWARCWriters(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		concurrency     = 256
 		wg              sync.WaitGroup
 		errWg           sync.WaitGroup
 	)
+	rotatorSettings.WARCWriterPoolSize = 8
 
 	// init test HTTP endpoint
 	fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
@@ -612,16 +587,6 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 		_, _ = w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	// init WARC rotator settings
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "MWW"
-	rotatorSettings.WARCWriterPoolSize = 8
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -682,7 +647,7 @@ func TestHTTPClientMultiWARCWriters(t *testing.T) {
 
 func TestHTTPClientLocalDedupe(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -699,14 +664,6 @@ func TestHTTPClientLocalDedupe(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "DEDUP1"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
@@ -766,7 +723,7 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	var (
 		dedupePath      = "/web/timemap/cdx"
 		dedupeResp      = "org,wikimedia,upload)/wikipedia/commons/5/55/blason_ville_fr_sarlat-la-can%c3%a9da_(dordogne).svg 20220320002518 https://upload.wikimedia.org/wikipedia/commons/5/55/Blason_ville_fr_Sarlat-la-Can%C3%A9da_%28Dordogne%29.svg image/svg+xml 200 UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3 13974"
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -793,13 +750,6 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "DEDUP2"
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
 		RotatorSettings: rotatorSettings,
@@ -858,7 +808,7 @@ func TestHTTPClientRemoteDedupe(t *testing.T) {
 
 func TestHTTPClientDedupeEmptyPayload(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -874,14 +824,6 @@ func TestHTTPClientDedupeEmptyPayload(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "DEDUP3"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
@@ -940,7 +882,7 @@ func TestHTTPClientDedupeEmptyPayload(t *testing.T) {
 
 func TestHTTPClientDisallow429(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -957,14 +899,6 @@ func TestHTTPClientDisallow429(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TEST429"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
@@ -1014,7 +948,7 @@ func TestHTTPClientDisallow429(t *testing.T) {
 
 func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -1031,14 +965,6 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TEST2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1082,7 +1008,7 @@ func TestHTTPClientPayloadLargerThan2MB(t *testing.T) {
 
 func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		err             error
 		concurrency     = 64
 		wg              sync.WaitGroup
@@ -1101,14 +1027,6 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "CONCTEST2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1169,7 +1087,7 @@ func TestConcurrentHTTPClientPayloadLargerThan2MB(t *testing.T) {
 
 func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -1186,14 +1104,6 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TESTCERT1"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1237,7 +1147,7 @@ func TestHTTPClientWithSelfSignedCertificate(t *testing.T) {
 
 func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -1254,14 +1164,6 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TESTCERT2"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings, VerifyCerts: true})
@@ -1308,7 +1210,7 @@ func TestWARCWritingWithDisallowedCertificate(t *testing.T) {
 
 func TestHTTPClientFullOnDisk(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		err             error
 	)
 
@@ -1324,14 +1226,6 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TESTONDISK"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings, FullOnDisk: true})
@@ -1375,7 +1269,7 @@ func TestHTTPClientFullOnDisk(t *testing.T) {
 
 func TestHTTPClientWithoutIoCopy(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -1395,14 +1289,6 @@ func TestHTTPClientWithoutIoCopy(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TEST"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1449,7 +1335,7 @@ func TestHTTPClientWithoutIoCopy(t *testing.T) {
 
 func TestHTTPClientWithoutChunkEncoding(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
@@ -1460,14 +1346,6 @@ func TestHTTPClientWithoutChunkEncoding(t *testing.T) {
 		w.Write([]byte("small text string to ensure it isn't chunked"))
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TESTUNCHUNKED"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1510,10 +1388,11 @@ func TestHTTPClientWithoutChunkEncoding(t *testing.T) {
 
 func TestHTTPClientWithZStandard(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
+	rotatorSettings.Compression = "ZSTD"
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1527,15 +1406,6 @@ func TestHTTPClientWithZStandard(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TESTZSTD"
-	rotatorSettings.Compression = "ZSTD"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1578,10 +1448,13 @@ func TestHTTPClientWithZStandard(t *testing.T) {
 
 func TestHTTPClientWithZStandardDictionary(t *testing.T) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
 		err             error
 	)
+	rotatorSettings.Compression = "ZSTD"
+	// Use predefined compression dictionary in testdata to compress with.
+	rotatorSettings.CompressionDictionary = "testdata/dictionary"
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1595,18 +1468,6 @@ func TestHTTPClientWithZStandardDictionary(t *testing.T) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "TESTZSTDDICT"
-	rotatorSettings.Compression = "ZSTD"
-
-	// Use predefined compression dictionary in testdata to compress with.
-	rotatorSettings.CompressionDictionary = "testdata/dictionary"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1692,10 +1553,7 @@ func TestHTTPClientWithIPv4Disabled(t *testing.T) {
 	ipv6URL, closeIPv6 := setupIPv6Server(t)
 	defer closeIPv6()
 
-	rotatorSettings := NewRotatorSettings()
-	rotatorSettings.OutputDirectory, _ = os.MkdirTemp("", "warc-tests-")
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-	rotatorSettings.Prefix = "TESTIPv6Only"
+	rotatorSettings := defaultRotatorSettings(t)
 
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
 		RotatorSettings: rotatorSettings,
@@ -1742,10 +1600,7 @@ func TestHTTPClientWithIPv6Disabled(t *testing.T) {
 	ipv6URL, closeIPv6 := setupIPv6Server(t)
 	defer closeIPv6()
 
-	rotatorSettings := NewRotatorSettings()
-	rotatorSettings.OutputDirectory, _ = os.MkdirTemp("", "warc-tests-")
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-	rotatorSettings.Prefix = "TESTIPv4Only"
+	rotatorSettings := defaultRotatorSettings(t)
 
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
 		RotatorSettings: rotatorSettings,
@@ -1788,7 +1643,7 @@ func TestHTTPClientWithIPv6Disabled(t *testing.T) {
 // MARK: Benchmarks
 func BenchmarkConcurrentUnder2MB(b *testing.B) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultBenchmarkRotatorSettings(b)
 		wg              sync.WaitGroup
 		errWg           sync.WaitGroup
 		err             error
@@ -1806,14 +1661,6 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "BENCHUNDER2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1857,11 +1704,12 @@ func BenchmarkConcurrentUnder2MB(b *testing.B) {
 
 func BenchmarkConcurrentUnder2MBZStandard(b *testing.B) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultBenchmarkRotatorSettings(b)
 		wg              sync.WaitGroup
 		errWg           sync.WaitGroup
 		err             error
 	)
+	rotatorSettings.Compression = "ZSTD"
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1875,15 +1723,6 @@ func BenchmarkConcurrentUnder2MBZStandard(b *testing.B) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "BENCHUNDER2MBZSTD"
-	rotatorSettings.Compression = "ZSTD"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1927,7 +1766,7 @@ func BenchmarkConcurrentUnder2MBZStandard(b *testing.B) {
 
 func BenchmarkConcurrentOver2MB(b *testing.B) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultBenchmarkRotatorSettings(b)
 		wg              sync.WaitGroup
 		errWg           sync.WaitGroup
 		err             error
@@ -1945,14 +1784,6 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "BENCHOVER2MB"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
@@ -1996,11 +1827,12 @@ func BenchmarkConcurrentOver2MB(b *testing.B) {
 
 func BenchmarkConcurrentOver2MBZStandard(b *testing.B) {
 	var (
-		rotatorSettings = NewRotatorSettings()
+		rotatorSettings = defaultBenchmarkRotatorSettings(b)
 		wg              sync.WaitGroup
 		errWg           sync.WaitGroup
 		err             error
 	)
+	rotatorSettings.Compression = "ZSTD"
 
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2014,15 +1846,6 @@ func BenchmarkConcurrentOver2MBZStandard(b *testing.B) {
 		w.Write(fileBytes)
 	}))
 	defer server.Close()
-
-	rotatorSettings.OutputDirectory, err = os.MkdirTemp("", "warc-tests-")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer os.RemoveAll(rotatorSettings.OutputDirectory)
-
-	rotatorSettings.Prefix = "BENCHOVER2MBZSTD"
-	rotatorSettings.Compression = "ZSTD"
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
