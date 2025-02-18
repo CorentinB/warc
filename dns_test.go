@@ -24,13 +24,15 @@ const (
 func newTestCustomDialer() (d *customDialer) {
 	d = new(customDialer)
 
-	var err error
-	d.DNSRecords, err = otter.MustBuilder[string, net.IP](1000).
+	DNScache, err := otter.MustBuilder[string, net.IP](1000).
 		WithTTL(1 * time.Hour).
 		Build()
 	if err != nil {
 		panic(err)
 	}
+
+	d.DNSRecords = &DNScache
+
 	d.DNSConfig = &dns.ClientConfig{
 		Port: "53",
 	}
@@ -59,6 +61,7 @@ func setup(t *testing.T) (*customDialer, *CustomHTTPClient, func()) {
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
 	}
+	httpClient.closeDNSCache() // We discard the initial dialer cache immediately
 
 	d := newTestCustomDialer()
 	d.client = httpClient
@@ -68,7 +71,10 @@ func setup(t *testing.T) (*customDialer, *CustomHTTPClient, func()) {
 		if err != nil {
 			panic(err)
 		}
+		d.DNSRecords.Close()
 		os.RemoveAll(rotatorSettings.OutputDirectory)
+
+		time.Sleep(1 * time.Second)
 	}
 
 	return d, httpClient, cleanup
@@ -151,5 +157,24 @@ func TestOtterCacheLeak(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	cache.Close()
+}
+
+func TestOtterCacheLeakWithMultipleOp(t *testing.T) {
+	cache, err := otter.MustBuilder[string, net.IP](1000).
+		WithTTL(1 * time.Hour).
+		Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cache.Get("test")
+	cache.Set("test", net.ParseIP("8.8.8.8"))
+	cache.Get("test")
+	cache.Set("test2", net.ParseIP("8.8.4.4"))
+	cache.Get("test")
+	cache.Get("test2")
+	cache.Delete("test")
+	cache.Get("test")
 	cache.Close()
 }
