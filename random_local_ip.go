@@ -122,14 +122,7 @@ func GetNextIP(availableIPs *availableIPs) net.IP {
 	return ipNet.IP
 }
 
-func getLocalAddr(network, IP string) any {
-	IP = strings.Trim(IP, "[]")
-
-	destIP := net.ParseIP(IP)
-	if destIP == nil {
-		return nil
-	}
-
+func getLocalAddr(network string, destIP net.IP) any {
 	if destIP.To4() != nil {
 		if strings.Contains(network, "tcp") {
 			return &net.TCPAddr{IP: GetNextIP(IPv4)}
