@@ -168,8 +168,7 @@ func generateRandomIPv6(baseIPv6Net net.IPNet) (net.IP, error) {
 	}
 
 	// Construct the randomized IP address
-	randomizedIP := make(net.IP, net.IPv6len)
-	copy(randomizedIP, baseIP.Mask(baseIPv6Net.Mask)) // Copy the network prefix
+	randomizedIP := baseIP.Mask(baseIPv6Net.Mask)
 
 	// Apply the random host bits to the randomized IP
 	for i := 0; i < nBytes; i++ {
