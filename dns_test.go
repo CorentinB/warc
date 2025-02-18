@@ -148,33 +148,3 @@ func TestDNSFallback(t *testing.T) {
 	}
 	t.Logf("Resolved IP: %s", IP)
 }
-
-func TestOtterCacheLeak(t *testing.T) {
-	cache, err := otter.MustBuilder[string, net.IP](1000).
-		WithTTL(1 * time.Hour).
-		Build()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cache.Close()
-}
-
-func TestOtterCacheLeakWithMultipleOp(t *testing.T) {
-	cache, err := otter.MustBuilder[string, net.IP](1000).
-		WithTTL(1 * time.Hour).
-		Build()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cache.Get("test")
-	cache.Set("test", net.ParseIP("8.8.8.8"))
-	cache.Get("test")
-	cache.Set("test2", net.ParseIP("8.8.4.4"))
-	cache.Get("test")
-	cache.Get("test2")
-	cache.Delete("test")
-	cache.Get("test")
-	cache.Close()
-}
