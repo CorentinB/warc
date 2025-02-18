@@ -264,15 +264,13 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 		recordChan           = make(chan *Record, 2)
 		warcTargetURIChannel = make(chan string, 1)
 		recordIDs            []string
-		target               string
-		host                 string
 		err                  = new(Error)
 		errs                 = errgroup.Group{}
 	)
 
 	// Run request and response readers in parallel, respecting context
 	errs.Go(func() error {
-		return d.readRequest(ctx, scheme, reqPipe, target, host, warcTargetURIChannel, recordChan)
+		return d.readRequest(ctx, scheme, reqPipe, warcTargetURIChannel, recordChan)
 	})
 
 	errs.Go(func() error {
@@ -593,7 +591,7 @@ func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader
 	return nil
 }
 
-func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, target string, host string, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	var (
 		warcTargetURI = scheme + "://"
 		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
@@ -609,63 +607,75 @@ func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *
 		return fmt.Errorf("readRequest: io.Copy failed: %s", err.Error())
 	}
 
-	// Parse data for WARC-Target-URI
-	var (
-		block = make([]byte, 1)
-		line  string
+	// Seek to the beginning of the content to allow reading
+	if _, err := requestRecord.Content.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("readRequest: seek failed: %s", err.Error())
+	}
+
+	// Use a buffered reader for efficient parsing
+	reader := bufio.NewReaderSize(requestRecord.Content, 4096) // 4KB buffer
+
+	// State machine to parse the request
+	const (
+		stateRequestLine = iota
+		stateHeaders
 	)
 
-loop:
+	var (
+		target      string
+		host        string
+		state       = stateRequestLine
+		foundHost   = false
+		foundTarget = false
+	)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			n, err := requestRecord.Content.Read(block)
-			if n > 0 {
-				if string(block) == "\n" {
-					if isHTTPRequest(line) {
-						target = strings.Split(line, " ")[1]
+		}
 
-						if host != "" && target != "" {
-							break loop
-						} else {
-							line = ""
-							continue
-						}
-					}
-
-					if strings.HasPrefix(line, "Host: ") {
-						host = strings.TrimPrefix(line, "Host: ")
-						host = strings.TrimSuffix(host, "\r")
-
-						if host != "" && target != "" {
-							break loop
-						} else {
-							line = ""
-							continue
-						}
-					}
-
-					line = ""
-				} else {
-					line += string(block)
-				}
-			} else {
-				break
-			}
-
+		line, err := reader.ReadString('\n')
+		if err != nil {
 			if err == io.EOF {
 				break
 			}
+			return fmt.Errorf("readRequest: failed to read line: %v", err)
+		}
 
-			if err != nil {
-				return fmt.Errorf("readRequest: could not read from request content: %s", err.Error())
+		line = strings.TrimSpace(line)
+
+		switch state {
+		case stateRequestLine:
+			// Parse the request line (e.g., "GET /path HTTP/1.1")
+			if isHTTPRequest(line) {
+				parts := strings.Split(line, " ")
+				if len(parts) >= 2 {
+					target = parts[1] // Extract the target (path)
+					foundTarget = true
+				}
+				state = stateHeaders
 			}
+		case stateHeaders:
+			// Parse headers (e.g., "Host: example.com")
+			if line == "" {
+				break // End of headers
+			}
+
+			if strings.HasPrefix(line, "Host: ") {
+				host = strings.TrimPrefix(line, "Host: ")
+				foundHost = true
+			}
+		}
+
+		// If we've found both the target and host, we can stop parsing
+		if foundHost && foundTarget {
+			break
 		}
 	}
 
-	// Check that we achieved to parse all the necessary data
+	// Check that we successfully parsed all necessary data
 	if host != "" && target != "" {
 		// HTTP's request first line can include a complete path, we check that
 		if strings.HasPrefix(target, scheme+"://"+host) {
@@ -677,7 +687,7 @@ loop:
 		return errors.New("unable to parse data necessary for WARC-Target-URI")
 	}
 
-	// Send the WARC-Target-URI to a channel so that it can be picked-up
+	// Send the WARC-Target-URI to a channel so that it can be picked up
 	// by the goroutine responsible for writing the response
 	select {
 	case <-ctx.Done():
@@ -685,6 +695,7 @@ loop:
 	case warcTargetURIChannel <- warcTargetURI:
 	}
 
+	// Send the request record to the channel for further processing
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
