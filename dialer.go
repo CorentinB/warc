@@ -134,7 +134,7 @@ func (d *customDialer) CustomDialContext(ctx context.Context, network, address s
 		return nil, errors.New("no supported network type available")
 	}
 
-	IP, err := d.archiveDNS(ctx, address)
+	IP, _, err := d.archiveDNS(ctx, address)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (d *customDialer) CustomDialTLSContext(ctx context.Context, network, addres
 		return nil, errors.New("no supported network type available")
 	}
 
-	IP, err := d.archiveDNS(ctx, address)
+	IP, _, err := d.archiveDNS(ctx, address)
 	if err != nil {
 		return nil, err
 	}
