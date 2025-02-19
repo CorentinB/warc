@@ -337,7 +337,7 @@ func TestGetAvailableIPsAnyIP(t *testing.T) {
 	newIPv4 := make([]net.IPNet, 0)
 	newIPv6 := make([]net.IPNet, 0)
 	for _, iface := range interfaces {
-		if strings.Contains(iface.Name, "docker") || strings.Contains(iface.Flags.String(), "pointtopoint") || !strings.Contains(iface.Flags.String(), "up") {
+		if strings.Contains(iface.Name, "docker") || iface.Flags&net.FlagPointToPoint != 0 || iface.Flags&net.FlagUp == 0 {
 			continue
 		} else {
 			t.Logf("Interface: %v", iface.Name)
