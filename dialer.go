@@ -20,6 +20,7 @@ import (
 	"github.com/miekg/dns"
 	tls "github.com/refraction-networking/utls"
 	"golang.org/x/net/proxy"
+	"golang.org/x/sync/errgroup"
 )
 
 type customDialer struct {
@@ -259,69 +260,80 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 	defer d.client.WaitGroup.Done()
 
 	var (
-		batch          = NewRecordBatch()
-		recordIDs      []string
-		err            error
-		warcTargetURI  string
-		requestRecord  *Record
-		responseRecord *Record
+		batch                = NewRecordBatch()
+		recordChan           = make(chan *Record, 2)
+		warcTargetURIChannel = make(chan string, 1)
+		recordIDs            []string
+		err                  = new(Error)
+		errs                 = errgroup.Group{}
 	)
 
-	requestRecord, warcTargetURI, err = d.readRequest(ctx, scheme, reqPipe)
-	if err != nil {
-		// Signal the error
+	// Run request and response readers in parallel, respecting context
+	errs.Go(func() error {
+		return d.readRequest(ctx, scheme, reqPipe, warcTargetURIChannel, recordChan)
+	})
+
+	errs.Go(func() error {
+		return d.readResponse(ctx, respPipe, warcTargetURIChannel, recordChan)
+	})
+
+	// Wait for both goroutines to finish
+	readErr := errs.Wait()
+	close(recordChan)
+
+	if readErr != nil {
 		d.client.ErrChan <- &Error{
-			Err:  fmt.Errorf("readRequest: %s", err.Error()),
+			Err:  readErr,
 			Func: "writeWARCFromConnection",
 		}
 
-		// Check if the request record is nil, if so, panic
-		if requestRecord == nil {
-			panic("readRequest: request record is nil, fix the code")
+		for record := range recordChan {
+			if closeErr := record.Content.Close(); closeErr != nil {
+				d.client.ErrChan <- &Error{
+					Err:  closeErr,
+					Func: "writeWARCFromConnection",
+				}
+			}
 		}
 
-		// Close the request content, if it fails, panic
-		errClose := requestRecord.Content.Close()
-		if errClose != nil {
-			panic(fmt.Sprintf("readRequest: closing request content failed: %s", errClose.Error()))
-		}
-
-		// We can't continue without a request record
 		return
 	}
 
-	responseRecord, err = d.readResponse(ctx, respPipe, warcTargetURI)
-	if err != nil {
-		d.client.ErrChan <- &Error{
-			Err:  fmt.Errorf("readResponse: %s", err.Error()),
-			Func: "writeWARCFromConnection",
+	for record := range recordChan {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			recordIDs = append(recordIDs, uuid.NewString())
+			batch.Records = append(batch.Records, record)
+		}
+	}
+
+	if len(batch.Records) != 2 {
+		err.Err = errors.New("warc: there was an unspecified problem creating one of the WARC records")
+		d.client.ErrChan <- err
+
+		for _, record := range batch.Records {
+			if closeErr := record.Content.Close(); closeErr != nil {
+				d.client.ErrChan <- &Error{
+					Err:  closeErr,
+					Func: "writeWARCFromConnection",
+				}
+			}
 		}
 
-		// Check if the response record is nil, if so, panic
-		if responseRecord == nil {
-			panic("readRequest: response record is nil, fix the code")
-		}
-
-		// Close the response content, if it fails, panic
-		errClose := responseRecord.Content.Close()
-		if errClose != nil {
-			panic(fmt.Sprintf("readRequest: closing response content failed: %s", errClose.Error()))
-		}
-
-		// We can't continue without a response record
 		return
 	}
 
-	// Add the records to the batch
-	// TODO make a better record system cause this looks like shit
-	recordIDs = append(recordIDs, uuid.NewString())
-	batch.Records = append(batch.Records, responseRecord)
-	recordIDs = append(recordIDs, uuid.NewString())
-	batch.Records = append(batch.Records, requestRecord)
-
-	// response should come first
-	if batch.Records[0].Header.Get("WARC-Type") == "request" {
+	if batch.Records[0].Header.Get("WARC-Type") != "response" {
 		slices.Reverse(batch.Records)
+	}
+
+	var warcTargetURI string
+	select {
+	case warcTargetURI = <-warcTargetURIChannel:
+	case <-ctx.Done():
+		return
 	}
 
 	for i, r := range batch.Records {
@@ -372,15 +384,15 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 	}
 
 	select {
+	case d.client.WARCWriter <- batch:
 	case <-ctx.Done():
 		return
-	case d.client.WARCWriter <- batch:
 	}
 }
 
-func (d *customDialer) readResponse(ctx context.Context, responseRecord *Record, warcTargetURI string) (responseRecord *Record, err error) {
+func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
 	// Initialize the response record
-	responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
+	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
 	responseRecord.Header.Set("WARC-Type", "response")
 	responseRecord.Header.Set("Content-Type", "application/http; msgtype=response")
 
@@ -389,15 +401,15 @@ func (d *customDialer) readResponse(ctx context.Context, responseRecord *Record,
 	if err != nil {
 		closeErr := responseRecord.Content.Close()
 		if closeErr != nil {
-			return responseRecord, fmt.Errorf("io.Copy failed and closing content failed: %s", closeErr.Error())
+			return fmt.Errorf("readResponse: io.Copy failed and closing content failed: %s", closeErr.Error())
 		}
 
-		return responseRecord, fmt.Errorf("io.Copy failed: %s", err.Error())
+		return fmt.Errorf("readResponse: io.Copy failed: %s", err.Error())
 	}
 
 	select {
 	case <-ctx.Done():
-		return responseRecord, ctx.Err()
+		return ctx.Err()
 	default:
 	}
 
@@ -405,25 +417,32 @@ func (d *customDialer) readResponse(ctx context.Context, responseRecord *Record,
 	if err != nil {
 		closeErr := responseRecord.Content.Close()
 		if closeErr != nil {
-			return responseRecord, fmt.Errorf("http.ReadResponse failed and closing content failed: %s", closeErr.Error())
+			return fmt.Errorf("readResponse: http.ReadResponse failed and closing content failed: %s", closeErr.Error())
 		}
 
-		return responseRecord, err
+		return err
 	}
+
+	// Grab the WARC-Target-URI and send it back for records post-processing
+	var warcTargetURI, ok = <-warcTargetURIChannel
+	if !ok {
+		return errors.New("readResponse: WARC-Target-URI channel closed due to readRequest error")
+	}
+	warcTargetURIChannel <- warcTargetURI
 
 	// If the HTTP status code is to be excluded as per client's settings, we stop here
 	if len(d.client.skipHTTPStatusCodes) > 0 && slices.Contains(d.client.skipHTTPStatusCodes, resp.StatusCode) {
 		err = resp.Body.Close()
 		if err != nil {
-			return responseRecord, fmt.Errorf("response code was blocked by config url and closing body failed: %s", err.Error())
+			return fmt.Errorf("readResponse: response code was blocked by config url and closing body failed: %s", err.Error())
 		}
 
 		err = responseRecord.Content.Close()
 		if err != nil {
-			return responseRecord, fmt.Errorf("response code was blocked by config url and closing content failed: %s", err.Error())
+			return fmt.Errorf("readResponse: response code was blocked by config url and closing content failed: %s", err.Error())
 		}
 
-		return responseRecord, fmt.Errorf("response code was blocked by config url: '%s'", warcTargetURI)
+		return fmt.Errorf("readResponse: response code was blocked by config url: '%s'", warcTargetURI)
 	}
 
 	// Calculate the WARC-Payload-Digest
@@ -431,16 +450,16 @@ func (d *customDialer) readResponse(ctx context.Context, responseRecord *Record,
 	if strings.HasPrefix(payloadDigest, "ERROR: ") {
 		closeErr := responseRecord.Content.Close()
 		if closeErr != nil {
-			return responseRecord, fmt.Errorf("SHA1 calculation failed and closing content failed: %s", closeErr.Error())
+			return fmt.Errorf("readResponse: SHA1 calculation failed and closing content failed: %s", closeErr.Error())
 		}
 
 		// This should _never_ happen.
-		return responseRecord, fmt.Errorf("SHA1 ran into an unrecoverable error: %s url: %s", payloadDigest, warcTargetURI)
+		return fmt.Errorf("readResponse: SHA1 ran into an unrecoverable error: %s url: %s", payloadDigest, warcTargetURI)
 	}
 
 	err = resp.Body.Close()
 	if err != nil {
-		return responseRecord, fmt.Errorf("closing body after SHA1 calculation failed: %s", err.Error())
+		return fmt.Errorf("readResponse: closing body after SHA1 calculation failed: %s", err.Error())
 	}
 
 	responseRecord.Header.Set("WARC-Payload-Digest", "sha1:"+payloadDigest)
@@ -476,7 +495,7 @@ func (d *customDialer) readResponse(ctx context.Context, responseRecord *Record,
 		// Find the position of the end of the headers
 		_, err := responseRecord.Content.Seek(0, 0)
 		if err != nil {
-			return responseRecord, fmt.Errorf("could not seek to the beginning of the content: %s", err.Error())
+			return fmt.Errorf("readResponse: could not seek to the beginning of the content: %s", err.Error())
 		}
 
 		found := false
@@ -524,13 +543,13 @@ func (d *customDialer) readResponse(ctx context.Context, responseRecord *Record,
 			}
 
 			if err != nil {
-				return responseRecord, err
+				return err
 			}
 		}
 
 		// This should really never happen! This could be the result of a malfunctioning HTTP server or something currently unknown!
 		if endOfHeadersOffset == -1 {
-			return responseRecord, fmt.Errorf("could not find the end of the headers")
+			return errors.New("readResponse: could not find the end of the headers")
 		}
 
 		// Write the data up until the end of the headers to a temporary buffer
@@ -543,7 +562,7 @@ func (d *customDialer) readResponse(ctx context.Context, responseRecord *Record,
 			if n > 0 {
 				_, err = tempBuffer.Write(block)
 				if err != nil {
-					return responseRecord, fmt.Errorf("could not write to temporary buffer: %s", err.Error())
+					return fmt.Errorf("readResponse: could not write to temporary buffer: %s", err.Error())
 				}
 			}
 
@@ -552,7 +571,7 @@ func (d *customDialer) readResponse(ctx context.Context, responseRecord *Record,
 			}
 
 			if err != nil {
-				return responseRecord, fmt.Errorf("could not read from response content: %s", err.Error())
+				return fmt.Errorf("readResponse: could not read from response content: %s", err.Error())
 			}
 
 			wrote++
@@ -565,32 +584,37 @@ func (d *customDialer) readResponse(ctx context.Context, responseRecord *Record,
 		// Close old buffer
 		err = responseRecord.Content.Close()
 		if err != nil {
-			return responseRecord, fmt.Errorf("could not close old content buffer: %s", err.Error())
+			return fmt.Errorf("readResponse: could not close old content buffer: %s", err.Error())
 		}
 		responseRecord.Content = tempBuffer
 	}
 
-	return responseRecord, nil
+	recordChan <- responseRecord
+
+	return nil
 }
 
-func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader) (requestRecord *Record, warcTargetURI string, err error) {
-	// Initialize the work variables
-	warcTargetURI = scheme + "://"
-	requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
+func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
+	var (
+		warcTargetURI = scheme + "://"
+		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
+	)
 
 	// Initialize the request record
 	requestRecord.Header.Set("WARC-Type", "request")
 	requestRecord.Header.Set("Content-Type", "application/http; msgtype=request")
 
 	// Copy the content from the pipe
-	_, err = io.Copy(requestRecord.Content, reqPipe)
+	_, err := io.Copy(requestRecord.Content, reqPipe)
 	if err != nil {
-		return requestRecord, "", fmt.Errorf("io.Copy failed: %s", err.Error())
+		close(warcTargetURIChannel)
+		return fmt.Errorf("readRequest: io.Copy failed: %s", err.Error())
 	}
 
 	// Seek to the beginning of the content to allow reading
 	if _, err := requestRecord.Content.Seek(0, io.SeekStart); err != nil {
-		return requestRecord, "", fmt.Errorf("seek failed: %s", err.Error())
+		close(warcTargetURIChannel)
+		return fmt.Errorf("readRequest: seek failed: %s", err.Error())
 	}
 
 	// Use a buffered reader for efficient parsing
@@ -613,7 +637,8 @@ func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *
 	for {
 		select {
 		case <-ctx.Done():
-			return requestRecord, "", ctx.Err()
+			close(warcTargetURIChannel)
+			return ctx.Err()
 		default:
 		}
 
@@ -622,7 +647,8 @@ func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *
 			if err == io.EOF {
 				break
 			}
-			return requestRecord, "", fmt.Errorf("while parsing request, failed to read line: %v", err)
+			close(warcTargetURIChannel)
+			return fmt.Errorf("readRequest: failed to read line: %v", err)
 		}
 
 		line = strings.TrimSpace(line)
@@ -665,8 +691,26 @@ func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *
 			warcTargetURI += host + target
 		}
 	} else {
-		return requestRecord, "", errors.New("after parsing request unable to parse data necessary for WARC-Target-URI")
+		close(warcTargetURIChannel)
+		return errors.New("unable to parse data necessary for WARC-Target-URI")
 	}
 
-	return requestRecord, warcTargetURI, nil
+	// Send the WARC-Target-URI to a channel so that it can be picked up
+	// by the goroutine responsible for writing the response
+	select {
+	case <-ctx.Done():
+		close(warcTargetURIChannel)
+		return ctx.Err()
+	case warcTargetURIChannel <- warcTargetURI:
+	}
+
+	// Send the request record to the channel for further processing
+	select {
+	case <-ctx.Done():
+		close(warcTargetURIChannel)
+		return ctx.Err()
+	case recordChan <- requestRecord:
+	}
+
+	return nil
 }
