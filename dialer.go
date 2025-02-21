@@ -260,21 +260,24 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 	defer d.client.WaitGroup.Done()
 
 	var (
-		batch                = NewRecordBatch()
-		recordChan           = make(chan *Record, 2)
-		warcTargetURIChannel = make(chan string, 1)
-		recordIDs            []string
-		err                  = new(Error)
-		errs                 = errgroup.Group{}
+		batch      = NewRecordBatch()
+		recordChan = make(chan *Record, 2)
+		recordIDs  []string
+		err        = new(Error)
+		errs       = errgroup.Group{}
+		// Channels for passing the WARC-Target-URI between the request and response readers
+		// These channels are used in a way so that both readers can synhronize themselves
+		targetURIReqCh  = make(chan string, 1) // readRequest() -> readResponse() : readRequest() sends the WARC-Target-URI then closes the channel or closes without sending anything if an error occurs, readResponse() reads the WARC-Target-URI
+		targetURIRespCh = make(chan string, 1) // readResponse() -> writeWARCFromConnection() : readResponse() sends the WARC-Target-URI then closes the channel or closes without sending anything if an error occurs, writeWARCFromConnection() reads the WARC-Target-URI
 	)
 
 	// Run request and response readers in parallel, respecting context
 	errs.Go(func() error {
-		return d.readRequest(ctx, scheme, reqPipe, warcTargetURIChannel, recordChan)
+		return d.readRequest(ctx, scheme, reqPipe, targetURIReqCh, recordChan)
 	})
 
 	errs.Go(func() error {
-		return d.readResponse(ctx, respPipe, warcTargetURIChannel, recordChan)
+		return d.readResponse(ctx, respPipe, targetURIReqCh, targetURIRespCh, recordChan)
 	})
 
 	// Wait for both goroutines to finish
@@ -331,7 +334,11 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 
 	var warcTargetURI string
 	select {
-	case warcTargetURI = <-warcTargetURIChannel:
+	case recv, ok := <-targetURIRespCh:
+		if !ok {
+			panic("writeWARCFromConnection: targetURIRespCh closed unexpectedly due to unhandled readRequest error or faulty code logic")
+		}
+		warcTargetURI = recv
 	case <-ctx.Done():
 		return
 	}
@@ -390,7 +397,9 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 	}
 }
 
-func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader, targetURIRxCh chan string, targetURITxCh chan string, recordChan chan *Record) error {
+	defer close(targetURITxCh)
+
 	// Initialize the response record
 	var responseRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
 	responseRecord.Header.Set("WARC-Type", "response")
@@ -424,8 +433,12 @@ func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader
 	}
 
 	// Grab the WARC-Target-URI and send it back for records post-processing
-	var warcTargetURI = <-warcTargetURIChannel
-	warcTargetURIChannel <- warcTargetURI
+	var warcTargetURI, ok = <-targetURIRxCh
+	if !ok {
+		return errors.New("readResponse: WARC-Target-URI channel closed due to readRequest error")
+	}
+
+	targetURITxCh <- warcTargetURI
 
 	// If the HTTP status code is to be excluded as per client's settings, we stop here
 	if len(d.client.skipHTTPStatusCodes) > 0 && slices.Contains(d.client.skipHTTPStatusCodes, resp.StatusCode) {
@@ -591,7 +604,9 @@ func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader
 	return nil
 }
 
-func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, warcTargetURIChannel chan string, recordChan chan *Record) error {
+func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *io.PipeReader, targetURITxCh chan string, recordChan chan *Record) error {
+	defer close(targetURITxCh)
+
 	var (
 		warcTargetURI = scheme + "://"
 		requestRecord = NewRecord(d.client.TempDir, d.client.FullOnDisk)
@@ -692,7 +707,7 @@ func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case warcTargetURIChannel <- warcTargetURI:
+	case targetURITxCh <- warcTargetURI:
 	}
 
 	// Send the request record to the channel for further processing
