@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"io"
 	"math/big"
 	"net"
@@ -23,11 +24,17 @@ import (
 	"github.com/armon/go-socks5"
 )
 
+// errorReadCloser simulates a failure during reading.
+type errorReadCloser struct {
+	data       []byte
+	readBefore int // number of bytes to read successfully
+}
+
 // Utility function used in all tests.
 func defaultRotatorSettings(t *testing.T) *RotatorSettings {
 	var (
 		rotatorSettings = NewRotatorSettings()
-		err error
+		err             error
 	)
 
 	rotatorSettings.Prefix = "TEST"
@@ -43,7 +50,7 @@ func defaultRotatorSettings(t *testing.T) *RotatorSettings {
 func defaultBenchmarkRotatorSettings(t *testing.B) *RotatorSettings {
 	var (
 		rotatorSettings = NewRotatorSettings()
-		err error
+		err             error
 	)
 
 	rotatorSettings.Prefix = "TEST"
@@ -54,6 +61,30 @@ func defaultBenchmarkRotatorSettings(t *testing.B) *RotatorSettings {
 	defer os.RemoveAll(rotatorSettings.OutputDirectory)
 
 	return rotatorSettings
+}
+
+func (e *errorReadCloser) Read(p []byte) (int, error) {
+	if len(e.data) > 0 && e.readBefore > 0 {
+		// Read up to min(len(p), readBefore, len(data))
+		n := len(p)
+		if e.readBefore < n {
+			n = e.readBefore
+		}
+		if len(e.data) < n {
+			n = len(e.data)
+		}
+		copy(p, e.data[:n])
+		e.data = e.data[n:]
+		e.readBefore -= n
+		return n, nil
+	}
+
+	// Once the allowed bytes have been read, return an error.
+	return 0, errors.New("injected read error")
+}
+
+func (e *errorReadCloser) Close() error {
+	return nil
 }
 
 func TestHTTPClient(t *testing.T) {
@@ -113,6 +144,57 @@ func TestHTTPClient(t *testing.T) {
 	for _, path := range files {
 		testFileSingleHashCheck(t, path, "sha1:UIRWL5DFIPQ4MX3D3GFHM2HCVU3TZ6I3", []string{"26872"}, 1, server.URL+"/testdata/image.svg")
 	}
+}
+
+func TestHTTPClientRequestFailing(t *testing.T) {
+	var (
+		rotatorSettings = defaultRotatorSettings(t)
+		errWg           sync.WaitGroup
+		err             error
+	)
+
+	// init test HTTP endpoint
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write(fileBytes)
+	}))
+	defer server.Close()
+
+	// init the HTTP client responsible for recording HTTP(s) requests / responses
+	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{RotatorSettings: rotatorSettings})
+	if err != nil {
+		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
+	}
+
+	errWg.Add(1)
+	go func() {
+		defer errWg.Done()
+		for _ = range httpClient.ErrChan {
+			// We expect an error here, so we don't need to log it
+		}
+	}()
+
+	// Prepare some dummy data and configure our error injector
+	data := []byte("this is some test data")
+	erc := &errorReadCloser{data: data, readBefore: 10} // allow 10 bytes before error
+
+	req, err := http.NewRequest("GET", server.URL+"/testdata/image.svg", erc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = httpClient.Do(req)
+	if err == nil {
+		t.Fatal("expected error on Do, got none")
+	}
+
+	httpClient.Close()
 }
 
 func TestHTTPClientContextCancellation(t *testing.T) {

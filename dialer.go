@@ -707,7 +707,6 @@ func (d *customDialer) readRequest(ctx context.Context, scheme string, reqPipe *
 	// Send the request record to the channel for further processing
 	select {
 	case <-ctx.Done():
-		close(warcTargetURIChannel)
 		return ctx.Err()
 	case recordChan <- requestRecord:
 	}
