@@ -14,7 +14,6 @@ require (
 	github.com/ulikunitz/xz v0.5.12
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.34.0
-	golang.org/x/sync v0.10.0
 )
 
 require (
@@ -24,6 +23,7 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
 )

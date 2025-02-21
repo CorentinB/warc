@@ -1,18 +1,31 @@
 package warc
 
-import "time"
+import (
+	"io"
+	"time"
+)
 
-func (c *CustomHTTPClient) WriteRecord(WARCTargetURI, WARCType, contentType, payload string) {
+func (c *CustomHTTPClient) WriteRecord(WARCTargetURI, WARCType, contentType, payloadString string, payloadReader io.Reader) {
 	// Initialize the record
 	metadataRecord := NewRecord("", false)
 
 	// Set the headers
 	metadataRecord.Header.Set("WARC-Type", WARCType)
-	metadataRecord.Header.Set("Content-Type", contentType)
 	metadataRecord.Header.Set("WARC-Target-URI", WARCTargetURI)
 
+	if contentType != "" {
+		metadataRecord.Header.Set("Content-Type", contentType)
+	}
+
 	// Write the payload
-	metadataRecord.Content.Write([]byte(payload))
+	if payloadString != "" {
+		metadataRecord.Content.Write([]byte(payloadString))
+	} else {
+		_, err := io.Copy(metadataRecord.Content, payloadReader)
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	// Add it to the batch
 	doneChan := make(chan bool)
