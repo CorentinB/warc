@@ -210,7 +210,7 @@ func TestGetLocalAddrIPv4TCP(t *testing.T) {
 	ipList := []net.IPNet{ipNet1}
 	IPv4.IPs.Store(&ipList)
 
-	addr := getLocalAddr("tcp", "192.168.1.2")
+	addr := getLocalAddr("tcp", net.ParseIP("192.168.1.2"))
 	tcpAddr, ok := addr.(*net.TCPAddr)
 	if !ok {
 		t.Errorf("Expected *net.TCPAddr, got %T", addr)
@@ -228,7 +228,7 @@ func TestGetLocalAddrIPv6TCP(t *testing.T) {
 	ipList := []net.IPNet{ipNet1}
 	IPv6.IPs.Store(&ipList)
 
-	addr := getLocalAddr("tcp6", "[2001:db8::2]")
+	addr := getLocalAddr("tcp6", net.ParseIP("[2001:db8::2]"))
 	tcpAddr, ok := addr.(*net.TCPAddr)
 	if !ok {
 		t.Errorf("Expected *net.TCPAddr, got %T", addr)
@@ -245,7 +245,7 @@ func TestGetLocalAddrIPv6TCPAnyIP(t *testing.T) {
 	ipList := []net.IPNet{ipNet1}
 	IPv6.IPs.Store(&ipList)
 
-	addr := getLocalAddr("tcp6", "[2001:db12::20]")
+	addr := getLocalAddr("tcp6", net.ParseIP("[2001:db12::20]"))
 	tcpAddr, ok := addr.(*net.TCPAddr)
 	if !ok {
 		t.Errorf("Expected *net.TCPAddr, got %T", addr)
@@ -263,7 +263,7 @@ func TestGetLocalAddrIPv4UDP(t *testing.T) {
 	ipList := []net.IPNet{ipNet1}
 	IPv4.IPs.Store(&ipList)
 
-	addr := getLocalAddr("udp", "192.168.1.2")
+	addr := getLocalAddr("udp", net.ParseIP("192.168.1.2"))
 	udpAddr, ok := addr.(*net.UDPAddr)
 	if !ok {
 		t.Errorf("Expected *net.UDPAddr, got %T", addr)
@@ -281,7 +281,7 @@ func TestGetLocalAddrIPv6UDP(t *testing.T) {
 	ipList := []net.IPNet{ipNet1}
 	IPv6.IPs.Store(&ipList)
 
-	addr := getLocalAddr("udp", "[2001:db8::2]")
+	addr := getLocalAddr("udp", net.ParseIP("[2001:db8::2]"))
 	udpAddr, ok := addr.(*net.UDPAddr)
 	if !ok {
 		t.Errorf("Expected *net.UDPAddr, got %T", addr)
@@ -291,33 +291,9 @@ func TestGetLocalAddrIPv6UDP(t *testing.T) {
 	}
 }
 
-// TestGetLocalAddrInvalidIP tests the function with an invalid destination IP.
-func TestGetLocalAddrInvalidIP(t *testing.T) {
-	addr := getLocalAddr("tcp", "invalidIP")
-	if addr != nil {
-		t.Errorf("Expected nil, got %v", addr)
-	}
-}
-
 // TestGetLocalAddrUnknownNetwork tests the function with an unknown network type.
 func TestGetLocalAddrUnknownNetwork(t *testing.T) {
-	addr := getLocalAddr("unknown", "192.168.1.2")
-	if addr != nil {
-		t.Errorf("Expected nil, got %v", addr)
-	}
-}
-
-// TestGetLocalAddrNoPort tests the function with an address missing a port.
-func TestGetLocalAddrWithPort(t *testing.T) {
-	addr := getLocalAddr("tcp", "192.168.1.2:80")
-	if addr != nil {
-		t.Errorf("Expected nil, got %v", addr)
-	}
-}
-
-// TestGetLocalAddrMalformedAddress tests the function with a malformed address.
-func TestGetLocalAddrMalformedAddress(t *testing.T) {
-	addr := getLocalAddr("tcp", "192.168.1.2::80")
+	addr := getLocalAddr("unknown", net.ParseIP("192.168.1.2"))
 	if addr != nil {
 		t.Errorf("Expected nil, got %v", addr)
 	}
@@ -332,7 +308,7 @@ func TestAnyIPIPv6IPv4DisabledRealLife(t *testing.T) {
 	ipList := []net.IPNet{ipNet1}
 	IPv6.IPs.Store(&ipList)
 
-	tcpAddr := getLocalAddr("tcp6", "2606:4700:3030::ac43:a86a")
+	tcpAddr := getLocalAddr("tcp6", net.ParseIP("2606:4700:3030::ac43:a86a"))
 	if tcpAddr == nil {
 		t.Error("Expected non-nil TCP address, got nil")
 	}
@@ -361,7 +337,7 @@ func TestGetAvailableIPsAnyIP(t *testing.T) {
 	newIPv4 := make([]net.IPNet, 0)
 	newIPv6 := make([]net.IPNet, 0)
 	for _, iface := range interfaces {
-		if strings.Contains(iface.Name, "docker") || strings.Contains(iface.Flags.String(), "pointtopoint") || !strings.Contains(iface.Flags.String(), "up") {
+		if strings.Contains(iface.Name, "docker") || iface.Flags&net.FlagPointToPoint != 0 || iface.Flags&net.FlagUp == 0 {
 			continue
 		} else {
 			t.Logf("Interface: %v", iface.Name)
@@ -403,6 +379,6 @@ func TestGetAvailableIPsAnyIP(t *testing.T) {
 	IPv6.IPs.Store(&newIPv6)
 	IPv4.IPs.Store(&newIPv4)
 
-	tcpv6Addr := getLocalAddr("tcp", "[2001:db8::2]:80")
+	tcpv6Addr := getLocalAddr("tcp", net.ParseIP("[2001:db8::2]:80"))
 	t.Logf("IPv6 TCP address: %v", tcpv6Addr)
 }

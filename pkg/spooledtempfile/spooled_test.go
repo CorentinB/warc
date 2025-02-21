@@ -579,3 +579,33 @@ func TestBufferGrowthBeyondNewCap(t *testing.T) {
 		t.Errorf("Expected buffer length to be 0, got %d", len(buf))
 	}
 }
+
+func TestSpoolingWhenIOCopy(t *testing.T) {
+	memoryUsageCache = &globalMemoryCache{}
+	spool := NewSpooledTempFile("test", os.TempDir(), 100*1024, false, -1)
+	defer spool.Close()
+
+	data := generateTestDataInKB(500)
+	_, err := io.Copy(spool, bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("Copy error: %v", err)
+	}
+
+	spooledFile := spool.(*spooledTempFile)
+	if spooledFile.Len() != 500*1024 {
+		t.Fatalf("Data length mismatch: got %d, want %d", spooledFile.Len(), 500*1024)
+	}
+	if spooledFile.FileName() == "" {
+		t.Error("Expected buffer to be spooled to disk, but no file exists")
+	}
+
+	// Verify the data was copied correctly
+	out := make([]byte, len(data))
+	_, err = spool.ReadAt(out, 0)
+	if err != nil && err != io.EOF {
+		t.Fatalf("ReadAt error: %v", err)
+	}
+	if !bytes.Equal(out, data) {
+		t.Errorf("Data mismatch. Got %q, want %q", out, data)
+	}
+}

@@ -49,7 +49,7 @@ func (c *CustomHTTPClient) getAvailableIPs(IPv6AnyIP bool) (IPs []net.IP, err er
 			newIPv4 := make([]net.IPNet, 0)
 			newIPv6 := make([]net.IPNet, 0)
 			for _, iface := range interfaces {
-				if strings.Contains(iface.Name, "docker") || strings.Contains(iface.Flags.String(), "pointtopoint") || !strings.Contains(iface.Flags.String(), "up") {
+				if strings.Contains(iface.Name, "docker") || iface.Flags&net.FlagPointToPoint != 0 || iface.Flags&net.FlagUp == 0 {
 					continue
 				}
 
@@ -122,14 +122,7 @@ func GetNextIP(availableIPs *availableIPs) net.IP {
 	return ipNet.IP
 }
 
-func getLocalAddr(network, IP string) any {
-	IP = strings.Trim(IP, "[]")
-
-	destIP := net.ParseIP(IP)
-	if destIP == nil {
-		return nil
-	}
-
+func getLocalAddr(network string, destIP net.IP) any {
 	if destIP.To4() != nil {
 		if strings.Contains(network, "tcp") {
 			return &net.TCPAddr{IP: GetNextIP(IPv4)}
@@ -175,8 +168,7 @@ func generateRandomIPv6(baseIPv6Net net.IPNet) (net.IP, error) {
 	}
 
 	// Construct the randomized IP address
-	randomizedIP := make(net.IP, net.IPv6len)
-	copy(randomizedIP, baseIP.Mask(baseIPv6Net.Mask)) // Copy the network prefix
+	randomizedIP := baseIP.Mask(baseIPv6Net.Mask)
 
 	// Apply the random host bits to the randomized IP
 	for i := 0; i < nBytes; i++ {
