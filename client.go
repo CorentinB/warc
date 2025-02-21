@@ -24,6 +24,7 @@ type HTTPClientSettings struct {
 	ResponseHeaderTimeout time.Duration
 	DNSResolutionTimeout  time.Duration
 	DNSRecordsTTL         time.Duration
+	DNSCacheSize          int
 	TLSHandshakeTimeout   time.Duration
 	TCPTimeout            time.Duration
 	MaxReadBeforeTruncate int
@@ -54,6 +55,7 @@ type CustomHTTPClient struct {
 	MaxReadBeforeTruncate  int
 	verifyCerts            bool
 	FullOnDisk             bool
+	closeDNSCache          func()
 	// MaxRAMUsageFraction is the fraction of system RAM above which we'll force spooling to disk. For example, 0.5 = 50%.
 	// If set to <= 0, the default value is DefaultMaxRAMUsageFraction.
 	MaxRAMUsageFraction float64
@@ -82,6 +84,8 @@ func (c *CustomHTTPClient) Close() error {
 		c.interfacesWatcherStop <- true
 		close(c.interfacesWatcherStop)
 	}
+
+	c.closeDNSCache()
 
 	return nil
 }
@@ -180,12 +184,21 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		HTTPClientSettings.DNSRecordsTTL = 5 * time.Minute
 	}
 
+	if HTTPClientSettings.DNSCacheSize == 0 {
+		HTTPClientSettings.DNSCacheSize = 10_000
+	}
+
 	httpClient.TLSHandshakeTimeout = HTTPClientSettings.TLSHandshakeTimeout
 
 	// Configure custom dialer / transport
-	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DNSRecordsTTL, HTTPClientSettings.DNSResolutionTimeout, HTTPClientSettings.DNSServers, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
+	customDialer, err := newCustomDialer(httpClient, HTTPClientSettings.Proxy, HTTPClientSettings.DialTimeout, HTTPClientSettings.DNSRecordsTTL, HTTPClientSettings.DNSResolutionTimeout, HTTPClientSettings.DNSCacheSize, HTTPClientSettings.DNSServers, HTTPClientSettings.DisableIPv4, HTTPClientSettings.DisableIPv6)
 	if err != nil {
 		return nil, err
+	}
+
+	httpClient.closeDNSCache = func() {
+		customDialer.DNSRecords.Close()
+		time.Sleep(1 * time.Second)
 	}
 
 	customTransport, err := newCustomTransport(customDialer, HTTPClientSettings.DecompressBody, HTTPClientSettings.TLSHandshakeTimeout)

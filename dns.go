@@ -5,39 +5,28 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/miekg/dns"
 )
 
-type cachedIP struct {
-	expiresAt time.Time
-	ip        net.IP
-}
-
 const maxFallbackDNSServers = 3
 
-func (d *customDialer) archiveDNS(ctx context.Context, address string) (resolvedIP net.IP, err error) {
+func (d *customDialer) archiveDNS(ctx context.Context, address string) (resolvedIP net.IP, cached bool, err error) {
 	// Get the address without the port if there is one
 	address, _, err = net.SplitHostPort(address)
 	if err != nil {
-		return resolvedIP, err
+		return resolvedIP, false, err
 	}
 
 	// Check if the address is already an IP
 	resolvedIP = net.ParseIP(address)
 	if resolvedIP != nil {
-		return resolvedIP, nil
+		return resolvedIP, false, nil
 	}
 
 	// Check cache first
-	if cached, ok := d.DNSRecords.Load(address); ok {
-		cachedEntry := cached.(cachedIP)
-		if time.Now().Before(cachedEntry.expiresAt) {
-			return cachedEntry.ip, nil
-		}
-		// Cache entry expired, remove it
-		d.DNSRecords.Delete(address)
+	if cachedIP, ok := d.DNSRecords.Get(address); ok {
+		return cachedIP, true, nil
 	}
 
 	var wg sync.WaitGroup
@@ -45,7 +34,7 @@ func (d *customDialer) archiveDNS(ctx context.Context, address string) (resolved
 	var errA, errAAAA error
 
 	if len(d.DNSConfig.Servers) == 0 {
-		return nil, fmt.Errorf("no DNS servers configured")
+		return nil, false, fmt.Errorf("no DNS servers configured")
 	}
 
 	fallbackServers := min(maxFallbackDNSServers, len(d.DNSConfig.Servers)-1)
@@ -74,7 +63,7 @@ func (d *customDialer) archiveDNS(ctx context.Context, address string) (resolved
 		}
 	}
 	if errA != nil && errAAAA != nil {
-		return nil, fmt.Errorf("failed to resolve DNS: A error: %v, AAAA error: %v", errA, errAAAA)
+		return nil, false, fmt.Errorf("failed to resolve DNS: A error: %v, AAAA error: %v", errA, errAAAA)
 	}
 
 	// Prioritize IPv6 if both are available and enabled
@@ -86,14 +75,11 @@ func (d *customDialer) archiveDNS(ctx context.Context, address string) (resolved
 
 	if resolvedIP != nil {
 		// Cache the result
-		d.DNSRecords.Store(address, cachedIP{
-			ip:        resolvedIP,
-			expiresAt: time.Now().Add(d.DNSRecordsTTL),
-		})
-		return resolvedIP, nil
+		d.DNSRecords.Set(address, resolvedIP)
+		return resolvedIP, false, nil
 	}
 
-	return nil, fmt.Errorf("no suitable IP address found for %s", address)
+	return nil, false, fmt.Errorf("no suitable IP address found for %s", address)
 }
 
 func (d *customDialer) lookupIP(ctx context.Context, address string, recordType uint16, DNSServer int) (net.IP, error) {

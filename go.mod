@@ -6,6 +6,7 @@ require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.18.0
+	github.com/maypok86/otter v1.2.4
 	github.com/miekg/dns v1.1.63
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/refraction-networking/utls v1.6.7
@@ -20,6 +21,8 @@ require (
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/cloudflare/circl v1.6.0 // indirect
+	github.com/dolthub/maphash v0.1.0 // indirect
+	github.com/gammazero/deque v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
