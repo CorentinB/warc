@@ -27,11 +27,12 @@ type Writer struct {
 
 // RecordBatch is a structure that contains a bunch of
 // records to be written at the same time, and a common
-// capture timestamp
+// capture timestamp. FeedbackChan is used to signal
+// when the records have been written.
 type RecordBatch struct {
-	Done        chan bool
-	CaptureTime string
-	Records     []*Record
+	FeedbackChan chan struct{}
+	CaptureTime  string
+	Records      []*Record
 }
 
 // Record represents a WARC record.

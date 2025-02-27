@@ -224,8 +224,9 @@ func recordWriter(settings *RotatorSettings, records chan *RecordBatch, done cha
 				panic(err)
 			}
 
-			if recordBatch.Done != nil {
-				recordBatch.Done <- true
+			if recordBatch.FeedbackChan != nil {
+				recordBatch.FeedbackChan <- struct{}{}
+				close(recordBatch.FeedbackChan)
 			}
 		} else {
 			// Channel has been closed

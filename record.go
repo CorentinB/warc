@@ -2,7 +2,6 @@ package warc
 
 import (
 	"io"
-	"time"
 )
 
 func (c *CustomHTTPClient) WriteRecord(WARCTargetURI, WARCType, contentType, payloadString string, payloadReader io.Reader) {
@@ -28,13 +27,11 @@ func (c *CustomHTTPClient) WriteRecord(WARCTargetURI, WARCType, contentType, pay
 	}
 
 	// Add it to the batch
-	doneChan := make(chan bool)
-	c.WARCWriter <- &RecordBatch{
-		Records:     []*Record{metadataRecord},
-		CaptureTime: time.Now().UTC().Format(time.RFC3339Nano),
-		Done:        doneChan,
-	}
+	batch := NewRecordBatch(nil)
+	batch.Records = append(batch.Records, metadataRecord)
+
+	c.WARCWriter <- batch
 
 	// Wait for the record to be written
-	<-doneChan
+	<-batch.FeedbackChan
 }
