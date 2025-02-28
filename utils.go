@@ -156,11 +156,11 @@ func NewRecord(tempDir string, fullOnDisk bool) *Record {
 	}
 }
 
-// NewRecordBatch creates a record batch,
-// it also initialize the capture time
-func NewRecordBatch() *RecordBatch {
+// NewRecordBatch creates a record batch, it also initialize the capture time.
+func NewRecordBatch(feedbackChan chan struct{}) *RecordBatch {
 	return &RecordBatch{
-		CaptureTime: time.Now().UTC().Format(time.RFC3339Nano),
+		CaptureTime:  time.Now().UTC().Format(time.RFC3339Nano),
+		FeedbackChan: feedbackChan,
 	}
 }
 

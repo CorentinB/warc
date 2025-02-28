@@ -267,8 +267,14 @@ func (d *customDialer) getNetworkType(network string) string {
 func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, respPipe *io.PipeReader, scheme string, conn net.Conn) {
 	defer d.client.WaitGroup.Done()
 
+	// Check if a feedback channel has been provided in the context
+	var feedbackChan chan struct{}
+	if ctx.Value("feedback") != nil {
+		feedbackChan = ctx.Value("feedback").(chan struct{})
+	}
+
 	var (
-		batch      = NewRecordBatch()
+		batch      = NewRecordBatch(feedbackChan)
 		recordChan = make(chan *Record, 2)
 		recordIDs  []string
 		err        = new(Error)
