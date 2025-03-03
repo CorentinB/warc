@@ -268,9 +268,16 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 	defer d.client.WaitGroup.Done()
 
 	// Check if a feedback channel has been provided in the context
+	// Defer the closing of the channel in case of an early return without mixing signals when the batch was properly sent
 	var feedbackChan chan struct{}
+	batchSent := false
 	if ctx.Value("feedback") != nil {
 		feedbackChan = ctx.Value("feedback").(chan struct{})
+		defer func() {
+			if !batchSent {
+				close(feedbackChan)
+			}
+		}()
 	}
 
 	var (
@@ -406,6 +413,7 @@ func (d *customDialer) writeWARCFromConnection(ctx context.Context, reqPipe, res
 
 	select {
 	case d.client.WARCWriter <- batch:
+		batchSent = true
 	case <-ctx.Done():
 		return
 	}
