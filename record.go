@@ -19,11 +19,13 @@ func (c *CustomHTTPClient) WriteRecord(WARCTargetURI, WARCType, contentType, pay
 	// Write the payload
 	if payloadString != "" {
 		metadataRecord.Content.Write([]byte(payloadString))
-	} else {
+	} else if payloadReader != nil {
 		_, err := io.Copy(metadataRecord.Content, payloadReader)
 		if err != nil {
 			panic(err)
 		}
+	} else {
+		panic("no payload provided")
 	}
 
 	// Add it to the batch
