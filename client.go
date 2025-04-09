@@ -17,7 +17,7 @@ type HTTPClientSettings struct {
 	Proxy                 string
 	TempDir               string
 	DNSServer             string
-	SkipHTTPStatusCodes   []int
+	DiscardHook           func(*http.Response) bool
 	DNSServers            []string
 	DedupeOptions         DedupeOptions
 	DialTimeout           time.Duration
@@ -49,7 +49,7 @@ type CustomHTTPClient struct {
 	http.Client
 	TempDir                string
 	WARCWriterDoneChannels []chan bool
-	skipHTTPStatusCodes    []int
+	DiscardHook            func(*http.Response) bool
 	dedupeOptions          DedupeOptions
 	TLSHandshakeTimeout    time.Duration
 	MaxReadBeforeTruncate  int
@@ -111,8 +111,8 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		httpClient.dedupeOptions.SizeThreshold = 2048
 	}
 
-	// Configure HTTP status code skipping (usually 429)
-	httpClient.skipHTTPStatusCodes = HTTPClientSettings.SkipHTTPStatusCodes
+	// A hook to determine if we should discard a response
+	httpClient.DiscardHook = HTTPClientSettings.DiscardHook
 
 	// Create an error channel for sending WARC errors through
 	httpClient.ErrChan = make(chan *Error)
