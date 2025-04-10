@@ -1026,7 +1026,7 @@ func TestHTTPClientDedupeEmptyPayload(t *testing.T) {
 	}
 }
 
-func TestHTTPClientDisallow429(t *testing.T) {
+func TestHTTPClientDiscardHook(t *testing.T) {
 	var (
 		rotatorSettings = defaultRotatorSettings(t)
 		errWg           sync.WaitGroup
@@ -1048,8 +1048,11 @@ func TestHTTPClientDisallow429(t *testing.T) {
 
 	// init the HTTP client responsible for recording HTTP(s) requests / responses
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
-		RotatorSettings:     rotatorSettings,
-		SkipHTTPStatusCodes: []int{429},
+		RotatorSettings: rotatorSettings,
+		// Set up a discard hook to discard 429 responses
+		DiscardHook: func(resp *http.Response) bool {
+			return resp.StatusCode == http.StatusTooManyRequests
+		},
 	})
 	if err != nil {
 		t.Fatalf("Unable to init WARC writing HTTP client: %s", err)
@@ -1060,7 +1063,7 @@ func TestHTTPClientDisallow429(t *testing.T) {
 		defer errWg.Done()
 		for err := range httpClient.ErrChan {
 			// validate 429 filtering as well as error reporting by url
-			if err.Err.Error() != "readResponse: response code was blocked by config url: '"+server.URL+"/'" {
+			if err.Err.Error() != "readResponse: response was blocked by DiscardHook. url: '"+server.URL+"/'" {
 				t.Errorf("Error writing to WARC: %s", err.Err.Error())
 			}
 		}
