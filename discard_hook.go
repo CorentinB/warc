@@ -1,6 +1,9 @@
 package warc
 
-import "fmt"
+import (
+	"fmt"
+	"net/http"
+)
 
 type DiscardHookError struct {
 	URL    string
@@ -15,3 +18,10 @@ func (e *DiscardHookError) Error() string {
 func (e *DiscardHookError) Unwrap() error {
 	return e.Err
 }
+
+// DiscardHook is a hook function that is called for each response. (if set)
+// It can be used to determine if the response should be discarded.
+// Returns:
+//   - bool: should the response be discarded
+//   - string: (optional) why the response was discarded or not
+type DiscardHook func(resp *http.Response) (bool, string)
