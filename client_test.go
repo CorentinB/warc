@@ -1054,7 +1054,8 @@ func TestHTTPClientDiscardHook(t *testing.T) {
 		// Set up a discard hook to discard 429 responses
 		DiscardHook: func(resp *http.Response) (bool, string) {
 			if resp.StatusCode != http.StatusTooManyRequests {
-				panic("This should never be reached")
+				// This should never be reached
+				t.Fatalf("DiscardHook called with non-429 response: %d", resp.StatusCode)
 			}
 			return true, expectedReason
 		},
