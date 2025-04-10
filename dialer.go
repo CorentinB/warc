@@ -463,17 +463,19 @@ func (d *customDialer) readResponse(ctx context.Context, respPipe *io.PipeReader
 	targetURITxCh <- warcTargetURI
 
 	// If the Discard Hook is set and returns true, discard the response
-	if d.client.DiscardHook != nil && d.client.DiscardHook(resp) {
+	if d.client.DiscardHook == nil {
+		// no hook, do nothing
+	} else if discarded, reason := d.client.DiscardHook(resp); discarded {
 		err = resp.Body.Close()
 		if err != nil {
-			return fmt.Errorf("readResponse: response was blocked by DiscardHook and closing body failed: %s", err.Error())
+			return &DiscardHookError{URL: warcTargetURI, Reason: reason, Err: fmt.Errorf("closing body failed: %w", err)}
 		}
 		err = responseRecord.Content.Close()
 		if err != nil {
-			return fmt.Errorf("readResponse: response was blocked by DiscardHook and closing content failed: %s", err.Error())
+			return &DiscardHookError{URL: warcTargetURI, Reason: reason, Err: fmt.Errorf("closing content failed: %w", err)}
 		}
 
-		return fmt.Errorf("readResponse: response was blocked by DiscardHook. url: '%s'", warcTargetURI)
+		return &DiscardHookError{URL: warcTargetURI, Reason: reason, Err: nil}
 	}
 
 	// Calculate the WARC-Payload-Digest

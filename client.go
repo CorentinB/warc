@@ -17,7 +17,7 @@ type HTTPClientSettings struct {
 	Proxy                 string
 	TempDir               string
 	DNSServer             string
-	DiscardHook           func(*http.Response) bool
+	DiscardHook           func(*http.Response) (bool, string)
 	DNSServers            []string
 	DedupeOptions         DedupeOptions
 	DialTimeout           time.Duration
@@ -49,13 +49,18 @@ type CustomHTTPClient struct {
 	http.Client
 	TempDir                string
 	WARCWriterDoneChannels []chan bool
-	DiscardHook            func(*http.Response) bool
-	dedupeOptions          DedupeOptions
-	TLSHandshakeTimeout    time.Duration
-	MaxReadBeforeTruncate  int
-	verifyCerts            bool
-	FullOnDisk             bool
-	closeDNSCache          func()
+	// DiscardHook is a hook function that is called for each response. (if set)
+	// It can be used to determine if the response should be discarded.
+	// Returns:
+	// 	- bool: should the response be discarded
+	// 	- string: (optional) why the response was discarded or not
+	DiscardHook           func(*http.Response) (bool, string)
+	dedupeOptions         DedupeOptions
+	TLSHandshakeTimeout   time.Duration
+	MaxReadBeforeTruncate int
+	verifyCerts           bool
+	FullOnDisk            bool
+	closeDNSCache         func()
 	// MaxRAMUsageFraction is the fraction of system RAM above which we'll force spooling to disk. For example, 0.5 = 50%.
 	// If set to <= 0, the default value is DefaultMaxRAMUsageFraction.
 	MaxRAMUsageFraction float64
@@ -111,7 +116,7 @@ func NewWARCWritingHTTPClient(HTTPClientSettings HTTPClientSettings) (httpClient
 		httpClient.dedupeOptions.SizeThreshold = 2048
 	}
 
-	// A hook to determine if we should discard a response
+	// Set a hook to determine if we should discard a response
 	httpClient.DiscardHook = HTTPClientSettings.DiscardHook
 
 	// Create an error channel for sending WARC errors through
