@@ -1033,6 +1033,8 @@ func TestHTTPClientDiscardHook(t *testing.T) {
 		err             error
 	)
 
+	expectedReason := "429 response"
+
 	// init test HTTP endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileBytes, err := os.ReadFile(path.Join("testdata", "image.svg"))
@@ -1050,8 +1052,12 @@ func TestHTTPClientDiscardHook(t *testing.T) {
 	httpClient, err := NewWARCWritingHTTPClient(HTTPClientSettings{
 		RotatorSettings: rotatorSettings,
 		// Set up a discard hook to discard 429 responses
-		DiscardHook: func(resp *http.Response) bool {
-			return resp.StatusCode == http.StatusTooManyRequests
+		DiscardHook: func(resp *http.Response) (bool, string) {
+			if resp.StatusCode != http.StatusTooManyRequests {
+				// This should never be reached
+				t.Fatalf("DiscardHook called with non-429 response: %d", resp.StatusCode)
+			}
+			return true, expectedReason
 		},
 	})
 	if err != nil {
@@ -1063,8 +1069,16 @@ func TestHTTPClientDiscardHook(t *testing.T) {
 		defer errWg.Done()
 		for err := range httpClient.ErrChan {
 			// validate 429 filtering as well as error reporting by url
-			if err.Err.Error() != "readResponse: response was blocked by DiscardHook. url: '"+server.URL+"/'" {
-				t.Errorf("Error writing to WARC: %s", err.Err.Error())
+			discardErr, ok := err.Err.(*DiscardHookError)
+			if !ok {
+				t.Errorf("Expected DiscardHookError, got: %T, error: %v", err.Err, err)
+				continue
+			}
+			if discardErr.URL != server.URL+"/" {
+				t.Errorf("Expected URL %s, got: %s", server.URL+"/", discardErr.URL)
+			}
+			if discardErr.Reason != expectedReason {
+				t.Errorf("Expected Reason %s, got: %s", expectedReason, discardErr.Reason)
 			}
 		}
 	}()
